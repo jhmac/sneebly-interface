@@ -64,8 +64,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_ACTIVE, projectId, sessionId),
 
   // ── Chat ──────────────────────────────────────────────────────────────
-  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, projectPath, sessionId, message, model),
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, projectPath, sessionId, message, model, projectId),
   chatOnMessageAppended: (
     callback: (sessionId: string, message: ChatMessage) => void
   ): (() => void) => {
@@ -101,6 +101,20 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.AGENT_EVENT, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_EVENT, h)
   },
+
+  // ── Secrets ───────────────────────────────────────────────────────────
+  secretsList: (projectId: string): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SECRETS_LIST, projectId),
+  secretsReveal: (projectId: string, name: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SECRETS_REVEAL, projectId, name),
+  secretsSet: (projectId: string, name: string, value: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SECRETS_SET, projectId, name, value),
+  secretsDelete: (projectId: string, name: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SECRETS_DELETE, projectId, name),
+  secretsImportEnv: (projectId: string, envContent: string): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SECRETS_IMPORT_ENV, projectId, envContent),
+  secretsExportEnv: (projectId: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SECRETS_EXPORT_ENV, projectId),
 }
 
 contextBridge.exposeInMainWorld('api', api)

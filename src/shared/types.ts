@@ -216,7 +216,7 @@ export interface ElectronAPI {
   sessionClear: (projectPath: string, sessionId: string) => Promise<void>
   sessionGetActive: (projectId: string) => Promise<string | null>
   sessionSetActive: (projectId: string, sessionId: string | null) => Promise<void>
-  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string) => Promise<void>
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string) => Promise<void>
   chatOnMessageAppended: (callback: (sessionId: string, message: ChatMessage) => void) => () => void
   modelGet: () => Promise<string>
   modelSet: (model: ModelName) => Promise<void>
@@ -229,4 +229,12 @@ export interface ElectronAPI {
   agentAbort: (sessionId: string) => Promise<void>
   agentPermissionResponse: (requestId: string, decision: 'allow' | 'deny') => Promise<void>
   agentOnEvent: (callback: (event: AgentEvent) => void) => () => void
+
+  // ── Secrets ───────────────────────────────────────────────────────────────
+  secretsList: (projectId: string) => Promise<string[]>
+  secretsReveal: (projectId: string, name: string) => Promise<string | null>
+  secretsSet: (projectId: string, name: string, value: string) => Promise<void>
+  secretsDelete: (projectId: string, name: string) => Promise<void>
+  secretsImportEnv: (projectId: string, envContent: string) => Promise<string[]>
+  secretsExportEnv: (projectId: string) => Promise<string>
 }

@@ -90,7 +90,8 @@ export default function PreviewPanel() {
       activeProject.path,
       activeSessionId,
       { id: crypto.randomUUID(), role: 'user', text: prompt, ts: Date.now() },
-      defaultModel
+      defaultModel,
+      activeProject.id
     )
     setSettingUp(true)
     setAwaitingSetupComplete(true)

@@ -22,8 +22,10 @@
   },
   "dependencies": {
     "@types/diff": "^7.0.2",
+    "@types/keytar": "^4.4.0",
     "diff": "^9.0.0",
     "electron-store": "^8.2.0",
+    "keytar": "^7.9.0",
     "lucide-react": "^1.16.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",

@@ -28,4 +28,10 @@ export const IPC_CHANNELS = {
   AGENT_EVENT: 'agent:event',
   AGENT_ABORT: 'agent:abort',
   AGENT_PERMISSION_RESPONSE: 'agent:permission-response',
+  SECRETS_LIST: 'secrets:list',
+  SECRETS_REVEAL: 'secrets:reveal',
+  SECRETS_SET: 'secrets:set',
+  SECRETS_DELETE: 'secrets:delete',
+  SECRETS_IMPORT_ENV: 'secrets:import-env',
+  SECRETS_EXPORT_ENV: 'secrets:export-env',
 } as const

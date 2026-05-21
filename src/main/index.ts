@@ -9,6 +9,7 @@ import { registerChatHandlers } from './ipc/chat'
 import { registerAgentHandlers } from './ipc/agent'
 import { registerFsHandlers } from './ipc/fs'
 import { registerSystemHandlers } from './ipc/system'
+import { registerSecretsHandlers } from './ipc/secrets'
 import { stopAllServers } from './services/dev-server'
 
 const store = new Store()
@@ -33,6 +34,7 @@ function registerIpcHandlers(): void {
   registerAgentHandlers()
   registerFsHandlers()
   registerSystemHandlers()
+  registerSecretsHandlers()
 }
 
 function createWindow(): void {

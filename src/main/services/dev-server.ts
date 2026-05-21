@@ -3,6 +3,7 @@ import type { ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import type { PreviewStatusEvent } from '../../shared/types'
+import { getAllSecrets } from './secrets-store'
 
 const URL_REGEX = /https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0):\d+/
 const RING_SIZE = 200
@@ -51,7 +52,7 @@ export function detectDevCommand(projectPath: string): string | null {
   return null
 }
 
-export function startServer(projectId: string, projectPath: string): void {
+export async function startServer(projectId: string, projectPath: string): Promise<void> {
   // Kill any existing server for this project (silently — generation mismatch
   // will prevent its exit handler from emitting anything misleading)
   const old = active.get(projectId)
@@ -72,10 +73,12 @@ export function startServer(projectId: string, projectPath: string): void {
   const generation = ++nextGen
   emit({ projectId, type: 'starting' })
 
+  const secrets = await getAllSecrets(projectId).catch(() => ({} as Record<string, string>))
+
   const proc = spawn(command, {
     shell: true,
     cwd: projectPath,
-    env: { ...process.env },
+    env: { ...process.env, ...secrets },
     stdio: 'pipe',
   })
 

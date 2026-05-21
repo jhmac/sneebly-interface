@@ -89,7 +89,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }))
 
     // Fire-and-forget — agent completes async via agent:event / chat:message-appended
-    window.api.chatSend(project.path, activeSessionId, message, defaultModel).catch(console.error)
+    window.api.chatSend(project.path, activeSessionId, message, defaultModel, project.id).catch(console.error)
   },
 
   createNewSession: async () => {
