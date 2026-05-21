@@ -1,0 +1,40 @@
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { resolve } from 'path'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  main: {
+    plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: {
+        '@shared': resolve('src/shared'),
+      },
+    },
+  },
+  preload: {
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/main/preload.ts'),
+        },
+      },
+    },
+    resolve: {
+      alias: {
+        '@shared': resolve('src/shared'),
+      },
+    },
+  },
+  renderer: {
+    root: resolve(__dirname, 'src/renderer'),
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '@renderer': resolve('src/renderer'),
+        '@shared': resolve('src/shared'),
+      },
+    },
+  },
+})
