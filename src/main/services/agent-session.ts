@@ -28,7 +28,7 @@ export function startTurn(
     '--output-format', 'stream-json',
     '--verbose',
     '--model', opts.model,
-    '--permission-mode', 'acceptEdits',
+    '--permission-mode', 'bypassPermissions',
   ]
   if (opts.claudeCodeSessionId) args.push('--resume', opts.claudeCodeSessionId)
 
