@@ -7,17 +7,23 @@ interface PreviewState {
   stderrTail: string[]
   deviceSize: DeviceSize
   logsExpanded: boolean
+  awaitingSetupComplete: boolean
+  settingUp: boolean
 
   handleStatusEvent: (event: PreviewStatusEvent, activeProjectId: string | null) => void
   setDeviceSize: (size: DeviceSize) => void
   setLogsExpanded: (v: boolean) => void
+  setAwaitingSetupComplete: (v: boolean) => void
+  setSettingUp: (v: boolean) => void
   reset: () => void
 }
 
-const INITIAL: Pick<PreviewState, 'status' | 'url' | 'stderrTail'> = {
+const INITIAL: Pick<PreviewState, 'status' | 'url' | 'stderrTail' | 'awaitingSetupComplete' | 'settingUp'> = {
   status: 'idle',
   url: null,
   stderrTail: [],
+  awaitingSetupComplete: false,
+  settingUp: false,
 }
 
 export const usePreviewStore = create<PreviewState>((set) => ({
@@ -36,6 +42,8 @@ export const usePreviewStore = create<PreviewState>((set) => ({
 
   setDeviceSize: (size: DeviceSize) => set({ deviceSize: size }),
   setLogsExpanded: (v: boolean) => set({ logsExpanded: v }),
+  setAwaitingSetupComplete: (v: boolean) => set({ awaitingSetupComplete: v }),
+  setSettingUp: (v: boolean) => set({ settingUp: v }),
 
   reset: () => set({ ...INITIAL }),
 }))

@@ -25,6 +25,19 @@ export default function App() {
   useEffect(() => {
     return window.api.chatOnMessageAppended((sessionId, message) => {
       useChatStore.getState().appendIncomingMessage(sessionId, message)
+
+      // Auto-restart preview when Claude signals setup is complete
+      const { awaitingSetupComplete, setAwaitingSetupComplete, setSettingUp } =
+        usePreviewStore.getState()
+      if (awaitingSetupComplete && message.role === 'assistant' && message.text.includes('SETUP_COMPLETE')) {
+        setAwaitingSetupComplete(false)
+        setSettingUp(false)
+        const { activeProjectId, projects } = useProjectStore.getState()
+        const project = projects.find((p) => p.id === activeProjectId)
+        if (activeProjectId && project) {
+          window.api.previewRestart(activeProjectId, project.path)
+        }
+      }
     })
   }, [])
 

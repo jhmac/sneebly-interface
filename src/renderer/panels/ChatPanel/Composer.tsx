@@ -12,11 +12,13 @@ import { useChatStore } from '../../state/chatStore'
 import { useProjectStore } from '../../state/projectStore'
 import type { PendingAttachment } from '../../../shared/types'
 import { basename } from '../../../shared/utils'
+import { buildSetupPrompt } from '../../../shared/setup-prompt'
 
 const SLASH_COMMANDS = [
   { cmd: '/clear', desc: 'Clear the current session' },
   { cmd: '/checkpoint', desc: 'Mark a checkpoint in the conversation' },
   { cmd: '/goals', desc: 'Inject project goals into the message' },
+  { cmd: '/setup', desc: 'Ask Claude to provision this project locally' },
 ]
 
 export default function Composer() {
@@ -120,6 +122,13 @@ export default function Composer() {
       ].filter(Boolean).join('\n')
       setComposerText(summary + '\n\n')
       textareaRef.current?.focus()
+    } else if (cmd === '/setup') {
+      const prompt = buildSetupPrompt(activeProject?.name ?? 'this project')
+      setComposerText(prompt)
+      setTimeout(() => {
+        const el = textareaRef.current
+        if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length }
+      })
     }
   }
 
