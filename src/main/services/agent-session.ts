@@ -10,7 +10,8 @@ const activeProcesses = new Map<string, ChildProcess>()
 
 export interface TurnOpts {
   cwd: string
-  sessionId: string | null
+  sneeblySessionId: string      // Sneebly's UUID — JSONL filename, process map key
+  claudeCodeSessionId?: string | null  // Claude's UUID — passed to --resume; null/undefined = first turn
   prompt: string
   model: string
 }
@@ -18,7 +19,8 @@ export interface TurnOpts {
 export function startTurn(
   opts: TurnOpts,
   onEvent: (event: AgentEvent) => void,
-  onDone: (sessionId: string | null, error?: string) => void
+  // claudeSessionId is the ID Claude reported via system_init (persisted for next resume)
+  onDone: (claudeSessionId: string | null, error?: string) => void
 ): void {
   const args: string[] = [
     '-p', opts.prompt,
@@ -26,19 +28,20 @@ export function startTurn(
     '--model', opts.model,
     '--permission-mode', 'acceptEdits',
   ]
-  if (opts.sessionId) args.push('--resume', opts.sessionId)
+  if (opts.claudeCodeSessionId) args.push('--resume', opts.claudeCodeSessionId)
 
   const proc = spawn(CLAUDE_BIN, args, {
     cwd: opts.cwd,
     shell: false,
+    // BUG 1 FIX: ignore stdin so the CLI doesn't wait for piped input
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env },
   })
 
-  // Track before we know the real session_id
-  const trackingKey = opts.sessionId ?? `pending-${Date.now()}`
-  activeProcesses.set(trackingKey, proc)
+  // Track by sneebly ID — stable across the whole turn
+  activeProcesses.set(opts.sneeblySessionId, proc)
 
-  let resolvedSessionId = opts.sessionId
+  let discoveredClaudeSessionId: string | null = null
   const stderrChunks: string[] = []
 
   proc.stderr?.on('data', (chunk: Buffer) => {
@@ -53,39 +56,36 @@ export function startTurn(
     try {
       event = JSON.parse(line) as AgentEvent
     } catch {
-      return // skip non-JSON lines (warnings etc.)
+      return // skip non-JSON lines (warnings, etc.)
     }
 
-    // Capture the real session_id from the first system_init event
+    // BUG 2 FIX: capture Claude's session ID from the first system_init event
     if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
-      if (resolvedSessionId !== event.session_id) {
-        activeProcesses.delete(trackingKey)
-        resolvedSessionId = event.session_id
-        activeProcesses.set(resolvedSessionId, proc)
-      }
+      discoveredClaudeSessionId = event.session_id
     }
 
     onEvent(event)
   })
 
   proc.on('close', (code) => {
-    activeProcesses.delete(resolvedSessionId ?? trackingKey)
+    activeProcesses.delete(opts.sneeblySessionId)
     if (code !== 0) {
       const stderr = stderrChunks.join('').trim()
-      onDone(resolvedSessionId, stderr || `Process exited with code ${code}`)
+      onDone(discoveredClaudeSessionId, stderr || `Process exited with code ${code}`)
     } else {
-      onDone(resolvedSessionId)
+      onDone(discoveredClaudeSessionId)
     }
   })
 
   proc.on('error', (err) => {
-    activeProcesses.delete(resolvedSessionId ?? trackingKey)
-    onDone(resolvedSessionId, err.message)
+    activeProcesses.delete(opts.sneeblySessionId)
+    onDone(discoveredClaudeSessionId, err.message)
   })
 }
 
-export function abortSession(sessionId: string): void {
-  const proc = activeProcesses.get(sessionId)
+// Abort takes the Sneebly session ID (the process map key)
+export function abortSession(sneeblySessionId: string): void {
+  const proc = activeProcesses.get(sneeblySessionId)
   if (!proc) return
   proc.kill('SIGTERM')
   const t = setTimeout(() => { if (!proc.killed) proc.kill('SIGKILL') }, 2000)

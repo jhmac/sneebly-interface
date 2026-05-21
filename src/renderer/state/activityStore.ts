@@ -263,8 +263,10 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
 
   abortTurn: () => {
     const { currentTurn } = get()
-    if (!currentTurn?.sessionId) return
-    window.api.agentAbort(currentTurn.sessionId)
+    if (!currentTurn?.active) return
+    // Use Sneebly session ID (the process map key in agent-session.ts)
+    const sneeblySessionId = useChatStore.getState().activeSessionId
+    if (sneeblySessionId) window.api.agentAbort(sneeblySessionId)
     set((s) => ({
       currentTurn: s.currentTurn
         ? { ...s.currentTurn, active: false, aborted: true, currentActivity: 'Aborted' }

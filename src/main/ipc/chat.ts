@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
-import type { ChatMessage, ModelName, AgentContentBlock } from '../../shared/types'
+import type { ChatMessage, ModelName } from '../../shared/types'
 import * as sessionStore from '../services/session-store'
 import { startTurn } from '../services/agent-session'
 import { pushAgentEvent } from './agent'
@@ -31,8 +31,11 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.SESSION_CLEAR,
-    (_e, projectPath: string, sessionId: string) =>
-      sessionStore.clearSession(projectPath, sessionId)
+    (_e, projectPath: string, sessionId: string) => {
+      // BUG 2 FIX: clear the Claude session ID mapping so the next turn starts fresh
+      store.delete(`claudeSessionIds.${sessionId}`)
+      return sessionStore.clearSession(projectPath, sessionId)
+    }
   )
 
   ipcMain.handle(IPC_CHANNELS.SESSION_GET_ACTIVE, (_e, projectId: string) =>
@@ -63,29 +66,45 @@ export function registerChatHandlers(): void {
     async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string) => {
       sessionStore.appendMessage(projectPath, sessionId, userMessage)
 
-      // Build the prompt text (include any @file mentions; images referenced by path)
-      const prompt = userMessage.text
+      // BUG 2 FIX: look up Claude's session ID for this Sneebly session
+      const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
 
-      // Fire-and-forget: start the turn and stream events to renderer
       let assistantText = ''
 
       startTurn(
-        { cwd: projectPath, sessionId, prompt, model: model || 'claude-sonnet-4-6' },
+        {
+          cwd: projectPath,
+          sneeblySessionId: sessionId,
+          claudeCodeSessionId,
+          prompt: userMessage.text,
+          model: model || 'claude-sonnet-4-6',
+        },
         (event) => {
+          // BUG 2 FIX: persist Claude's session ID the moment we see system_init
+          if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
+            store.set(`claudeSessionIds.${sessionId}`, event.session_id)
+          }
+
           // Accumulate assistant text for session persistence
           if (event.type === 'assistant') {
             for (const block of event.message.content) {
               if (block.type === 'text') assistantText += block.text
             }
           }
+
           pushAgentEvent(event)
         },
-        (resolvedSessionId, error) => {
+        (claudeSessionId, error) => {
+          // Persist the discovered Claude session ID in case it wasn't in system_init
+          if (claudeSessionId) {
+            store.set(`claudeSessionIds.${sessionId}`, claudeSessionId)
+          }
+
           if (error) {
             pushAgentEvent({ type: 'error', message: error })
           }
 
-          // Persist the assistant reply to the session JSONL
+          // Always use the Sneebly session ID for JSONL writes
           if (assistantText.trim()) {
             const assistantMsg: ChatMessage = {
               id: crypto.randomUUID(),
@@ -93,11 +112,9 @@ export function registerChatHandlers(): void {
               text: assistantText.trim(),
               ts: Date.now(),
             }
-            const sid = resolvedSessionId ?? sessionId
-            sessionStore.appendMessage(projectPath, sid, assistantMsg)
-            pushMessage(sid, assistantMsg)
+            sessionStore.appendMessage(projectPath, sessionId, assistantMsg)
+            pushMessage(sessionId, assistantMsg)
           } else if (error) {
-            // Push a minimal error message so the chat doesn't stay blocked
             const errMsg: ChatMessage = {
               id: crypto.randomUUID(),
               role: 'assistant',
