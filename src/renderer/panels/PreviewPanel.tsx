@@ -10,6 +10,7 @@ import {
   Tablet,
   Smartphone,
   RotateCcw,
+  Bug,
 } from 'lucide-react'
 import { usePreviewStore } from '../state/previewStore'
 import { useProjectStore } from '../state/projectStore'
@@ -141,6 +142,15 @@ export default function PreviewPanel() {
           <ExternalLink className="h-3.5 w-3.5" />
         </button>
 
+        {/* Webview DevTools */}
+        <button
+          onClick={() => webviewRef.current?.openDevTools()}
+          title="Open webview DevTools"
+          className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+        >
+          <Bug className="h-3.5 w-3.5" />
+        </button>
+
         {/* Status pill */}
         <StatusPill status={status} />
 
@@ -161,7 +171,7 @@ export default function PreviewPanel() {
       {/* Main content area */}
       <div className="relative flex-1 overflow-hidden">
         {status === 'running' && url ? (
-          <div className="flex h-full items-start justify-center overflow-auto bg-zinc-800">
+          <div className="flex h-full items-stretch justify-center overflow-x-auto overflow-y-hidden bg-zinc-800">
             <webview
               key={url}
               ref={attachWebviewListeners as unknown as React.Ref<HTMLElement>}
@@ -170,9 +180,9 @@ export default function PreviewPanel() {
               style={{
                 width: deviceWidth,
                 height: '100%',
-                minHeight: '100%',
                 display: 'block',
                 background: '#fff',
+                flexShrink: 0,
               }}
             />
           </div>
