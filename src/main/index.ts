@@ -3,6 +3,7 @@ import { join } from 'path'
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type { LayoutSizes, PongPayload } from '../shared/types'
+import { registerProjectHandlers } from './ipc/project'
 
 const store = new Store()
 
@@ -19,6 +20,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.LAYOUT_SET_SIZES, (_event, sizes: LayoutSizes) => {
     store.set('layout.workspace.sizes', sizes)
   })
+
+  registerProjectHandlers()
 }
 
 function createWindow(): void {
