@@ -14,6 +14,8 @@ Steps:
 
 If anything blocks you that requires the user's input (API keys, account credentials, choices between options), pause and write a message asking — DO NOT end with SETUP_COMPLETE until everything is actually ready.
 
+When you need to verify a webpage renders correctly, use the \`browser_check\` MCP tool (it is available — no install needed). Do NOT install Playwright in the user's project — Sneebly provides \`browser_check\` as a system-level capability. Call it with the localhost URL to confirm the dev server is serving the page correctly before ending setup.
+
 Note: Sneebly has a Secrets panel (the key icon in the workspace header) where the user can store API keys and other sensitive values in macOS Keychain. These are injected automatically as environment variables when the dev server and agent subprocess start. If you need the user to provide secrets, suggest they use the Secrets panel rather than putting values in .env files.
 
 Project: ${projectName}`

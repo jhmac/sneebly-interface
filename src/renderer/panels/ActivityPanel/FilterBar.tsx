@@ -3,7 +3,8 @@ import type { CardType } from '../../../shared/types'
 
 const PILL_LABELS: Record<CardType, string> = {
   thinking: 'Think', read: 'Read', edit: 'Edit', write: 'Write', bash: 'Bash',
-  search: 'Search', webfetch: 'Fetch', task: 'Task', permission: 'Perm', error: 'Error', summary: 'Summary',
+  search: 'Search', webfetch: 'Fetch', task: 'Task', permission: 'Perm',
+  error: 'Error', summary: 'Summary', browsercheck: 'Browser',
 }
 
 export default function FilterBar() {

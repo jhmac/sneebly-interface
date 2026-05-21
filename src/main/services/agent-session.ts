@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import type { AgentEvent } from '../../shared/types'
 import { getAllSecrets } from './secrets-store'
+import { getMcpConfigPath } from './mcp-config'
 
 // Binary path — use full path so Electron's minimal PATH doesn't miss it
 const CLAUDE_BIN = process.env['CLAUDE_BIN'] ?? '/Users/mister/.local/bin/claude'
@@ -29,6 +30,7 @@ export function startTurn(
     '--verbose',
     '--model', opts.model,
     '--permission-mode', 'bypassPermissions',
+    '--mcp-config', getMcpConfigPath(),
   ]
   if (opts.claudeCodeSessionId) args.push('--resume', opts.claudeCodeSessionId)
 

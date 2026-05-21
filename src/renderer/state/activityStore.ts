@@ -15,6 +15,8 @@ import type {
   TaskCard,
   SummaryCard,
   ErrorCard,
+  BrowserCheckCard,
+  BrowserCheckResultData,
 } from '../../shared/types'
 
 const READ_TOOLS = new Set(['Read', 'View', 'ReadFile'])
@@ -24,6 +26,7 @@ const BASH_TOOLS = new Set(['Bash', 'Shell', 'Execute'])
 const SEARCH_TOOLS = new Set(['Grep', 'Glob', 'Search', 'FindFiles', 'Find'])
 const WEBFETCH_TOOLS = new Set(['WebFetch', 'Fetch', 'Browser'])
 const TASK_TOOLS = new Set(['Task', 'Agent', 'SubAgent'])
+const BROWSER_CHECK_TOOLS = new Set(['browser_check'])
 
 export interface TurnState {
   startedAt: number
@@ -54,6 +57,7 @@ interface ActivityState {
 const DEFAULT_FILTERS: Record<CardType, boolean> = {
   thinking: true, read: true, edit: true, write: true, bash: true,
   search: true, webfetch: true, task: true, permission: true, error: true, summary: true,
+  browsercheck: true,
 }
 
 function toolNameToCardType(name: string): CardType | null {
@@ -64,6 +68,7 @@ function toolNameToCardType(name: string): CardType | null {
   if (SEARCH_TOOLS.has(name)) return 'search'
   if (WEBFETCH_TOOLS.has(name)) return 'webfetch'
   if (TASK_TOOLS.has(name)) return 'task'
+  if (BROWSER_CHECK_TOOLS.has(name)) return 'browsercheck'
   return null
 }
 
@@ -84,6 +89,10 @@ function activityLabel(toolName: string, input: Record<string, unknown>): string
   if (SEARCH_TOOLS.has(toolName)) return `Searching…`
   if (WEBFETCH_TOOLS.has(toolName)) return `Fetching web…`
   if (TASK_TOOLS.has(toolName)) return `Running task…`
+  if (BROWSER_CHECK_TOOLS.has(toolName)) {
+    const u = (input['url'] ?? '') as string
+    return `Checking browser: ${u}…`
+  }
   return `Using ${toolName}…`
 }
 
@@ -137,6 +146,12 @@ function toolUseToCard(block: AgentContentToolUse, ts: number): ActivityCardData
       ...base, cardType: 'task', toolUseId: id,
       description: (input['description'] ?? input['prompt'] ?? '') as string,
     } satisfies TaskCard
+  }
+  if (BROWSER_CHECK_TOOLS.has(name)) {
+    return {
+      ...base, cardType: 'browsercheck', toolUseId: id,
+      url: (input['url'] ?? '') as string,
+    } satisfies BrowserCheckCard
   }
   return null
 }
@@ -214,6 +229,15 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
           if (!('toolUseId' in card)) return card
           const upd = updates.get((card as ReadCard).toolUseId)
           if (!upd) return card
+          // BrowserCheckCard: parse JSON result into structured data
+          if (card.cardType === 'browsercheck' && upd.resultContent) {
+            try {
+              const result = JSON.parse(upd.resultContent) as BrowserCheckResultData
+              return { ...card, result, isError: upd.isError }
+            } catch {
+              return { ...card, isError: true }
+            }
+          }
           return { ...card, ...upd }
         }),
       }))

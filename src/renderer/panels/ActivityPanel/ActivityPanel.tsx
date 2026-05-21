@@ -15,20 +15,22 @@ import TaskCard from './cards/TaskCard'
 import PermissionCard from './cards/PermissionCard'
 import ErrorCard from './cards/ErrorCard'
 import SummaryCard from './cards/SummaryCard'
+import BrowserCheckCard from './cards/BrowserCheckCard'
 
 function CardView({ card }: { card: ActivityCardData }) {
   switch (card.cardType) {
-    case 'thinking':    return <ThinkingCard card={card} />
-    case 'read':        return <ReadCard card={card} />
-    case 'edit':        return <EditCard card={card} />
-    case 'write':       return <WriteCard card={card} />
-    case 'bash':        return <BashCard card={card} />
-    case 'search':      return <SearchCard card={card} />
-    case 'webfetch':    return <WebFetchCard card={card} />
-    case 'task':        return <TaskCard card={card} />
-    case 'permission':  return <PermissionCard card={card} />
-    case 'error':       return <ErrorCard card={card} />
-    case 'summary':     return <SummaryCard card={card} />
+    case 'thinking':      return <ThinkingCard card={card} />
+    case 'read':          return <ReadCard card={card} />
+    case 'edit':          return <EditCard card={card} />
+    case 'write':         return <WriteCard card={card} />
+    case 'bash':          return <BashCard card={card} />
+    case 'search':        return <SearchCard card={card} />
+    case 'webfetch':      return <WebFetchCard card={card} />
+    case 'task':          return <TaskCard card={card} />
+    case 'permission':    return <PermissionCard card={card} />
+    case 'error':         return <ErrorCard card={card} />
+    case 'summary':       return <SummaryCard card={card} />
+    case 'browsercheck':  return <BrowserCheckCard card={card} />
   }
 }
 

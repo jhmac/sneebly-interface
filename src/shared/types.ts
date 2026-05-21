@@ -154,6 +154,7 @@ export type AgentEvent =
 export type CardType =
   | 'thinking' | 'read' | 'edit' | 'write' | 'bash'
   | 'search' | 'webfetch' | 'task' | 'permission' | 'error' | 'summary'
+  | 'browsercheck'
 
 interface BaseCard { id: string; ts: number }
 
@@ -193,9 +194,34 @@ export interface PermissionCard extends BaseCard {
 export interface ErrorCard extends BaseCard { cardType: 'error'; message: string }
 export interface SummaryCard extends BaseCard { cardType: 'summary'; text: string }
 
+export interface BrowserCheckResultData {
+  url: string
+  finalUrl: string
+  status: number
+  title: string
+  rootChildren: number
+  bodyBackground: string
+  domSnippet: string
+  consoleMessages: Array<{ level: string; text: string; url?: string; line?: number }>
+  networkRequests: Array<{ url: string; status?: number; contentType?: string; ok: boolean }>
+  failedRequests: Array<{ url: string; errorText: string }>
+  cspViolations: Array<{ violatedDirective: string; blockedURI: string }>
+  screenshotPath: string
+  durationMs: number
+}
+
+export interface BrowserCheckCard extends BaseCard {
+  cardType: 'browsercheck'
+  toolUseId: string
+  url: string
+  result?: BrowserCheckResultData
+  isError?: boolean
+}
+
 export type ActivityCardData =
   | ThinkingCard | ReadCard | EditCard | WriteCard | BashCard
   | SearchCard | WebFetchCard | TaskCard | PermissionCard | ErrorCard | SummaryCard
+  | BrowserCheckCard
 
 export interface ElectronAPI {
   ping: () => Promise<PongPayload>

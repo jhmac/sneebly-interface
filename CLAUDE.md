@@ -39,6 +39,10 @@ Use `git log --oneline` to figure out the current phase. Each phase is committed
 - Don't write documentation files unless requested.
 - Don't use emoji in code or commit messages.
 
+## Available MCP tools
+
+- `browser_check` — Load a URL in headless Chromium and return rendered DOM, console messages, network requests, CSP violations, and a screenshot. USE THIS instead of installing Playwright in user projects. When you need to verify a webpage renders, debug a blank page, check console errors, or inspect network failures, call `browser_check` with the URL. Output includes `#root` children count (useful for confirming React mounted), body background, console errors, failed requests, CSP violations, and screenshot path. The tool is registered via `--mcp-config` on every agent turn — no install step needed.
+
 ## Acceptance tests
 
 Each phase in `ROADMAP.md` has an "Acceptance test" — verify it before committing the phase.

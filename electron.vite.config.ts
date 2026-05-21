@@ -6,6 +6,14 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          'mcp-servers/browser-check/index': resolve('src/main/mcp-servers/browser-check/index.ts'),
+        },
+      },
+    },
     resolve: {
       alias: {
         '@shared': resolve('src/shared'),

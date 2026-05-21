@@ -11,6 +11,8 @@ import { registerFsHandlers } from './ipc/fs'
 import { registerSystemHandlers } from './ipc/system'
 import { registerSecretsHandlers } from './ipc/secrets'
 import { stopAllServers } from './services/dev-server'
+import { ensureChromiumInstalled } from './services/playwright-setup'
+import { generateMcpConfig } from './services/mcp-config'
 
 const store = new Store()
 
@@ -65,6 +67,8 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerIpcHandlers()
+  generateMcpConfig()
+  ensureChromiumInstalled()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
