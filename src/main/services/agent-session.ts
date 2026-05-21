@@ -25,6 +25,7 @@ export function startTurn(
   const args: string[] = [
     '-p', opts.prompt,
     '--output-format', 'stream-json',
+    '--verbose',
     '--model', opts.model,
     '--permission-mode', 'acceptEdits',
   ]
