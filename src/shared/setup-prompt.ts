@@ -3,6 +3,7 @@ export function buildSetupPrompt(projectName: string): string {
 
 Steps:
 1. Read SETUP.md, README.md, package.json, .env.example, drizzle.config.ts, docker-compose.yml, and any other setup-related files that exist. Skip ones that don't exist; don't error.
+   Also check the parent directory (\`../\`) for context files: \`../SETUP.md\`, \`../README.md\`, \`../PHASE1-REPORT.md\`, \`../GOALS.md\`. These exist when this folder is a sub-directory of a wrapper (like Sneebly-V3's projects/<name>/artifacts/ pattern). If they don't exist there, ignore them — don't error.
 2. Identify what's needed: language runtime, dependencies, databases (Postgres/MySQL/SQLite/MongoDB/Redis), environment variables, migrations, seed data.
 3. Install missing system dependencies via Homebrew when needed (postgres, redis, etc.). Use \`brew install\` and \`brew services start\` as appropriate. If Homebrew is missing, install it first.
 4. Run \`npm install\` (or the equivalent for the detected package manager: pnpm, yarn, bun).
