@@ -108,14 +108,14 @@ For each phase you'll find:
 
 ---
 
-## Phase 5 — Claude Agent SDK + Activity Panel (Week 5–6, the big one)
+## Phase 5 — Claude Code Engine + Activity Panel (Week 5–6, the big one)
 
 **Goal:** real agent integration. Sending a message in the left panel makes Claude Code work for real, with all activity rendering as cards on the right.
 
 **Deliverables:**
-- `agent-session.ts` service in main wraps `@anthropic-ai/claude-agent-sdk`
+- `agent-session.ts` service in main spawns the local `claude` CLI as a child process and parses `--output-format stream-json` line-by-line. Stream parsed events to renderer over IPC.
 - IPC: `agent:send`, `agent:event` (streamed), `agent:abort`, `agent:list-sessions`
-- Session resume via SDK's `resume` option keyed by sessionId
+- Session resume via `--resume <sessionId>` flag on the CLI subprocess
 - Right panel renders all card types from `SPEC.md` §5.3: Thinking, Read, Edit, Write, Bash, Search, WebFetch, Task, Permission, Error, Summary
 - Status bar at top of right panel: current activity, elapsed, tokens, cost, **Stop** button
 - Filter bar: toggle visibility per card type, preference persisted
@@ -127,7 +127,7 @@ For each phase you'll find:
 **Acceptance test:** in a real project, type "what does this codebase do?" — Claude reads files (cards appear right), responds in the chat (left). Type "add a `/ping` endpoint" — Edit cards appear, diffs render, file saves, preview hot-reloads in top panel. Press Stop mid-run — agent aborts cleanly.
 
 **Claude Code kickoff prompt:**
-> Read `SPEC.md` §4, §5.3, §6, §10.2, §10.5. This is the keystone phase. Implement `agent-session.ts` in main using `@anthropic-ai/claude-agent-sdk`. Stream every event (assistant_message, tool_use, tool_result, thinking, error) over IPC `agent:event`. In renderer, build the ActivityPanel with all card types listed in the spec — one component per card type. Use `jsdiff` to compute diffs for Edit cards, render with red/green inline styling. Permission callback: when SDK asks `canUseTool`, main forwards an IPC request to renderer, renderer shows yellow card in chat panel, awaits user choice, sends result back. Sessions resume via the SDK's `resume` option. Add the status bar with token/cost/elapsed and a Stop button that calls abort. Test thoroughly with a real project — this phase is the whole reason the app exists.
+> Read `SPEC.md` §4, §5.3, §6, §10.2, §10.5. This is the keystone phase. Implement `agent-session.ts` in main that spawns the local `claude` CLI as a child process and parses `--output-format stream-json` line-by-line. Stream parsed events to renderer over IPC `agent:event`. In renderer, build the ActivityPanel with all card types listed in the spec — one component per card type. Use `jsdiff` to compute diffs for Edit cards, render with red/green inline styling. Permission callback: main forwards an IPC request to renderer, renderer shows yellow card in chat panel, awaits user choice, sends result back. Sessions resume via `--resume <sessionId>` on the CLI subprocess. Add the status bar with token/cost/elapsed and a Stop button that kills the subprocess. Test thoroughly with a real project — this phase is the whole reason the app exists.
 
 ---
 

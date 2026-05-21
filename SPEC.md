@@ -192,48 +192,51 @@ This is the panel you specifically said you want **less terminal-like, more grap
 
 ---
 
-## 6. The Claude Agent SDK Integration
+## 6. The Claude Code Engine
 
-The bottom-right panel is powered by `@anthropic-ai/claude-agent-sdk` (TypeScript). The SDK is a programmatic interface to the same agent that powers the Claude Code CLI — same tools (Read/Write/Edit/Bash/Grep/Glob/Task/WebFetch), same system prompt, same MCP support. We just render its events ourselves instead of letting the CLI print them.
+The bottom-right panel is powered by spawning the local `claude` CLI as a child process using `node:child_process.spawn`. The CLI is invoked with `--output-format stream-json`, which makes it emit one JSON object per line on stdout — the same structured event shape the SDK would emit. We parse these line-by-line and forward each event to the renderer over IPC.
 
 ```ts
 // engine/agent-session.ts (in Electron main process)
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { spawn } from 'node:child_process'
 
 export async function* runTurn(opts: {
   cwd: string;            // project root
   prompt: string;         // user message
-  attachments: Path[];    // image paths, etc.
-  model: 'sonnet' | 'opus' | 'haiku';
-  sessionId: string;      // for resuming
-  permissionMode: 'acceptEdits' | 'plan' | 'default' | 'bypassPermissions';
-  onPermissionRequest: (req) => Promise<'allow' | 'deny'>;
+  sessionId: string | null; // for resuming; null on first turn
+  model: string;          // e.g. 'claude-sonnet-4-6'
+  permissionMode: string; // e.g. 'acceptEdits'
 }) {
-  const stream = query({
-    prompt: buildPrompt(opts.prompt, opts.attachments),
-    options: {
-      model: opts.model,
-      cwd: opts.cwd,
-      permissionMode: opts.permissionMode,
-      canUseTool: opts.onPermissionRequest,
-      resume: opts.sessionId,
-    },
-  });
+  const args = [
+    '-p', opts.prompt,
+    '--output-format', 'stream-json',
+    '--model', opts.model,
+    '--permission-mode', opts.permissionMode,
+  ]
+  if (opts.sessionId) args.push('--resume', opts.sessionId)
 
-  for await (const event of stream) {
-    yield event; // -> forwarded to renderer over IPC
+  const proc = spawn('claude', args, { cwd: opts.cwd })
+
+  for await (const line of readLines(proc.stdout)) {
+    try {
+      yield JSON.parse(line) // each line is a structured event
+    } catch {
+      // non-JSON lines (e.g. warnings) are discarded
+    }
   }
 }
 ```
 
-**Why SDK, not spawning the CLI binary:**
-- Structured events (JSON), not parsed ANSI.
-- Programmatic permission control — we can show our own Allow/Deny UI.
-- Sessions resume cleanly.
-- No PTY weirdness.
-- Same authentication as the CLI (reads `~/.config/claude/`), so your existing Claude Max login carries over.
+**Auth:** the subprocess inherits the user's shell environment, so it uses whatever `claude` is logged into — for this user, a Claude Max subscription. **This guarantees the user's Max subscription is used. The SDK path was considered but requires either `ANTHROPIC_API_KEY` (paid API, separate from Max) or fiddly `CLAUDE_CODE_OAUTH_TOKEN` extraction. CLI subprocess is the cleanest path.**
 
-**What about MCP servers and CLAUDE.md?** Both are honored — the SDK picks up MCP config from `~/.claude/` and the project's `CLAUDE.md` exactly like the CLI does.
+**Why CLI subprocess, not the SDK:**
+- Auth just works — inherits Max login with no extra configuration.
+- `--output-format stream-json` gives the same structured events the SDK emits.
+- Session resume via `--resume <sessionId>` works exactly like the SDK's `resume` option.
+- No PTY needed — `spawn` with stdout pipe is clean and cross-platform.
+- `--permission-mode acceptEdits` (or `plan`, `bypassPermissions`) maps directly to the SDK's `permissionMode`.
+
+**What about MCP servers and CLAUDE.md?** Both are honored — the CLI picks up MCP config from `~/.claude/` and the project's `CLAUDE.md` exactly as it does when run interactively.
 
 ---
 
@@ -352,7 +355,6 @@ Conventions:
 | Package | Why |
 |---|---|
 | `electron`, `electron-vite`, `@electron-forge/cli` | App shell, dev tooling, packaging |
-| `@anthropic-ai/claude-agent-sdk` | The agent engine for the right panel |
 | `react`, `react-dom`, `typescript`, `vite` | UI |
 | `tailwindcss` v4 | Styling |
 | `zustand` | Renderer state |

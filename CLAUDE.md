@@ -16,13 +16,13 @@ Use `git log --oneline` to figure out the current phase. Each phase is committed
 - React 19 + TypeScript 5 strict
 - Tailwind v4
 - Zustand (renderer state), Zod (IPC validation), electron-store (small KV persistence)
-- @anthropic-ai/claude-agent-sdk (Phase 5+)
 - simple-git, keytar, @octokit/rest (Phase 6+)
 - Shiki for syntax highlighting; jsdiff for Edit-card diffs
 
 ## Architecture conventions
 
-- Main process owns: filesystem, child processes (dev server), Claude Agent SDK, git ops, project registry, GitHub auth
+- Engine: the right-panel agent spawns the local `claude` CLI as a subprocess (`claude -p --output-format stream-json --resume <id>`). Auth is the user's Claude Code login (Max subscription). Do NOT use @anthropic-ai/claude-agent-sdk or set ANTHROPIC_API_KEY in this project.
+- Main process owns: filesystem, child processes (dev server, claude CLI), git ops, project registry, GitHub auth
 - Renderer owns: all UI
 - All IPC payloads are Zod-validated on both sides
 - Renderer NEVER touches `fs` directly — everything goes through main via IPC
