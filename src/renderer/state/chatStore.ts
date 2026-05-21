@@ -12,12 +12,13 @@ interface ChatState {
   defaultModel: ModelName
 
   loadForProject: (projectPath: string, projectId: string) => Promise<void>
-  sendMessage: () => Promise<void>
+  sendMessage: () => void
   createNewSession: () => Promise<void>
   switchSession: (sessionId: string) => Promise<void>
   clearCurrentSession: () => Promise<void>
   switchModel: (model: ModelName) => void
   appendIncomingMessage: (sessionId: string, message: ChatMessage) => void
+  setPendingSend: (v: boolean) => void
   addAttachment: (a: PendingAttachment) => void
   removeAttachment: (id: string) => void
   setComposerText: (text: string) => void
@@ -63,9 +64,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })
   },
 
-  sendMessage: async () => {
+  sendMessage: () => {
     const project = activeProject()
-    const { activeSessionId, composerText, composerAttachments } = get()
+    const { activeSessionId, composerText, composerAttachments, defaultModel } = get()
     if (!project || !activeSessionId || !composerText.trim()) return
 
     const message: ChatMessage = {
@@ -75,9 +76,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ts: Date.now(),
       ...(composerAttachments.length > 0 && {
         attachments: composerAttachments.map(({ kind, path, name }) => ({
-          kind,
-          path,
-          name,
+          kind, path, name,
         })),
       }),
     }
@@ -89,11 +88,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingSend: true,
     }))
 
-    try {
-      await window.api.chatSend(project.path, activeSessionId, message)
-    } finally {
-      set({ pendingSend: false })
-    }
+    // Fire-and-forget — agent completes async via agent:event / chat:message-appended
+    window.api.chatSend(project.path, activeSessionId, message, defaultModel).catch(console.error)
   },
 
   createNewSession: async () => {
@@ -129,9 +125,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   appendIncomingMessage: (sessionId: string, message: ChatMessage) => {
     set((s) => {
       if (s.activeSessionId !== sessionId) return s
-      return { messages: [...s.messages, message] }
+      return { messages: [...s.messages, message], pendingSend: false }
     })
   },
+
+  setPendingSend: (v: boolean) => set({ pendingSend: v }),
 
   addAttachment: (a: PendingAttachment) =>
     set((s) => ({ composerAttachments: [...s.composerAttachments, a] })),

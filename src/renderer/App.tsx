@@ -5,6 +5,7 @@ import Workspace from './screens/Workspace'
 import { useProjectStore } from './state/projectStore'
 import { usePreviewStore } from './state/previewStore'
 import { useChatStore } from './state/chatStore'
+import { useActivityStore } from './state/activityStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -39,6 +40,13 @@ export default function App() {
 
     return () => { window.api.previewStop(activeProjectId) }
   }, [activeProjectId])
+
+  // ── Agent event push channel ───────────────────────────────────────────
+  useEffect(() => {
+    return window.api.agentOnEvent((event) => {
+      useActivityStore.getState().appendEvent(event)
+    })
+  }, [])
 
   // ── Session lifecycle ──────────────────────────────────────────────────
   useEffect(() => {

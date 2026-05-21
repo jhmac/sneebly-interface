@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { FileText, Image } from 'lucide-react'
+import { FileText, Image, Wrench } from 'lucide-react'
 import type { ChatMessage } from '../../../shared/types'
 import CodeBlock from './CodeBlock'
+import { useActivityStore } from '../../state/activityStore'
 
 interface Props {
   messages: ChatMessage[]
@@ -48,16 +49,7 @@ export default function MessageList({ messages, pendingSend }: Props) {
           <AssistantMessage key={msg.id} message={msg} />
         )
       )}
-      {pendingSend && (
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <span className="flex gap-1">
-            <span className="animate-bounce" style={{ animationDelay: '0ms' }}>●</span>
-            <span className="animate-bounce" style={{ animationDelay: '150ms' }}>●</span>
-            <span className="animate-bounce" style={{ animationDelay: '300ms' }}>●</span>
-          </span>
-          Claude is thinking…
-        </div>
-      )}
+      {pendingSend && <WorkingPill />}
       <div ref={bottomRef} />
     </div>
   )
@@ -94,6 +86,20 @@ function AttachmentChip({
         <FileText className="h-3 w-3 flex-shrink-0" />
       )}
       <span className="max-w-[120px] truncate">{attachment.name}</span>
+    </div>
+  )
+}
+
+function WorkingPill() {
+  const toolCallCount = useActivityStore((s) => s.currentTurn?.toolCallCount ?? 0)
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400">
+        <Wrench className="h-3 w-3 animate-spin" />
+        {toolCallCount > 0
+          ? `Claude is working — ${toolCallCount} tool call${toolCallCount !== 1 ? 's' : ''}`
+          : 'Claude is working…'}
+      </div>
     </div>
   )
 }

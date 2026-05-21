@@ -11,6 +11,7 @@ import type { LayoutSizes } from '../../shared/types'
 import { useProjectStore } from '../state/projectStore'
 import PreviewPanel from '../panels/PreviewPanel'
 import ChatPanel from '../panels/ChatPanel/ChatPanel'
+import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -96,7 +97,7 @@ export default function Workspace() {
               </Panel>
               <ResizeHandle orientation="vertical" />
               <Panel id="activity" defaultSize={50} minSize={20}>
-                <PlaceholderPanel label="Activity" />
+                <ActivityPanel />
               </Panel>
             </Group>
           </Panel>

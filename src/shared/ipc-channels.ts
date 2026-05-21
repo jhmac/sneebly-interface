@@ -25,4 +25,7 @@ export const IPC_CHANNELS = {
   FS_SAVE_ATTACHMENT: 'fs:save-attachment',
   FS_SHOW_OPEN_DIALOG: 'fs:show-open-dialog',
   SYSTEM_TAKE_SCREENSHOT: 'system:take-screenshot',
+  AGENT_EVENT: 'agent:event',
+  AGENT_ABORT: 'agent:abort',
+  AGENT_PERMISSION_RESPONSE: 'agent:permission-response',
 } as const

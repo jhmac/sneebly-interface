@@ -6,6 +6,7 @@ import type { LayoutSizes, PongPayload } from '../shared/types'
 import { registerProjectHandlers } from './ipc/project'
 import { registerPreviewHandlers } from './ipc/preview'
 import { registerChatHandlers } from './ipc/chat'
+import { registerAgentHandlers } from './ipc/agent'
 import { registerFsHandlers } from './ipc/fs'
 import { registerSystemHandlers } from './ipc/system'
 import { stopAllServers } from './services/dev-server'
@@ -29,6 +30,7 @@ function registerIpcHandlers(): void {
   registerProjectHandlers()
   registerPreviewHandlers()
   registerChatHandlers()
+  registerAgentHandlers()
   registerFsHandlers()
   registerSystemHandlers()
 }

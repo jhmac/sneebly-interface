@@ -91,6 +91,112 @@ export interface PreviewStatusEvent {
   stderrTail?: string[]
 }
 
+// ── Agent / Activity types ─────────────────────────────────────────────────
+
+export interface AgentContentText { type: 'text'; text: string }
+export interface AgentContentThinking { type: 'thinking'; thinking: string }
+export interface AgentContentToolUse {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+export type AgentContentBlock = AgentContentText | AgentContentThinking | AgentContentToolUse
+
+export interface AgentToolResultBlock {
+  type: 'tool_result'
+  tool_use_id: string
+  content: string | AgentContentBlock[]
+  is_error?: boolean
+}
+
+export interface AgentSystemEvent {
+  type: 'system'
+  subtype: 'init'
+  session_id: string
+  model?: string
+}
+
+export interface AgentAssistantEvent {
+  type: 'assistant'
+  message: { id?: string; content: AgentContentBlock[] }
+}
+
+export interface AgentUserEvent {
+  type: 'user'
+  message: { content: AgentToolResultBlock[] }
+}
+
+export interface AgentResultEvent {
+  type: 'result'
+  subtype: 'success' | 'error'
+  session_id?: string
+  total_cost_usd?: number
+  usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number }
+  duration_ms?: number
+  error?: string
+}
+
+export interface AgentErrorEvent {
+  type: 'error'
+  message: string
+}
+
+export type AgentEvent =
+  | AgentSystemEvent
+  | AgentAssistantEvent
+  | AgentUserEvent
+  | AgentResultEvent
+  | AgentErrorEvent
+
+// ── Activity card data types ───────────────────────────────────────────────
+
+export type CardType =
+  | 'thinking' | 'read' | 'edit' | 'write' | 'bash'
+  | 'search' | 'webfetch' | 'task' | 'permission' | 'error' | 'summary'
+
+interface BaseCard { id: string; ts: number }
+
+export interface ThinkingCard extends BaseCard { cardType: 'thinking'; text: string }
+export interface ReadCard extends BaseCard {
+  cardType: 'read'; toolUseId: string; filePath: string
+  startLine?: number; endLine?: number; resultContent?: string; isError?: boolean
+}
+export interface EditCard extends BaseCard {
+  cardType: 'edit'; toolUseId: string; filePath: string
+  oldContent?: string; newContent?: string; result?: string; isError?: boolean
+}
+export interface WriteCard extends BaseCard {
+  cardType: 'write'; toolUseId: string; filePath: string
+  content?: string; result?: string; isError?: boolean
+}
+export interface BashCard extends BaseCard {
+  cardType: 'bash'; toolUseId: string; command: string
+  output?: string; isError?: boolean
+}
+export interface SearchCard extends BaseCard {
+  cardType: 'search'; toolUseId: string; toolName: string; pattern: string
+  resultContent?: string; isError?: boolean
+}
+export interface WebFetchCard extends BaseCard {
+  cardType: 'webfetch'; toolUseId: string; url: string
+  resultContent?: string; isError?: boolean
+}
+export interface TaskCard extends BaseCard {
+  cardType: 'task'; toolUseId: string; description: string
+  result?: string; isError?: boolean
+}
+export interface PermissionCard extends BaseCard {
+  cardType: 'permission'; requestId: string; toolName: string
+  input: Record<string, unknown>; decision?: 'allow' | 'deny'
+}
+export interface ErrorCard extends BaseCard { cardType: 'error'; message: string }
+export interface SummaryCard extends BaseCard { cardType: 'summary'; text: string }
+
+export type ActivityCardData =
+  | ThinkingCard | ReadCard | EditCard | WriteCard | BashCard
+  | SearchCard | WebFetchCard | TaskCard | PermissionCard | ErrorCard | SummaryCard
+
 export interface ElectronAPI {
   ping: () => Promise<PongPayload>
   layoutGetSizes: () => Promise<LayoutSizes | null>
@@ -110,7 +216,7 @@ export interface ElectronAPI {
   sessionClear: (projectPath: string, sessionId: string) => Promise<void>
   sessionGetActive: (projectId: string) => Promise<string | null>
   sessionSetActive: (projectId: string, sessionId: string | null) => Promise<void>
-  chatSend: (projectPath: string, sessionId: string, message: ChatMessage) => Promise<void>
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string) => Promise<void>
   chatOnMessageAppended: (callback: (sessionId: string, message: ChatMessage) => void) => () => void
   modelGet: () => Promise<string>
   modelSet: (model: ModelName) => Promise<void>
@@ -118,4 +224,9 @@ export interface ElectronAPI {
   fsSaveAttachment: (projectPath: string, fileName: string, data: Uint8Array) => Promise<string>
   fsShowOpenDialog: () => Promise<string[]>
   systemTakeScreenshot: (projectPath: string) => Promise<string | null>
+
+  // ── Agent ─────────────────────────────────────────────────────────────────
+  agentAbort: (sessionId: string) => Promise<void>
+  agentPermissionResponse: (requestId: string, decision: 'allow' | 'deny') => Promise<void>
+  agentOnEvent: (callback: (event: AgentEvent) => void) => () => void
 }

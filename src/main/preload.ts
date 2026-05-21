@@ -11,6 +11,7 @@ import type {
   ChatMessage,
   SessionSummary,
   ModelName,
+  AgentEvent,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -63,8 +64,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_ACTIVE, projectId, sessionId),
 
   // ── Chat ──────────────────────────────────────────────────────────────
-  chatSend: (projectPath: string, sessionId: string, message: ChatMessage): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, projectPath, sessionId, message),
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, projectPath, sessionId, message, model),
   chatOnMessageAppended: (
     callback: (sessionId: string, message: ChatMessage) => void
   ): (() => void) => {
@@ -89,6 +90,17 @@ const api: ElectronAPI = {
   // ── System ────────────────────────────────────────────────────────────
   systemTakeScreenshot: (projectPath: string): Promise<string | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_TAKE_SCREENSHOT, projectPath),
+
+  // ── Agent ─────────────────────────────────────────────────────────────
+  agentAbort: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_ABORT, sessionId),
+  agentPermissionResponse: (requestId: string, decision: 'allow' | 'deny'): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PERMISSION_RESPONSE, requestId, decision),
+  agentOnEvent: (callback: (event: AgentEvent) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, event: AgentEvent) => callback(event)
+    ipcRenderer.on(IPC_CHANNELS.AGENT_EVENT, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_EVENT, h)
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
