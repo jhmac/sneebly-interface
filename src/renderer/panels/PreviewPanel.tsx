@@ -57,6 +57,9 @@ export default function PreviewPanel() {
       setCanGoBack(el.canGoBack())
       setCanGoForward(el.canGoForward())
     })
+    el.addEventListener('dom-ready', () => {
+      el.setZoomFactor(1.0)
+    })
   }, [])
 
   function handleUrlSubmit(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -171,19 +174,36 @@ export default function PreviewPanel() {
       {/* Main content area */}
       <div className="relative flex-1 overflow-hidden">
         {status === 'running' && url ? (
-          <div className="flex h-full items-stretch justify-center overflow-x-auto overflow-y-hidden bg-zinc-800">
+          <div className="relative h-full overflow-hidden bg-zinc-800">
             <webview
               key={url}
               ref={attachWebviewListeners as unknown as React.Ref<HTMLElement>}
               src={url}
               allowpopups={true}
-              style={{
-                width: deviceWidth,
-                height: '100%',
-                display: 'block',
-                background: '#fff',
-                flexShrink: 0,
-              }}
+              style={
+                deviceSize === 'desktop'
+                  ? {
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      background: '#fff',
+                    }
+                  : {
+                      position: 'absolute',
+                      top: 0,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: deviceWidth,
+                      height: '100%',
+                      display: 'flex',
+                      background: '#fff',
+                    }
+              }
             />
           </div>
         ) : status === 'crashed' ? (

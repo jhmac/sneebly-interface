@@ -18,6 +18,7 @@ declare global {
     canGoBack(): boolean
     canGoForward(): boolean
     openDevTools(): void
+    setZoomFactor(factor: number): void
   }
 
   namespace JSX {
