@@ -4,6 +4,8 @@ import Store from 'electron-store'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type { LayoutSizes, PongPayload } from '../shared/types'
 import { registerProjectHandlers } from './ipc/project'
+import { registerPreviewHandlers } from './ipc/preview'
+import { stopAllServers } from './services/dev-server'
 
 const store = new Store()
 
@@ -22,6 +24,7 @@ function registerIpcHandlers(): void {
   })
 
   registerProjectHandlers()
+  registerPreviewHandlers()
 }
 
 function createWindow(): void {
@@ -35,7 +38,12 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       sandbox: false,
+      webviewTag: true,
     },
+  })
+
+  mainWindow.on('closed', () => {
+    stopAllServers()
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -54,5 +62,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  stopAllServers()
   if (process.platform !== 'darwin') app.quit()
 })

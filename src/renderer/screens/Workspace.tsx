@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   Group,
   Panel,
@@ -9,6 +9,7 @@ import {
 import { GitBranch, ChevronDown, ChevronUp } from 'lucide-react'
 import type { LayoutSizes } from '../../shared/types'
 import { useProjectStore } from '../state/projectStore'
+import PreviewPanel from '../panels/PreviewPanel'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -78,7 +79,7 @@ export default function Workspace() {
           className="h-full"
         >
           <Panel id="preview" defaultSize={55} minSize={20}>
-            <PlaceholderPanel label="Preview goes here" />
+            <PreviewPanel />
           </Panel>
           <ResizeHandle orientation="horizontal" />
           <Panel id="bottom" defaultSize={45} minSize={20}>

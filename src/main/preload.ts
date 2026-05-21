@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type {
   ElectronAPI,
@@ -6,6 +7,7 @@ import type {
   PongPayload,
   Project,
   ProjectActivateResult,
+  PreviewStatusEvent,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -26,6 +28,29 @@ const api: ElectronAPI = {
 
   projectActivate: (id: string): Promise<ProjectActivateResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.PROJECT_ACTIVATE, id),
+
+  previewStart: (projectId: string, projectPath: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PREVIEW_START, projectId, projectPath),
+
+  previewStop: (projectId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PREVIEW_STOP, projectId),
+
+  previewRestart: (projectId: string, projectPath: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PREVIEW_RESTART, projectId, projectPath),
+
+  previewGetLogs: (projectId: string): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PREVIEW_GET_LOGS, projectId),
+
+  previewOnStatus: (callback: (event: PreviewStatusEvent) => void): (() => void) => {
+    const handler = (_ipcEvent: IpcRendererEvent, statusEvent: PreviewStatusEvent) => {
+      callback(statusEvent)
+    }
+    ipcRenderer.on(IPC_CHANNELS.PREVIEW_STATUS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.PREVIEW_STATUS, handler)
+  },
+
+  shellOpenExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, url),
 }
 
 contextBridge.exposeInMainWorld('api', api)
