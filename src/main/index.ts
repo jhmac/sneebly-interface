@@ -5,6 +5,9 @@ import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type { LayoutSizes, PongPayload } from '../shared/types'
 import { registerProjectHandlers } from './ipc/project'
 import { registerPreviewHandlers } from './ipc/preview'
+import { registerChatHandlers } from './ipc/chat'
+import { registerFsHandlers } from './ipc/fs'
+import { registerSystemHandlers } from './ipc/system'
 import { stopAllServers } from './services/dev-server'
 
 const store = new Store()
@@ -25,6 +28,9 @@ function registerIpcHandlers(): void {
 
   registerProjectHandlers()
   registerPreviewHandlers()
+  registerChatHandlers()
+  registerFsHandlers()
+  registerSystemHandlers()
 }
 
 function createWindow(): void {

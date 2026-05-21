@@ -4,27 +4,32 @@ import Welcome from './screens/Welcome'
 import Workspace from './screens/Workspace'
 import { useProjectStore } from './state/projectStore'
 import { usePreviewStore } from './state/previewStore'
+import { useChatStore } from './state/chatStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
 
-  useEffect(() => {
-    loadProjects()
-  }, [])
+  // ── Bootstrap ──────────────────────────────────────────────────────────
+  useEffect(() => { loadProjects() }, [])
 
-  // Subscribe to preview status events from main once, globally
+  // ── Preview status push channel ────────────────────────────────────────
   useEffect(() => {
-    const unsub = window.api.previewOnStatus((event) => {
+    return window.api.previewOnStatus((event) => {
       const id = useProjectStore.getState().activeProjectId
       usePreviewStore.getState().handleStatusEvent(event, id)
     })
-    return unsub
   }, [])
 
-  // Start/stop dev server when active project changes
+  // ── Chat push channel ──────────────────────────────────────────────────
+  useEffect(() => {
+    return window.api.chatOnMessageAppended((sessionId, message) => {
+      useChatStore.getState().appendIncomingMessage(sessionId, message)
+    })
+  }, [])
+
+  // ── Dev server lifecycle ───────────────────────────────────────────────
   useEffect(() => {
     if (!activeProjectId) return
-
     const { projects } = useProjectStore.getState()
     const project = projects.find((p) => p.id === activeProjectId)
     if (!project) return
@@ -32,9 +37,20 @@ export default function App() {
     usePreviewStore.getState().reset()
     window.api.previewStart(activeProjectId, project.path)
 
-    return () => {
-      window.api.previewStop(activeProjectId)
+    return () => { window.api.previewStop(activeProjectId) }
+  }, [activeProjectId])
+
+  // ── Session lifecycle ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!activeProjectId) {
+      useChatStore.getState().reset()
+      return
     }
+    const { projects } = useProjectStore.getState()
+    const project = projects.find((p) => p.id === activeProjectId)
+    if (!project) return
+
+    useChatStore.getState().loadForProject(project.path, project.id)
   }, [activeProjectId])
 
   return (

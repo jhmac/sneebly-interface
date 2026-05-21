@@ -35,6 +35,39 @@ export interface GoalsMd {
   openQuestions: string[]
 }
 
+export type ModelName = 'claude-sonnet-4-6' | 'claude-opus-4-7' | 'claude-haiku-4-5'
+
+export interface ChatAttachment {
+  kind: 'image' | 'file' | 'screenshot'
+  path: string
+  name: string
+}
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  attachments?: ChatAttachment[]
+  ts: number
+  checkpoint?: true
+}
+
+export interface SessionSummary {
+  id: string
+  createdAt: number
+  lastMessageAt: number
+  messageCount: number
+  preview: string
+}
+
+export interface PendingAttachment {
+  id: string
+  kind: 'image' | 'file' | 'screenshot'
+  path: string
+  name: string
+  thumbnailUrl?: string
+}
+
 export interface ProjectActivateResult {
   project: Project
   branch: string | null
@@ -71,4 +104,18 @@ export interface ElectronAPI {
   previewGetLogs: (projectId: string) => Promise<string[]>
   previewOnStatus: (callback: (event: PreviewStatusEvent) => void) => () => void
   shellOpenExternal: (url: string) => Promise<void>
+  sessionList: (projectPath: string) => Promise<SessionSummary[]>
+  sessionLoad: (projectPath: string, sessionId: string) => Promise<ChatMessage[]>
+  sessionCreate: (projectPath: string) => Promise<string>
+  sessionClear: (projectPath: string, sessionId: string) => Promise<void>
+  sessionGetActive: (projectId: string) => Promise<string | null>
+  sessionSetActive: (projectId: string, sessionId: string | null) => Promise<void>
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage) => Promise<void>
+  chatOnMessageAppended: (callback: (sessionId: string, message: ChatMessage) => void) => () => void
+  modelGet: () => Promise<string>
+  modelSet: (model: ModelName) => Promise<void>
+  fsListProjectFiles: (projectPath: string) => Promise<string[]>
+  fsSaveAttachment: (projectPath: string, fileName: string, data: Uint8Array) => Promise<string>
+  fsShowOpenDialog: () => Promise<string[]>
+  systemTakeScreenshot: (projectPath: string) => Promise<string | null>
 }

@@ -10,6 +10,7 @@ import { GitBranch, ChevronDown, ChevronUp } from 'lucide-react'
 import type { LayoutSizes } from '../../shared/types'
 import { useProjectStore } from '../state/projectStore'
 import PreviewPanel from '../panels/PreviewPanel'
+import ChatPanel from '../panels/ChatPanel/ChatPanel'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -91,7 +92,7 @@ export default function Workspace() {
               className="h-full"
             >
               <Panel id="chat" defaultSize={50} minSize={20}>
-                <PlaceholderPanel label="Chat" />
+                <ChatPanel />
               </Panel>
               <ResizeHandle orientation="vertical" />
               <Panel id="activity" defaultSize={50} minSize={20}>
