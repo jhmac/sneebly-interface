@@ -223,6 +223,13 @@ export type ActivityCardData =
   | SearchCard | WebFetchCard | TaskCard | PermissionCard | ErrorCard | SummaryCard
   | BrowserCheckCard
 
+export interface AppSettings {
+  theme: 'dark' | 'light'
+  defaultModel: ModelName
+  defaultProjectsFolder: string
+  mcpServers: Array<{ name: string; command: string; args: string[] }>
+}
+
 export interface ElectronAPI {
   ping: () => Promise<PongPayload>
   layoutGetSizes: () => Promise<LayoutSizes | null>
@@ -255,6 +262,14 @@ export interface ElectronAPI {
   agentAbort: (sessionId: string) => Promise<void>
   agentPermissionResponse: (requestId: string, decision: 'allow' | 'deny') => Promise<void>
   agentOnEvent: (callback: (event: AgentEvent) => void) => () => void
+
+  // ── App / Settings / Onboarding ──────────────────────────────────────────
+  appVersion: () => Promise<string>
+  appOpenFolderDialog: () => Promise<string | null>
+  settingsGet: () => Promise<AppSettings>
+  settingsSet: (settings: Partial<AppSettings>) => Promise<void>
+  onboardingIsDone: () => Promise<boolean>
+  onboardingComplete: () => Promise<void>
 
   // ── Secrets ───────────────────────────────────────────────────────────────
   secretsList: (projectId: string) => Promise<string[]>

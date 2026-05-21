@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Sidebar from './chrome/Sidebar'
 import Welcome from './screens/Welcome'
 import Workspace from './screens/Workspace'
+import OnboardingOverlay from './panels/OnboardingOverlay/OnboardingOverlay'
 import { useProjectStore } from './state/projectStore'
 import { usePreviewStore } from './state/previewStore'
 import { useChatStore } from './state/chatStore'
@@ -9,9 +10,20 @@ import { useActivityStore } from './state/activityStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
-  useEffect(() => { loadProjects() }, [])
+  useEffect(() => {
+    loadProjects()
+    window.api.onboardingIsDone().then((done) => {
+      if (!done) setShowOnboarding(true)
+    })
+  }, [])
+
+  function handleOnboardingDismiss() {
+    setShowOnboarding(false)
+    window.api.onboardingComplete()
+  }
 
   // ── Preview status push channel ────────────────────────────────────────
   useEffect(() => {
@@ -76,6 +88,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-950">
+      {showOnboarding && <OnboardingOverlay onDismiss={handleOnboardingDismiss} />}
       <Sidebar />
       <div className="flex flex-1 overflow-hidden">
         {activeProjectId ? <Workspace /> : <Welcome />}

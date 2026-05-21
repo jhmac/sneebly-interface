@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Group,
   Panel,
@@ -6,7 +6,7 @@ import {
   useGroupRef,
   type Layout,
 } from 'react-resizable-panels'
-import { GitBranch, ChevronDown, ChevronUp, KeyRound } from 'lucide-react'
+import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings } from 'lucide-react'
 import type { LayoutSizes } from '../../shared/types'
 import { useProjectStore } from '../state/projectStore'
 import { useSecretsStore } from '../state/secretsStore'
@@ -14,6 +14,7 @@ import PreviewPanel from '../panels/PreviewPanel'
 import ChatPanel from '../panels/ChatPanel/ChatPanel'
 import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
 import SecretsPanel from '../panels/SecretsPanel/SecretsPanel'
+import SettingsPanel from '../panels/SettingsPanel/SettingsPanel'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -35,6 +36,7 @@ export default function Workspace() {
   } = useProjectStore()
 
   const { openPanel: openSecrets } = useSecretsStore()
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
 
@@ -59,8 +61,9 @@ export default function Workspace() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-zinc-900 text-zinc-100">
-      {/* Secrets modal */}
+      {/* Modals */}
       <SecretsPanel />
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Workspace header */}
       <WorkspaceHeader
@@ -70,6 +73,7 @@ export default function Workspace() {
         goalsExpanded={goalsExpanded}
         onToggleGoals={() => setGoalsExpanded(!goalsExpanded)}
         onOpenSecrets={openSecrets}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       {/* Goals expander */}
@@ -122,6 +126,7 @@ function WorkspaceHeader({
   goalsExpanded,
   onToggleGoals,
   onOpenSecrets,
+  onOpenSettings,
 }: {
   projectName: string | null
   branch: string | null
@@ -129,6 +134,7 @@ function WorkspaceHeader({
   goalsExpanded: boolean
   onToggleGoals: () => void
   onOpenSecrets: () => void
+  onOpenSettings: () => void
 }) {
   return (
     <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4">
@@ -145,6 +151,15 @@ function WorkspaceHeader({
       </div>
 
       <div className="flex items-center gap-1">
+        <button
+          onClick={onOpenSettings}
+          title="Settings"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+        >
+          <Settings className="h-3 w-3" />
+          Settings
+        </button>
+
         <button
           onClick={onOpenSecrets}
           title="Manage secrets"

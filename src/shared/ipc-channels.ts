@@ -34,4 +34,10 @@ export const IPC_CHANNELS = {
   SECRETS_DELETE: 'secrets:delete',
   SECRETS_IMPORT_ENV: 'secrets:import-env',
   SECRETS_EXPORT_ENV: 'secrets:export-env',
+  SETTINGS_GET: 'settings:get',
+  SETTINGS_SET: 'settings:set',
+  ONBOARDING_IS_DONE: 'onboarding:is-done',
+  ONBOARDING_COMPLETE: 'onboarding:complete',
+  APP_VERSION: 'app:version',
+  APP_OPEN_FOLDER_DIALOG: 'app:open-folder-dialog',
 } as const

@@ -12,6 +12,7 @@ import type {
   SessionSummary,
   ModelName,
   AgentEvent,
+  AppSettings,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -101,6 +102,20 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.AGENT_EVENT, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_EVENT, h)
   },
+
+  // ── App / Settings / Onboarding ──────────────────────────────────────────
+  appVersion: (): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.APP_VERSION),
+  appOpenFolderDialog: (): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_FOLDER_DIALOG),
+  settingsGet: (): Promise<AppSettings> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
+  settingsSet: (settings: Partial<AppSettings>): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, settings),
+  onboardingIsDone: (): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_IS_DONE),
+  onboardingComplete: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_COMPLETE),
 
   // ── Secrets ───────────────────────────────────────────────────────────
   secretsList: (projectId: string): Promise<string[]> =>
