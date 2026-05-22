@@ -325,6 +325,18 @@ export interface ElectronAPI {
   daemonQueueReject: (projectId: string, cycleId: string) => Promise<void>
   daemonListOpenQuestions: (projectId: string) => Promise<OpenQuestion[]>
   daemonAnswerOpenQuestion: (projectId: string, cycleId: string, answer: string) => Promise<void>
+  daemonSetRunAfterQuit: (value: boolean) => Promise<void>
+  daemonReadQueueDiff: (projectId: string, cycleId: string) => Promise<string>
+  daemonReadJournal: (projectId: string) => Promise<JournalEntry[]>
+}
+
+export interface JournalEntry {
+  id: string
+  ts: string
+  project: string
+  event: string
+  cycleId: string
+  data: Record<string, unknown>
 }
 
 // ── Daemon types ───────────────────────────────────────────────────────────

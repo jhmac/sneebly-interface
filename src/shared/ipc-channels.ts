@@ -55,4 +55,7 @@ export const IPC_CHANNELS = {
   DAEMON_QUEUE_REJECT: 'daemon:queue-reject',
   DAEMON_LIST_OPEN_QUESTIONS: 'daemon:list-open-questions',
   DAEMON_ANSWER_OPEN_QUESTION: 'daemon:answer-open-question',
+  DAEMON_SET_RUN_AFTER_QUIT: 'daemon:set-run-after-quit',
+  DAEMON_READ_QUEUE_DIFF: 'daemon:read-queue-diff',
+  DAEMON_READ_JOURNAL: 'daemon:read-journal',
 } as const

@@ -21,6 +21,7 @@ import type {
   TreeNode,
   FileViewerData,
   FileChangedEvent,
+  JournalEntry,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -173,6 +174,12 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.DAEMON_LIST_OPEN_QUESTIONS, projectId),
   daemonAnswerOpenQuestion: (projectId: string, cycleId: string, answer: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.DAEMON_ANSWER_OPEN_QUESTION, projectId, cycleId, answer),
+  daemonSetRunAfterQuit: (value: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_SET_RUN_AFTER_QUIT, value),
+  daemonReadQueueDiff: (projectId: string, cycleId: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_READ_QUEUE_DIFF, projectId, cycleId),
+  daemonReadJournal: (projectId: string): Promise<JournalEntry[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_READ_JOURNAL, projectId),
 }
 
 contextBridge.exposeInMainWorld('api', api)

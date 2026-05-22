@@ -10,6 +10,7 @@ import {
   startDaemon, stopDaemon, runCycleNow, getDaemonStatus,
 } from '../services/cycle/daemon-runner'
 import { getProjectConfig, setProjectConfig, getDaemonEnabled } from '../services/cycle/scheduler'
+import { readJournal } from '../services/cycle/journal'
 
 const store = new Store()
 
@@ -133,20 +134,54 @@ export function registerDaemonHandlers(): void {
     const project = listProjects().find(p => p.id === projectId)
     if (!project) return
 
+    const timestamp = new Date().toISOString()
+    const dateStr = timestamp.slice(0, 10)
+
     // Append answer to GOALS.md Open Questions section
     const goalsPath = join(project.path, 'GOALS.md')
     if (existsSync(goalsPath)) {
       const content = readFileSync(goalsPath, 'utf8')
-      const answerEntry = `\n- **[${new Date().toISOString().slice(0, 10)}]** ${answer}\n`
+      const answerEntry = `\n- **[${dateStr}]** ${answer}\n`
       const updated = content.includes('## Open Questions')
         ? content.replace('## Open Questions', `## Open Questions\n${answerEntry}`)
         : content + '\n## Open Questions\n' + answerEntry
       writeFileSync(goalsPath, updated)
     }
 
+    // Also append to AGENTS.md Notes for Agent section for better planner pickup
+    const agentsPath = join(project.path, 'AGENTS.md')
+    const noteEntry = `\n## Note from user (${timestamp})\n\n${answer}\n`
+    if (existsSync(agentsPath)) {
+      const existing = readFileSync(agentsPath, 'utf8')
+      const updated = existing.includes('## Notes for Agent')
+        ? existing.replace('## Notes for Agent', `## Notes for Agent${noteEntry}`)
+        : existing + '\n## Notes for Agent' + noteEntry
+      writeFileSync(agentsPath, updated)
+    } else {
+      writeFileSync(agentsPath, `# Agent Notes\n\n## Notes for Agent${noteEntry}`)
+    }
+
     // Remove the blocked queue item
     const queueDir = join(project.path, '.sneebly', 'queue')
     const planPath = join(queueDir, `pending-${cycleId}.plan.json`)
     if (existsSync(planPath)) rmSync(planPath, { force: true })
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DAEMON_SET_RUN_AFTER_QUIT, (_e, value: boolean) => {
+    store.set('daemon.runAfterQuit', value)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DAEMON_READ_QUEUE_DIFF, (_e, projectId: string, cycleId: string): string => {
+    const project = listProjects().find(p => p.id === projectId)
+    if (!project) return ''
+    const diffPath = join(project.path, '.sneebly', 'queue', `pending-${cycleId}.diff`)
+    if (!existsSync(diffPath)) return ''
+    try { return readFileSync(diffPath, 'utf8') } catch { return '' }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DAEMON_READ_JOURNAL, (_e, projectId: string) => {
+    const project = listProjects().find(p => p.id === projectId)
+    if (!project) return []
+    return readJournal(project.path, 200)
   })
 }

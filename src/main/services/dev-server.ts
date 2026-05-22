@@ -101,6 +101,20 @@ export async function startServer(projectId: string, projectPath: string): Promi
     if (isStderr) {
       entry.stderrLines.push(line)
       if (entry.stderrLines.length > 200) entry.stderrLines.shift()
+
+      // Auto-clear port and retry on EADDRINUSE
+      if (!entry.stopping && line.includes('EADDRINUSE')) {
+        const portMatch = line.match(/:(\d+)/)
+        if (portMatch) {
+          const stuckPort = portMatch[1]
+          const { execSync } = require('node:child_process') as typeof import('node:child_process')
+          try {
+            execSync(`lsof -ti :${stuckPort} | xargs kill -9`, { stdio: 'ignore' })
+          } catch {}
+          // Small delay then restart
+          setTimeout(() => startServer(projectId, projectPath), 1500)
+        }
+      }
     }
     // Check both stdout and stderr for the URL
     if (!entry.url) {
