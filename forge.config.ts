@@ -5,6 +5,7 @@ import { MakerZIP } from '@electron-forge/maker-zip'
 const config: ForgeConfig = {
   outDir: 'dist',
   packagerConfig: {
+    name: 'Sneebly',
     appBundleId: 'com.scuild.sneebly-interface',
     appCategoryType: 'public.app-category.developer-tools',
     icon: 'resources/icon',
@@ -42,7 +43,7 @@ const config: ForgeConfig = {
 
   makers: [
     new MakerDMG({
-      name: 'SneeblyInterface',
+      name: 'Sneebly',
       icon: 'resources/icon.icns',
       overwrite: true,
     }),

@@ -23,7 +23,7 @@ export default function Sidebar() {
     <div className="flex h-full w-48 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">
       <div className="pt-8 px-3 pb-2">
         <div className="text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
-          Sneebly V. 2
+          Sneebly
         </div>
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">

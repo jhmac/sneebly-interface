@@ -1,5 +1,6 @@
 {
   "name": "sneebly-interface",
+  "productName": "Sneebly",
   "version": "0.2.0-alpha",
   "description": "Local-first Electron desktop app — autonomous Claude coding sessions with live preview, activity panel, and Keychain-backed secrets",
   "main": "./out/main/index.js",

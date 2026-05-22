@@ -3,7 +3,7 @@ fixMacOsPath()
 
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join, dirname } from 'path'
-import { mkdirSync, appendFileSync } from 'fs'
+import { mkdirSync, appendFileSync, existsSync, cpSync } from 'fs'
 import { homedir } from 'os'
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
@@ -25,6 +25,23 @@ import { generateMcpConfig } from './services/mcp-config'
 import { initAutoUpdater } from './services/auto-updater'
 import { setupTray, teardownTray } from './services/tray'
 import { getDaemonStatus, stopDaemon } from './services/cycle/daemon-runner'
+
+// ── User data migration (sneebly-interface → Sneebly) ─────────────────────────
+function migrateUserData(): void {
+  const home = homedir()
+  const oldPath = join(home, 'Library', 'Application Support', 'sneebly-interface')
+  const newPath = join(home, 'Library', 'Application Support', 'Sneebly')
+  if (existsSync(oldPath) && !existsSync(newPath)) {
+    try {
+      mkdirSync(newPath, { recursive: true })
+      cpSync(oldPath, newPath, { recursive: true })
+      console.log(`[Sneebly] Migrated user data from ${oldPath} to ${newPath}`)
+    } catch (err) {
+      console.error('[Sneebly] User data migration failed:', err)
+    }
+  }
+}
+migrateUserData()
 
 const store = new Store()
 
@@ -92,7 +109,7 @@ function createWindow(): void {
     height: 900,
     minWidth: 1200,
     minHeight: 800,
-    title: 'Sneebly Interface',
+    title: 'Sneebly',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

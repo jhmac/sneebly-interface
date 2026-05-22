@@ -1,4 +1,4 @@
-# Sneebly Interface
+# Sneebly
 
 A local-first macOS desktop app that collapses the Claude UI + Claude Code CLI into one integrated workspace. Three panels: **live app preview** on top, **Claude chat** bottom-left, **agent activity feed** bottom-right.
 
