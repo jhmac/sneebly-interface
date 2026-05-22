@@ -247,6 +247,12 @@ export interface FileViewerData {
   truncated?: boolean
 }
 
+export interface FileChangedEvent {
+  projectId: string
+  relativePath: string
+  kind: 'add' | 'change' | 'unlink'
+}
+
 export interface AppSettings {
   theme: 'dark' | 'light'
   defaultModel: ModelName
@@ -282,6 +288,8 @@ export interface ElectronAPI {
   fsShowOpenDialog: () => Promise<string[]>
   fsGetTree: (projectPath: string) => Promise<TreeNode[]>
   fsReadFile: (projectPath: string, relativePath: string) => Promise<FileViewerData>
+  fsWriteFile: (projectPath: string, relativePath: string, content: string) => Promise<{ mtime: number }>
+  fsOnFileChanged: (callback: (event: FileChangedEvent) => void) => () => void
   systemTakeScreenshot: (projectPath: string) => Promise<string | null>
 
   // ── Agent ─────────────────────────────────────────────────────────────────

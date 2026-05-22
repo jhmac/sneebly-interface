@@ -9,6 +9,9 @@ import {
   detectProjectName,
 } from '../services/project-registry'
 import { parseGoalsFile } from '../services/cycle/identity'
+import { startWatcher, stopWatcher } from '../services/project-watcher'
+
+let currentWatchedProjectId: string | null = null
 
 async function getBranch(projectPath: string): Promise<string | null> {
   try {
@@ -65,6 +68,13 @@ export function registerProjectHandlers(): void {
         getBranch(project.path),
         Promise.resolve(parseGoalsFile(project.path)),
       ])
+
+      // Stop previous watcher and start one for the new project
+      if (currentWatchedProjectId && currentWatchedProjectId !== id) {
+        stopWatcher(currentWatchedProjectId)
+      }
+      startWatcher(id, project.path)
+      currentWatchedProjectId = id
 
       return { project, branch, goals }
     }

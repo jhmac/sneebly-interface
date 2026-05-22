@@ -15,6 +15,7 @@ import { registerSecretsHandlers } from './ipc/secrets'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerDaemonHandlers } from './ipc/daemon'
 import { stopAllServers } from './services/dev-server'
+import { stopAllWatchers } from './services/project-watcher'
 import { ensureChromiumInstalled } from './services/playwright-setup'
 import { generateMcpConfig } from './services/mcp-config'
 import { initAutoUpdater } from './services/auto-updater'
@@ -89,6 +90,7 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     stopAllServers()
+    stopAllWatchers()
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -112,5 +114,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopAllServers()
+  stopAllWatchers()
   if (process.platform !== 'darwin') app.quit()
 })

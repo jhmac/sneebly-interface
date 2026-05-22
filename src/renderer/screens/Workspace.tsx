@@ -6,18 +6,19 @@ import {
   useGroupRef,
   type Layout,
 } from 'react-resizable-panels'
-import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree } from 'lucide-react'
+import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, X } from 'lucide-react'
 import type { LayoutSizes } from '../../shared/types'
 import { useProjectStore } from '../state/projectStore'
 import { useSecretsStore } from '../state/secretsStore'
 import { useFilesStore } from '../state/filesStore'
+import { useEditorStore } from '../state/editorStore'
+import { useActivityPanelStore } from '../state/activityPanelStore'
 import PreviewPanel from '../panels/PreviewPanel'
 import ChatPanel from '../panels/ChatPanel/ChatPanel'
 import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
 import SecretsPanel from '../panels/SecretsPanel/SecretsPanel'
 import SettingsPanel from '../panels/SettingsPanel/SettingsPanel'
-import FilesPanel from '../panels/FilesPanel/FilesPanel'
-import FileViewer from '../panels/FilesPanel/FileViewer'
+import EditorPanel from '../panels/FilesPanel/EditorPanel'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -36,20 +37,26 @@ export default function Workspace() {
     activeProjectGoals,
     goalsExpanded,
     setGoalsExpanded,
+    pendingProjectSwitch,
+    confirmProjectSwitch,
+    cancelProjectSwitch,
   } = useProjectStore()
 
   const { openPanel: openSecrets } = useSecretsStore()
-  const { openPanel: openFiles, resetForProject, loadTree, panelOpen: filesPanelOpen } = useFilesStore()
+  const { resetForProject } = useFilesStore()
+  const { setActiveTab } = useActivityPanelStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
 
-  // Reset file tree when active project changes; reload if panel is open
+  // Open files count badge
+  const openFilesCount = useEditorStore(
+    (s) => (s.openFilesByProject[activeProjectId ?? ''] ?? []).length
+  )
+
+  // Reset file tree when project changes
   useEffect(() => {
     resetForProject()
-    if (activeProject && filesPanelOpen) {
-      loadTree(activeProject.path, activeProject.id)
-    }
   }, [activeProjectId])
 
   useEffect(() => {
@@ -71,13 +78,26 @@ export default function Workspace() {
     window.api.layoutSetSizes(sizesRef.current)
   }
 
+  function handleOpenFiles() {
+    setActiveTab('files')
+  }
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-zinc-900 text-zinc-100">
       {/* Modals */}
       <SecretsPanel />
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <FilesPanel />
-      <FileViewer />
+      <EditorPanel />
+
+      {/* Project switch dirty-files guard */}
+      {pendingProjectSwitch && (
+        <UnsavedChangesModal
+          currentProjectName={activeProject?.name ?? 'current project'}
+          onSaveAll={() => confirmProjectSwitch('save-all')}
+          onDiscardAll={() => confirmProjectSwitch('discard-all')}
+          onCancel={cancelProjectSwitch}
+        />
+      )}
 
       {/* Workspace header */}
       <WorkspaceHeader
@@ -88,7 +108,8 @@ export default function Workspace() {
         onToggleGoals={() => setGoalsExpanded(!goalsExpanded)}
         onOpenSecrets={openSecrets}
         onOpenSettings={() => setSettingsOpen(true)}
-        onOpenFiles={openFiles}
+        onOpenFiles={handleOpenFiles}
+        openFilesCount={openFilesCount}
       />
 
       {/* Goals expander */}
@@ -134,6 +155,54 @@ export default function Workspace() {
   )
 }
 
+function UnsavedChangesModal({
+  currentProjectName,
+  onSaveAll,
+  onDiscardAll,
+  onCancel,
+}: {
+  currentProjectName: string
+  onSaveAll: () => void
+  onDiscardAll: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60">
+      <div className="flex w-96 flex-col gap-4 rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
+        <div className="flex items-start justify-between">
+          <p className="text-sm text-zinc-200">
+            You have unsaved changes in{' '}
+            <span className="font-medium text-zinc-100">{currentProjectName}</span>.
+          </p>
+          <button onClick={onCancel} className="ml-3 flex-shrink-0 text-zinc-600 hover:text-zinc-400">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-md px-3 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onDiscardAll}
+            className="rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+          >
+            Discard all
+          </button>
+          <button
+            onClick={onSaveAll}
+            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 transition-colors"
+          >
+            Save all
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function WorkspaceHeader({
   projectName,
   branch,
@@ -143,6 +212,7 @@ function WorkspaceHeader({
   onOpenSecrets,
   onOpenSettings,
   onOpenFiles,
+  openFilesCount,
 }: {
   projectName: string | null
   branch: string | null
@@ -152,6 +222,7 @@ function WorkspaceHeader({
   onOpenSecrets: () => void
   onOpenSettings: () => void
   onOpenFiles: () => void
+  openFilesCount: number
 }) {
   return (
     <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4">
@@ -192,7 +263,7 @@ function WorkspaceHeader({
           className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
         >
           <FolderTree className="h-3 w-3" />
-          Files
+          {openFilesCount > 0 ? `Files (${openFilesCount})` : 'Files'}
         </button>
 
         {hasGoals && (
@@ -269,14 +340,6 @@ function GoalsSummary({
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function PlaceholderPanel({ label }: { label: string }) {
-  return (
-    <div className="flex h-full w-full items-center justify-center">
-      <span className="text-sm text-zinc-600">{label}</span>
     </div>
   )
 }

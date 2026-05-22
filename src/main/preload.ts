@@ -20,6 +20,7 @@ import type {
   OpenQuestion,
   TreeNode,
   FileViewerData,
+  FileChangedEvent,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -98,6 +99,13 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.FS_GET_TREE, projectPath),
   fsReadFile: (projectPath: string, relativePath: string): Promise<FileViewerData> =>
     ipcRenderer.invoke(IPC_CHANNELS.FS_READ_FILE, projectPath, relativePath),
+  fsWriteFile: (projectPath: string, relativePath: string, content: string): Promise<{ mtime: number }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.FS_WRITE_FILE, projectPath, relativePath, content),
+  fsOnFileChanged: (callback: (event: FileChangedEvent) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, event: FileChangedEvent) => callback(event)
+    ipcRenderer.on(IPC_CHANNELS.FS_FILE_CHANGED, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.FS_FILE_CHANGED, h)
+  },
 
   // ── System ────────────────────────────────────────────────────────────
   systemTakeScreenshot: (projectPath: string): Promise<string | null> =>

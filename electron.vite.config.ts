@@ -2,6 +2,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import { resolve } from 'path'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import monacoEditorPlugin from 'vite-plugin-monaco-editor'
 
 export default defineConfig({
   main: {
@@ -37,7 +38,13 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      ((monacoEditorPlugin as any).default ?? monacoEditorPlugin as any)({
+        languageWorkers: ['editorWorkerService', 'typescript', 'json', 'css', 'html'],
+      }),
+    ],
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer'),

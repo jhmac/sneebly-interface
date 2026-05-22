@@ -2,7 +2,7 @@ import { FolderOpen, FolderCode } from 'lucide-react'
 import { useProjectStore } from '../state/projectStore'
 
 export default function Sidebar() {
-  const { projects, activeProjectId, activateProject, openProjectDialog, loading } =
+  const { projects, activeProjectId, requestProjectSwitch, openProjectDialog, loading } =
     useProjectStore()
 
   return (
@@ -25,7 +25,7 @@ export default function Sidebar() {
                 return (
                   <li key={project.id}>
                     <button
-                      onClick={() => activateProject(project.id)}
+                      onClick={() => requestProjectSwitch(project.id)}
                       className={[
                         'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors',
                         isActive

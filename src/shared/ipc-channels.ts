@@ -26,6 +26,8 @@ export const IPC_CHANNELS = {
   FS_SHOW_OPEN_DIALOG: 'fs:show-open-dialog',
   FS_GET_TREE: 'fs:get-tree',
   FS_READ_FILE: 'fs:read-file',
+  FS_WRITE_FILE: 'fs:write-file',
+  FS_FILE_CHANGED: 'fs:file-changed',
   SYSTEM_TAKE_SCREENSHOT: 'system:take-screenshot',
   AGENT_EVENT: 'agent:event',
   AGENT_ABORT: 'agent:abort',

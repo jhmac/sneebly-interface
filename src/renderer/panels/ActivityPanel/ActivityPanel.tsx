@@ -1,9 +1,11 @@
 import { useRef, useEffect } from 'react'
 import { useActivityStore } from '../../state/activityStore'
 import { useChatStore } from '../../state/chatStore'
+import { useActivityPanelStore } from '../../state/activityPanelStore'
 import type { ActivityCardData, CardType } from '../../../shared/types'
 import StatusBar from './StatusBar'
 import FilterBar from './FilterBar'
+import FilesTree from '../FilesPanel/FilesTree'
 import ThinkingCard from './cards/ThinkingCard'
 import ReadCard from './cards/ReadCard'
 import EditCard from './cards/EditCard'
@@ -37,6 +39,7 @@ function CardView({ card }: { card: ActivityCardData }) {
 export default function ActivityPanel() {
   const { cards, filters } = useActivityStore()
   const model = useChatStore((s) => s.defaultModel)
+  const { activeTab, setActiveTab } = useActivityPanelStore()
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const atBottom = useRef(true)
@@ -48,34 +51,69 @@ export default function ActivityPanel() {
   }
 
   useEffect(() => {
-    if (atBottom.current) {
+    if (activeTab === 'activity' && atBottom.current) {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
     }
-  }, [cards.length])
+  }, [cards.length, activeTab])
 
   const visible = cards.filter((c) => filters[c.cardType as CardType])
 
   return (
     <div className="flex h-full flex-col bg-zinc-900 text-zinc-100">
       <StatusBar model={model} />
-      <FilterBar />
-      <div
-        ref={scrollRef}
-        onScroll={onScroll}
-        className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3"
-      >
-        {visible.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
-            Activity will appear here
-          </div>
-        ) : (
-          visible.map((card) => (
-            <div key={card.id} className={card.source === 'daemon' ? 'ring-1 ring-inset ring-indigo-900/60 rounded-md' : undefined}>
-              <CardView card={card} />
-            </div>
-          ))
-        )}
+
+      {/* Tab strip */}
+      <div className="flex flex-shrink-0 border-b border-zinc-800 bg-zinc-950">
+        <button
+          onClick={() => setActiveTab('activity')}
+          className={[
+            'px-4 py-1.5 text-xs transition-colors',
+            activeTab === 'activity'
+              ? 'border-b-2 border-indigo-500 text-zinc-200'
+              : 'text-zinc-500 hover:text-zinc-300',
+          ].join(' ')}
+        >
+          Activity
+        </button>
+        <button
+          onClick={() => setActiveTab('files')}
+          className={[
+            'px-4 py-1.5 text-xs transition-colors',
+            activeTab === 'files'
+              ? 'border-b-2 border-indigo-500 text-zinc-200'
+              : 'text-zinc-500 hover:text-zinc-300',
+          ].join(' ')}
+        >
+          Files
+        </button>
       </div>
+
+      {activeTab === 'activity' ? (
+        <>
+          <FilterBar />
+          <div
+            ref={scrollRef}
+            onScroll={onScroll}
+            className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3"
+          >
+            {visible.length === 0 ? (
+              <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
+                Activity will appear here
+              </div>
+            ) : (
+              visible.map((card) => (
+                <div key={card.id} className={card.source === 'daemon' ? 'ring-1 ring-inset ring-indigo-900/60 rounded-md' : undefined}>
+                  <CardView card={card} />
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <FilesTree />
+        </div>
+      )}
     </div>
   )
 }

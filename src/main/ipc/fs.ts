@@ -1,6 +1,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { readdirSync, statSync, existsSync, mkdirSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
-import { join, relative, resolve, sep } from 'path'
+import { join, relative, resolve, sep, dirname } from 'path'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { TreeNode, FileViewerData } from '../../shared/types'
 
@@ -110,6 +110,28 @@ export function registerFsHandlers(): void {
       let content = buf.toString('utf-8')
       if (truncated) content += '\n\n[... file truncated — showing first 1MB ...]'
       return { content, sizeBytes, mtime, isBinary: false, truncated }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FS_WRITE_FILE,
+    (_e, projectPath: string, relativePath: string, content: string): { mtime: number } => {
+      const base = resolve(projectPath)
+      const resolved = resolve(join(projectPath, relativePath))
+      if (!resolved.startsWith(base + sep) && resolved !== base) {
+        throw new Error('Path escape detected')
+      }
+      // Block writes into internal/build dirs (defense-in-depth)
+      const rel = relative(base, resolved)
+      const firstSegment = rel.split(sep)[0]
+      const BLOCKED_PREFIXES = new Set(['.git', 'node_modules', 'dist', 'out', '.next', '.sneebly-interface', '.sneebly'])
+      if (BLOCKED_PREFIXES.has(firstSegment)) {
+        throw new Error(`Writes to ${firstSegment}/ are blocked`)
+      }
+      const dir = dirname(resolved)
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+      writeFileSync(resolved, content, 'utf-8')
+      return { mtime: statSync(resolved).mtimeMs }
     }
   )
 }
