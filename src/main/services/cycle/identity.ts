@@ -182,9 +182,10 @@ export function parseGoals(content: string): GoalsMd {
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         const bullet = trimmed.slice(2)
         if (phaseSection === 'behaviors') currentPhase.behaviors.push(bullet.trim())
-        else if (phaseSection === 'milestones') {
+        else {
           const m = parseMilestone(bullet)
           if (m) currentPhase.milestones.push(m)
+          else if (phaseSection === 'none') { /* non-milestone bullet outside section — ignore */ }
         }
         continue
       }

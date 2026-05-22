@@ -15,7 +15,7 @@ export function resolveAndValidate(filePath: string, repoRoot: string): { relati
     realResolved = resolved
   }
   const rel = relative(repoRoot, realResolved)
-  const valid = !rel.startsWith('..') && !resolve(rel).startsWith('/')
+  const valid = !rel.startsWith('..') && !rel.startsWith('/')
   return { relative: rel, valid }
 }
 
