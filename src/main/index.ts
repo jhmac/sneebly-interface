@@ -13,6 +13,7 @@ import { registerFsHandlers } from './ipc/fs'
 import { registerSystemHandlers } from './ipc/system'
 import { registerSecretsHandlers } from './ipc/secrets'
 import { registerSettingsHandlers } from './ipc/settings'
+import { registerDaemonHandlers } from './ipc/daemon'
 import { stopAllServers } from './services/dev-server'
 import { ensureChromiumInstalled } from './services/playwright-setup'
 import { generateMcpConfig } from './services/mcp-config'
@@ -66,6 +67,7 @@ function registerIpcHandlers(): void {
   registerSystemHandlers()
   registerSecretsHandlers()
   registerSettingsHandlers()
+  registerDaemonHandlers()
 }
 
 // ── Window ─────────────────────────────────────────────────────────────────
