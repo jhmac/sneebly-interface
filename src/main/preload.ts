@@ -18,6 +18,8 @@ import type {
   CycleResult,
   QueueItem,
   OpenQuestion,
+  TreeNode,
+  FileViewerData,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -92,6 +94,10 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.FS_SAVE_ATTACHMENT, projectPath, fileName, data),
   fsShowOpenDialog: (): Promise<string[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.FS_SHOW_OPEN_DIALOG),
+  fsGetTree: (projectPath: string): Promise<TreeNode[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.FS_GET_TREE, projectPath),
+  fsReadFile: (projectPath: string, relativePath: string): Promise<FileViewerData> =>
+    ipcRenderer.invoke(IPC_CHANNELS.FS_READ_FILE, projectPath, relativePath),
 
   // ── System ────────────────────────────────────────────────────────────
   systemTakeScreenshot: (projectPath: string): Promise<string | null> =>

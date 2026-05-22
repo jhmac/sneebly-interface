@@ -24,6 +24,8 @@ export const IPC_CHANNELS = {
   FS_LIST_PROJECT_FILES: 'fs:list-project-files',
   FS_SAVE_ATTACHMENT: 'fs:save-attachment',
   FS_SHOW_OPEN_DIALOG: 'fs:show-open-dialog',
+  FS_GET_TREE: 'fs:get-tree',
+  FS_READ_FILE: 'fs:read-file',
   SYSTEM_TAKE_SCREENSHOT: 'system:take-screenshot',
   AGENT_EVENT: 'agent:event',
   AGENT_ABORT: 'agent:abort',

@@ -6,15 +6,18 @@ import {
   useGroupRef,
   type Layout,
 } from 'react-resizable-panels'
-import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings } from 'lucide-react'
+import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree } from 'lucide-react'
 import type { LayoutSizes } from '../../shared/types'
 import { useProjectStore } from '../state/projectStore'
 import { useSecretsStore } from '../state/secretsStore'
+import { useFilesStore } from '../state/filesStore'
 import PreviewPanel from '../panels/PreviewPanel'
 import ChatPanel from '../panels/ChatPanel/ChatPanel'
 import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
 import SecretsPanel from '../panels/SecretsPanel/SecretsPanel'
 import SettingsPanel from '../panels/SettingsPanel/SettingsPanel'
+import FilesPanel from '../panels/FilesPanel/FilesPanel'
+import FileViewer from '../panels/FilesPanel/FileViewer'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -36,9 +39,18 @@ export default function Workspace() {
   } = useProjectStore()
 
   const { openPanel: openSecrets } = useSecretsStore()
+  const { openPanel: openFiles, resetForProject, loadTree, panelOpen: filesPanelOpen } = useFilesStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
+
+  // Reset file tree when active project changes; reload if panel is open
+  useEffect(() => {
+    resetForProject()
+    if (activeProject && filesPanelOpen) {
+      loadTree(activeProject.path, activeProject.id)
+    }
+  }, [activeProjectId])
 
   useEffect(() => {
     window.api.layoutGetSizes().then((loaded) => {
@@ -64,6 +76,8 @@ export default function Workspace() {
       {/* Modals */}
       <SecretsPanel />
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <FilesPanel />
+      <FileViewer />
 
       {/* Workspace header */}
       <WorkspaceHeader
@@ -74,6 +88,7 @@ export default function Workspace() {
         onToggleGoals={() => setGoalsExpanded(!goalsExpanded)}
         onOpenSecrets={openSecrets}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenFiles={openFiles}
       />
 
       {/* Goals expander */}
@@ -127,6 +142,7 @@ function WorkspaceHeader({
   onToggleGoals,
   onOpenSecrets,
   onOpenSettings,
+  onOpenFiles,
 }: {
   projectName: string | null
   branch: string | null
@@ -135,6 +151,7 @@ function WorkspaceHeader({
   onToggleGoals: () => void
   onOpenSecrets: () => void
   onOpenSettings: () => void
+  onOpenFiles: () => void
 }) {
   return (
     <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4">
@@ -167,6 +184,15 @@ function WorkspaceHeader({
         >
           <KeyRound className="h-3 w-3" />
           Secrets
+        </button>
+
+        <button
+          onClick={onOpenFiles}
+          title="Browse files"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+        >
+          <FolderTree className="h-3 w-3" />
+          Files
         </button>
 
         {hasGoals && (

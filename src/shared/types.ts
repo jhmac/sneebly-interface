@@ -230,6 +230,23 @@ export type ActivityCardData =
   | SearchCard | WebFetchCard | TaskCard | PermissionCard | ErrorCard | SummaryCard
   | BrowserCheckCard
 
+export interface TreeNode {
+  name: string
+  path: string
+  kind: 'dir' | 'file'
+  children?: TreeNode[]
+  size?: number
+  mtime?: number
+}
+
+export interface FileViewerData {
+  content: string
+  sizeBytes: number
+  mtime: number
+  isBinary: boolean
+  truncated?: boolean
+}
+
 export interface AppSettings {
   theme: 'dark' | 'light'
   defaultModel: ModelName
@@ -263,6 +280,8 @@ export interface ElectronAPI {
   fsListProjectFiles: (projectPath: string) => Promise<string[]>
   fsSaveAttachment: (projectPath: string, fileName: string, data: Uint8Array) => Promise<string>
   fsShowOpenDialog: () => Promise<string[]>
+  fsGetTree: (projectPath: string) => Promise<TreeNode[]>
+  fsReadFile: (projectPath: string, relativePath: string) => Promise<FileViewerData>
   systemTakeScreenshot: (projectPath: string) => Promise<string | null>
 
   // ── Agent ─────────────────────────────────────────────────────────────────
