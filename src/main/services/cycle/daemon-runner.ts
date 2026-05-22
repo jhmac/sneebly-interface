@@ -1,8 +1,10 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { Notification } from 'electron'
 import Store from 'electron-store'
 import { listProjects } from '../project-registry'
 import { getActiveChatProjectIds } from '../agent-session'
+import { pushAgentEvent } from '../../ipc/agent'
 import type { CycleResult, DaemonStatus } from '../../../shared/types'
 import { runCycle } from './cycle'
 import { pickNextProject, getDaemonEnabled, getProjectConfig, setProjectConfig, recordCycleOutcome } from './scheduler'
@@ -90,6 +92,20 @@ export async function runCycleNow(
     activeCycle = null
     const error = err instanceof Error ? err.message : String(err)
     if (!options.dryRun) recordCycleOutcome(projectId, 'failed')
+
+    const projectName = project.name
+    pushAgentEvent({
+      type: 'error',
+      message: `Daemon cycle on ${projectName} failed: ${error}`,
+      source: 'daemon',
+    })
+    try {
+      new Notification({
+        title: 'Sneebly: Daemon cycle failed',
+        body: `${projectName}: ${error}`,
+      }).show()
+    } catch { /* notifications are optional */ }
+
     return { cycleId: 'error', projectId, outcome: 'failed', durationMs: 0, error }
   }
 }
