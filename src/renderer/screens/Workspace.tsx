@@ -14,6 +14,7 @@ import { useFilesStore } from '../state/filesStore'
 import { useEditorStore } from '../state/editorStore'
 import { useActivityPanelStore } from '../state/activityPanelStore'
 import { useGitStatusStore } from '../state/gitStatusStore'
+import CommitPushModal from '../panels/GitHubPanel/CommitPushModal'
 import PreviewPanel from '../panels/PreviewPanel'
 import ChatPanel from '../panels/ChatPanel/ChatPanel'
 import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
@@ -46,7 +47,7 @@ export default function Workspace() {
   const { openPanel: openSecrets } = useSecretsStore()
   const { resetForProject } = useFilesStore()
   const { setActiveTab } = useActivityPanelStore()
-  const { status: gitStatus, openCommitModal } = useGitStatusStore()
+  const { status: gitStatus, openCommitModal, commitModalOpen, closeCommitModal } = useGitStatusStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
@@ -90,6 +91,7 @@ export default function Workspace() {
       <SecretsPanel />
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <EditorPanel />
+      {commitModalOpen && <CommitPushModal onClose={closeCommitModal} />}
 
       {/* Project switch dirty-files guard */}
       {pendingProjectSwitch && (
