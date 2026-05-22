@@ -38,7 +38,7 @@ function CardView({ card }: { card: ActivityCardData }) {
 }
 
 export default function ActivityPanel() {
-  const { cards, filters } = useActivityStore()
+  const { cards, filters, sourceFilters } = useActivityStore()
   const model = useChatStore((s) => s.defaultModel)
   const { activeTab, setActiveTab } = useActivityPanelStore()
 
@@ -57,7 +57,11 @@ export default function ActivityPanel() {
     }
   }, [cards.length, activeTab])
 
-  const visible = cards.filter((c) => filters[c.cardType as CardType])
+  const visible = cards.filter((c) => {
+    if (!filters[c.cardType as CardType]) return false
+    const src = c.source ?? 'chat'
+    return sourceFilters[src as keyof typeof sourceFilters] ?? true
+  })
 
   return (
     <div className="flex h-full flex-col bg-zinc-900 text-zinc-100">

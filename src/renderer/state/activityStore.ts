@@ -40,10 +40,16 @@ export interface TurnState {
   currentActivity: string
 }
 
+export interface SourceFilters {
+  chat: boolean
+  daemon: boolean
+}
+
 interface ActivityState {
   cards: ActivityCardData[]
   currentTurn: TurnState | null
   filters: Record<CardType, boolean>
+  sourceFilters: SourceFilters
   pendingSessionId: string | null
 
   appendEvent: (event: AgentEvent) => void
@@ -51,6 +57,7 @@ interface ActivityState {
   abortTurn: () => void
   respondToPermission: (requestId: string, decision: 'allow' | 'deny') => void
   toggleFilter: (cardType: CardType) => void
+  toggleSourceFilter: (source: keyof SourceFilters) => void
   reset: () => void
 }
 
@@ -58,6 +65,20 @@ const DEFAULT_FILTERS: Record<CardType, boolean> = {
   thinking: true, read: true, edit: true, write: true, bash: true,
   search: true, webfetch: true, task: true, permission: true, error: true, summary: true,
   browsercheck: true,
+}
+
+function loadSourceFilters(): SourceFilters {
+  try {
+    const raw = localStorage.getItem('activity.sourceFilters')
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<SourceFilters>
+      return {
+        chat: parsed.chat ?? true,
+        daemon: parsed.daemon ?? true,
+      }
+    }
+  } catch { /* ignore */ }
+  return { chat: true, daemon: true }
 }
 
 function toolNameToCardType(name: string): CardType | null {
@@ -165,6 +186,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   cards: [],
   currentTurn: null,
   filters: { ...DEFAULT_FILTERS },
+  sourceFilters: loadSourceFilters(),
   pendingSessionId: null,
 
   appendEvent: (event: AgentEvent) => {
@@ -315,6 +337,14 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
     set((s) => ({
       filters: { ...s.filters, [cardType]: !s.filters[cardType] },
     }))
+  },
+
+  toggleSourceFilter: (source) => {
+    set((s) => {
+      const next = { ...s.sourceFilters, [source]: !s.sourceFilters[source] }
+      try { localStorage.setItem('activity.sourceFilters', JSON.stringify(next)) } catch { /* ignore */ }
+      return { sourceFilters: next }
+    })
   },
 
   reset: () => set({ cards: [], currentTurn: null }),
