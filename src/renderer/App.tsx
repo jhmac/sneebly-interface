@@ -3,6 +3,9 @@ import Sidebar from './chrome/Sidebar'
 import Welcome from './screens/Welcome'
 import Workspace from './screens/Workspace'
 import OnboardingOverlay from './panels/OnboardingOverlay/OnboardingOverlay'
+import DaemonSettingsModal from './panels/DaemonPanel/DaemonSettingsModal'
+import DaemonQueueModal from './panels/DaemonPanel/DaemonQueueModal'
+import DaemonQuestionsModal from './panels/DaemonPanel/DaemonQuestionsModal'
 import { useProjectStore } from './state/projectStore'
 import { usePreviewStore } from './state/previewStore'
 import { useChatStore } from './state/chatStore'
@@ -13,6 +16,7 @@ import { useDaemonStore } from './state/daemonStore'
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const { modalOpen, closeModal } = useDaemonStore()
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -111,6 +115,9 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-950">
       {showOnboarding && <OnboardingOverlay onDismiss={handleOnboardingDismiss} />}
+      {modalOpen === 'settings' && <DaemonSettingsModal onClose={closeModal} />}
+      {modalOpen === 'queue' && <DaemonQueueModal onClose={closeModal} />}
+      {modalOpen === 'questions' && <DaemonQuestionsModal onClose={closeModal} />}
       <Sidebar />
       <div className="flex flex-1 overflow-hidden">
         {activeProjectId ? <Workspace /> : <Welcome />}
