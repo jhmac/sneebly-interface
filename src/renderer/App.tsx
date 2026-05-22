@@ -13,6 +13,7 @@ import { useActivityStore } from './state/activityStore'
 import { useEditorStore } from './state/editorStore'
 import { useDaemonStore } from './state/daemonStore'
 import { useGitHubStore } from './state/githubStore'
+import { useGitStatusStore } from './state/gitStatusStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -31,6 +32,15 @@ export default function App() {
   useEffect(() => {
     useGitHubStore.getState().checkStatus()
   }, [])
+
+  // ── Git status polling ─────────────────────────────────────────────────
+  useEffect(() => {
+    const { refresh, reset } = useGitStatusStore.getState()
+    if (!activeProjectId) { reset(); return }
+    refresh()
+    const timer = setInterval(refresh, 10000)
+    return () => clearInterval(timer)
+  }, [activeProjectId])
 
   // ── Daemon status polling ──────────────────────────────────────────────
   useEffect(() => {

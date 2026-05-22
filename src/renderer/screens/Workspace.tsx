@@ -13,6 +13,7 @@ import { useSecretsStore } from '../state/secretsStore'
 import { useFilesStore } from '../state/filesStore'
 import { useEditorStore } from '../state/editorStore'
 import { useActivityPanelStore } from '../state/activityPanelStore'
+import { useGitStatusStore } from '../state/gitStatusStore'
 import PreviewPanel from '../panels/PreviewPanel'
 import ChatPanel from '../panels/ChatPanel/ChatPanel'
 import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
@@ -45,6 +46,7 @@ export default function Workspace() {
   const { openPanel: openSecrets } = useSecretsStore()
   const { resetForProject } = useFilesStore()
   const { setActiveTab } = useActivityPanelStore()
+  const { status: gitStatus, openCommitModal } = useGitStatusStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
@@ -110,6 +112,10 @@ export default function Workspace() {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenFiles={handleOpenFiles}
         openFilesCount={openFilesCount}
+        gitChangedFiles={gitStatus?.changedFiles ?? 0}
+        gitAhead={gitStatus?.ahead ?? 0}
+        gitBehind={gitStatus?.behind ?? 0}
+        onOpenCommit={openCommitModal}
       />
 
       {/* Goals expander */}
@@ -213,6 +219,10 @@ function WorkspaceHeader({
   onOpenSettings,
   onOpenFiles,
   openFilesCount,
+  gitChangedFiles,
+  gitAhead,
+  gitBehind,
+  onOpenCommit,
 }: {
   projectName: string | null
   branch: string | null
@@ -223,7 +233,14 @@ function WorkspaceHeader({
   onOpenSettings: () => void
   onOpenFiles: () => void
   openFilesCount: number
+  gitChangedFiles: number
+  gitAhead: number
+  gitBehind: number
+  onOpenCommit: () => void
 }) {
+  const hasChanges = gitChangedFiles > 0
+  const hasSyncInfo = gitAhead > 0 || gitBehind > 0
+
   return (
     <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4">
       <div className="flex items-center gap-3">
@@ -231,10 +248,23 @@ function WorkspaceHeader({
           {projectName ?? 'Sneebly Interface'}
         </span>
         {branch && (
-          <span className="flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+          <button
+            onClick={onOpenCommit}
+            title="Git status"
+            className="flex items-center gap-1.5 rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+          >
             <GitBranch className="h-3 w-3" />
             {branch}
-          </span>
+            {hasChanges && (
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+            )}
+            {hasSyncInfo && (
+              <span className="flex items-center gap-0.5 text-zinc-500">
+                {gitAhead > 0 && <span>↑{gitAhead}</span>}
+                {gitBehind > 0 && <span>↓{gitBehind}</span>}
+              </span>
+            )}
+          </button>
         )}
       </div>
 
