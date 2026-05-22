@@ -6,6 +6,7 @@ import type { ActivityCardData, CardType } from '../../../shared/types'
 import StatusBar from './StatusBar'
 import FilterBar from './FilterBar'
 import FilesTree from '../FilesPanel/FilesTree'
+import DigestCard from '../DaemonPanel/DigestCard'
 import ThinkingCard from './cards/ThinkingCard'
 import ReadCard from './cards/ReadCard'
 import EditCard from './cards/EditCard'
@@ -90,6 +91,7 @@ export default function ActivityPanel() {
 
       {activeTab === 'activity' ? (
         <>
+          <DigestCard />
           <FilterBar />
           <div
             ref={scrollRef}
