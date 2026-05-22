@@ -53,15 +53,14 @@ export function detectDevCommand(projectPath: string): string | null {
 }
 
 export async function startServer(projectId: string, projectPath: string): Promise<void> {
-  // Kill any existing server for this project (silently — generation mismatch
-  // will prevent its exit handler from emitting anything misleading)
+  // Kill any existing server for this project — must kill the whole process group
+  // (shell + npm + tsx + node) not just the shell wrapper, otherwise children
+  // keep holding the port and the new process immediately hits EADDRINUSE.
   const old = active.get(projectId)
   if (old) {
     clearTimeout(old.killTimer)
-    try { old.proc.kill('SIGTERM') } catch {}
-    old.killTimer = setTimeout(() => {
-      try { old.proc.kill('SIGKILL') } catch {}
-    }, 3000)
+    killGroup(old.proc, 'SIGTERM')
+    old.killTimer = setTimeout(() => killGroup(old.proc, 'SIGKILL'), 3000)
   }
 
   const command = detectDevCommand(projectPath)
@@ -102,9 +101,10 @@ export async function startServer(projectId: string, projectPath: string): Promi
       entry.stderrLines.push(line)
       if (entry.stderrLines.length > 200) entry.stderrLines.shift()
 
-      // Auto-clear port and retry on EADDRINUSE
-      if (!entry.stopping && line.includes('EADDRINUSE')) {
-        const portMatch = line.match(/:(\d+)/)
+      // Auto-clear port and retry on EADDRINUSE (matches both Node's native message
+      // and our custom "Port N is already in use" message from server/index.ts)
+      if (!entry.stopping && (line.includes('EADDRINUSE') || line.includes('already in use'))) {
+        const portMatch = line.match(/[: ](\d{4,5})/)
         if (portMatch) {
           const stuckPort = portMatch[1]
           try {
@@ -158,6 +158,8 @@ export async function startServer(projectId: string, projectPath: string): Promi
         type: 'crashed',
         stderrTail: current.stderrLines.slice(-50),
       })
+      // Auto-restart after unexpected crash (2 s delay to avoid tight loops)
+      setTimeout(() => startServer(projectId, projectPath), 2000)
     } else {
       emit({ projectId, type: 'stopped' })
     }
