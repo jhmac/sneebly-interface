@@ -22,6 +22,8 @@ import { stopAllWatchers } from './services/project-watcher'
 import { ensureChromiumInstalled } from './services/playwright-setup'
 import { generateMcpConfig } from './services/mcp-config'
 import { initAutoUpdater } from './services/auto-updater'
+import { setupTray, teardownTray } from './services/tray'
+import { getDaemonStatus, stopDaemon } from './services/cycle/daemon-runner'
 
 const store = new Store()
 
@@ -75,8 +77,15 @@ function registerIpcHandlers(): void {
 }
 
 // ── Window ─────────────────────────────────────────────────────────────────
+let mainWindow: BrowserWindow | null = null
+let isAppQuitting = false
+
+export function getMainWindow(): BrowserWindow | null {
+  return mainWindow
+}
+
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1200,
@@ -91,9 +100,18 @@ function createWindow(): void {
     },
   })
 
+  mainWindow.on('close', (event) => {
+    const showInMenuBar = store.get('daemon.runAfterQuit', false) as boolean
+    const daemonRunning = getDaemonStatus().running
+    if (showInMenuBar && daemonRunning && !isAppQuitting) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
   mainWindow.on('closed', () => {
+    mainWindow = null
     stopAllServers()
-    stopAllWatchers()
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -110,13 +128,40 @@ app.whenReady().then(() => {
   ensureChromiumInstalled()
   initAutoUpdater()
   createWindow()
+  setupTray()
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (mainWindow) {
+      mainWindow.show()
+      mainWindow.focus()
+    } else {
+      createWindow()
+    }
   })
 })
 
-app.on('window-all-closed', () => {
-  stopAllServers()
+app.on('before-quit', () => {
+  isAppQuitting = true
+})
+
+app.on('will-quit', (event) => {
+  const status = getDaemonStatus()
+  if (status.activeCycle) {
+    // Attempt graceful stop — give cycle up to 3s then proceed
+    event.preventDefault()
+    stopDaemon()
+    setTimeout(() => app.quit(), 3000)
+    return
+  }
+  stopDaemon()
   stopAllWatchers()
+  teardownTray()
+})
+
+app.on('window-all-closed', () => {
+  const showInMenuBar = store.get('daemon.runAfterQuit', false) as boolean
+  const daemonRunning = getDaemonStatus().running
+  // On macOS, if the daemon is running and "show in menu bar" is on, keep alive
+  if (process.platform === 'darwin' && showInMenuBar && daemonRunning) return
+  stopAllServers()
   if (process.platform !== 'darwin') app.quit()
 })
