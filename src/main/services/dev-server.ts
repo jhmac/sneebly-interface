@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -107,11 +107,9 @@ export async function startServer(projectId: string, projectPath: string): Promi
         const portMatch = line.match(/:(\d+)/)
         if (portMatch) {
           const stuckPort = portMatch[1]
-          const { execSync } = require('node:child_process') as typeof import('node:child_process')
           try {
             execSync(`lsof -ti :${stuckPort} | xargs kill -9`, { stdio: 'ignore' })
           } catch {}
-          // Small delay then restart
           setTimeout(() => startServer(projectId, projectPath), 1500)
         }
       }

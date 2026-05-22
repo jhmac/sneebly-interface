@@ -328,6 +328,25 @@ export interface ElectronAPI {
   daemonSetRunAfterQuit: (value: boolean) => Promise<void>
   daemonReadQueueDiff: (projectId: string, cycleId: string) => Promise<string>
   daemonReadJournal: (projectId: string) => Promise<JournalEntry[]>
+
+  // ── GitHub ────────────────────────────────────────────────────────────────
+  githubGetAuthStatus: () => Promise<GitHubAuthStatus>
+  githubStartOAuth: () => Promise<{ success: boolean; user?: GitHubUser; error?: string }>
+  githubDisconnect: () => Promise<void>
+  githubOnUserCode: (callback: (payload: { code: string; verificationUri: string }) => void) => () => void
+  githubListRepos: (opts: { search?: string; page: number; perPage?: number }) => Promise<GitHubRepoListResult>
+  githubCloneRepo: (opts: { cloneUrl: string; fullName: string }) => Promise<{ projectId?: string; error?: string }>
+
+  // ── Git status / commit ───────────────────────────────────────────────────
+  gitGetStatus: (projectPath: string) => Promise<GitStatusResult>
+  gitGetDiff: (projectPath: string) => Promise<GitDiffResult>
+  gitCommitAndPush: (opts: {
+    projectPath: string
+    files: string[]
+    message: string
+    body?: string
+    pushAfter: boolean
+  }) => Promise<{ commitSha?: string; pushed: boolean; error?: string }>
 }
 
 export interface JournalEntry {
@@ -337,6 +356,54 @@ export interface JournalEntry {
   event: string
   cycleId: string
   data: Record<string, unknown>
+}
+
+// ── GitHub types ───────────────────────────────────────────────────────────
+
+export interface GitHubUser {
+  login: string
+  avatarUrl: string
+}
+
+export interface GitHubAuthStatus {
+  connected: boolean
+  user?: GitHubUser
+}
+
+export interface GitHubRepo {
+  id: number
+  name: string
+  fullName: string
+  description: string | null
+  defaultBranch: string
+  private: boolean
+  updatedAt: string
+  cloneUrl: string
+}
+
+export interface GitHubRepoListResult {
+  repos: GitHubRepo[]
+  hasMore: boolean
+  totalCount: number
+}
+
+export interface GitStatusResult {
+  changedFiles: number
+  ahead: number
+  behind: number
+  branch: string | null
+}
+
+export interface GitDiffFile {
+  path: string
+  status: 'M' | 'A' | 'D' | 'R' | '?'
+  additions: number
+  deletions: number
+}
+
+export interface GitDiffResult {
+  files: GitDiffFile[]
+  fullDiff: string
 }
 
 // ── Daemon types ───────────────────────────────────────────────────────────

@@ -22,6 +22,11 @@ import type {
   FileViewerData,
   FileChangedEvent,
   JournalEntry,
+  GitHubAuthStatus,
+  GitHubUser,
+  GitHubRepoListResult,
+  GitStatusResult,
+  GitDiffResult,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -180,6 +185,37 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.DAEMON_READ_QUEUE_DIFF, projectId, cycleId),
   daemonReadJournal: (projectId: string): Promise<JournalEntry[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.DAEMON_READ_JOURNAL, projectId),
+
+  // ── GitHub ────────────────────────────────────────────────────────────────
+  githubGetAuthStatus: (): Promise<GitHubAuthStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_GET_AUTH_STATUS),
+  githubStartOAuth: (): Promise<{ success: boolean; user?: GitHubUser; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_START_OAUTH),
+  githubDisconnect: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_DISCONNECT),
+  githubOnUserCode: (callback: (payload: { code: string; verificationUri: string }) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, payload: { code: string; verificationUri: string }) => callback(payload)
+    ipcRenderer.on(IPC_CHANNELS.GITHUB_OAUTH_USER_CODE, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.GITHUB_OAUTH_USER_CODE, h)
+  },
+  githubListRepos: (opts: { search?: string; page: number; perPage?: number }): Promise<GitHubRepoListResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_LIST_REPOS, opts),
+  githubCloneRepo: (opts: { cloneUrl: string; fullName: string }): Promise<{ projectId?: string; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_CLONE_REPO, opts),
+
+  // ── Git status / commit ───────────────────────────────────────────────────
+  gitGetStatus: (projectPath: string): Promise<GitStatusResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_STATUS, projectPath),
+  gitGetDiff: (projectPath: string): Promise<GitDiffResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_DIFF, projectPath),
+  gitCommitAndPush: (opts: {
+    projectPath: string
+    files: string[]
+    message: string
+    body?: string
+    pushAfter: boolean
+  }): Promise<{ commitSha?: string; pushed: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_AND_PUSH, opts),
 }
 
 contextBridge.exposeInMainWorld('api', api)

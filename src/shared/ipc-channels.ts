@@ -58,4 +58,13 @@ export const IPC_CHANNELS = {
   DAEMON_SET_RUN_AFTER_QUIT: 'daemon:set-run-after-quit',
   DAEMON_READ_QUEUE_DIFF: 'daemon:read-queue-diff',
   DAEMON_READ_JOURNAL: 'daemon:read-journal',
+  GITHUB_GET_AUTH_STATUS: 'github:get-auth-status',
+  GITHUB_START_OAUTH: 'github:start-oauth',
+  GITHUB_DISCONNECT: 'github:disconnect',
+  GITHUB_OAUTH_USER_CODE: 'github:oauth-user-code',
+  GITHUB_LIST_REPOS: 'github:list-repos',
+  GITHUB_CLONE_REPO: 'github:clone-repo',
+  GIT_GET_STATUS: 'git:get-status',
+  GIT_GET_DIFF: 'git:get-diff',
+  GIT_COMMIT_AND_PUSH: 'git:commit-and-push',
 } as const
