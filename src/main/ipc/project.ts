@@ -7,7 +7,9 @@ import {
   addProject,
   touchProject,
   detectProjectName,
+  removeProject,
 } from '../services/project-registry'
+import { stopServer } from '../services/dev-server'
 import { parseGoalsFile } from '../services/cycle/identity'
 import { startWatcher, stopWatcher } from '../services/project-watcher'
 
@@ -79,4 +81,10 @@ export function registerProjectHandlers(): void {
       return { project, branch, goals }
     }
   )
+
+  ipcMain.handle(IPC_CHANNELS.PROJECT_REMOVE, (_e, id: string): void => {
+    try { stopServer(id) } catch { /* already stopped */ }
+    try { stopWatcher(id) } catch { /* already stopped */ }
+    removeProject(id)
+  })
 }

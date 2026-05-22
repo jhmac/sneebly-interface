@@ -52,6 +52,12 @@ export function touchProject(id: string): Project | null {
   return project
 }
 
+export function removeProject(id: string): void {
+  const registry = readRegistry()
+  registry.projects = registry.projects.filter((p) => p.id !== id)
+  writeRegistry(registry)
+}
+
 export function detectProjectName(projectPath: string): string {
   const pkgPath = join(projectPath, 'package.json')
   if (existsSync(pkgPath)) {

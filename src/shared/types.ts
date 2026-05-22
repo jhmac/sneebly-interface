@@ -267,6 +267,7 @@ export interface ElectronAPI {
   projectList: () => Promise<Project[]>
   projectOpenDialog: () => Promise<Project | null>
   projectActivate: (id: string) => Promise<ProjectActivateResult>
+  projectRemove: (id: string) => Promise<void>
   previewStart: (projectId: string, projectPath: string) => Promise<void>
   previewStop: (projectId: string) => Promise<void>
   previewRestart: (projectId: string, projectPath: string) => Promise<void>

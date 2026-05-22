@@ -5,6 +5,7 @@ export const IPC_CHANNELS = {
   PROJECT_LIST: 'project:list',
   PROJECT_OPEN_DIALOG: 'project:open-dialog',
   PROJECT_ACTIVATE: 'project:activate',
+  PROJECT_REMOVE: 'project:remove',
   PREVIEW_START: 'preview:start',
   PREVIEW_STOP: 'preview:stop',
   PREVIEW_RESTART: 'preview:restart',

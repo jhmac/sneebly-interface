@@ -44,6 +44,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.PROJECT_OPEN_DIALOG),
   projectActivate: (id: string): Promise<ProjectActivateResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.PROJECT_ACTIVATE, id),
+  projectRemove: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECT_REMOVE, id),
 
   // ── Preview ───────────────────────────────────────────────────────────
   previewStart: (projectId: string, projectPath: string): Promise<void> =>
