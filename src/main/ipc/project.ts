@@ -8,7 +8,7 @@ import {
   touchProject,
   detectProjectName,
 } from '../services/project-registry'
-import { parseGoalsFile } from '../services/goals-parser'
+import { parseGoalsFile } from '../services/cycle/identity'
 
 async function getBranch(projectPath: string): Promise<string | null> {
   try {
