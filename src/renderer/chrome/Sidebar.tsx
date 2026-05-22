@@ -21,10 +21,23 @@ export default function Sidebar() {
 
   return (
     <div className="flex h-full w-48 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">
-      <div className="flex items-center justify-between px-3 py-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-          Projects
-        </span>
+      <div className="pt-8 px-3 pb-2">
+        <div className="text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+          Sneebly V. 2
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Projects
+          </span>
+          <button
+            onClick={openProjectDialog}
+            disabled={loading}
+            title="Open folder…"
+            className="flex items-center justify-center h-5 w-5 rounded text-zinc-600 hover:bg-zinc-800 hover:text-zinc-300 transition-colors disabled:opacity-50 text-base leading-none"
+          >
+            +
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
