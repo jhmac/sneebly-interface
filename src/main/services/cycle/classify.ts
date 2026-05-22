@@ -1,23 +1,5 @@
-// PlanResult is defined here to keep classify.ts compilable before plan.ts
-// is created in Phase 8a-4. Once plan.ts exists, update to import from there.
-export type PlanResult = {
-  constraint: string
-  reason: string
-  phase?: string
-  milestone?: string
-  dependencyChain?: string
-  existingContext?: string
-  plan?: Array<{
-    step: number
-    action: 'create' | 'modify'
-    filePath: string
-    description: string
-    successCriteria: string[]
-  }>
-  uncertainties?: string[]
-  estimatedComplexity?: 'low' | 'medium' | 'high'
-  requiresHumanAction?: string
-}
+import type { PlanResult } from './plan'
+export type { PlanResult }
 
 export type ClassifyResult = {
   decision: 'auto-commit' | 'queue-for-approval'
