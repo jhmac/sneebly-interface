@@ -169,6 +169,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
 
   appendEvent: (event: AgentEvent) => {
     const ts = Date.now()
+    const source = event.source
 
     if (event.type === 'system' && event.subtype === 'init') {
       set((s) => ({
@@ -191,13 +192,13 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
 
       for (const block of event.message.content) {
         if (block.type === 'thinking') {
-          newCards.push({ id: `think-${ts}-${Math.random()}`, ts, cardType: 'thinking', text: block.thinking } satisfies ThinkingCard)
+          newCards.push({ id: `think-${ts}-${Math.random()}`, ts, source, cardType: 'thinking', text: block.thinking } satisfies ThinkingCard)
           currentActivity = 'Thinking…'
         } else if (block.type === 'text' && block.text.trim()) {
-          newCards.push({ id: `summary-${ts}-${Math.random()}`, ts, cardType: 'summary', text: block.text } satisfies SummaryCard)
+          newCards.push({ id: `summary-${ts}-${Math.random()}`, ts, source, cardType: 'summary', text: block.text } satisfies SummaryCard)
         } else if (block.type === 'tool_use') {
           const card = toolUseToCard(block, ts)
-          if (card) newCards.push(card)
+          if (card) newCards.push({ ...card, source })
           currentActivity = activityLabel(block.name, block.input)
           toolCallCount++
         }

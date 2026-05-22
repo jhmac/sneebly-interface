@@ -13,6 +13,11 @@ import type {
   ModelName,
   AgentEvent,
   AppSettings,
+  DaemonStatus,
+  DaemonProjectConfig,
+  CycleResult,
+  QueueItem,
+  OpenQuestion,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -130,6 +135,30 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SECRETS_IMPORT_ENV, projectId, envContent),
   secretsExportEnv: (projectId: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.SECRETS_EXPORT_ENV, projectId),
+
+  // ── Daemon ────────────────────────────────────────────────────────────────
+  daemonStatus: (): Promise<DaemonStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_STATUS),
+  daemonRunNow: (projectId: string, options?: { dryRun?: boolean }): Promise<CycleResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_RUN_NOW, projectId, options),
+  daemonStart: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_START),
+  daemonStop: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_STOP),
+  daemonGetProjectConfig: (projectId: string): Promise<DaemonProjectConfig> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_GET_PROJECT_CONFIG, projectId),
+  daemonSetProjectConfig: (projectId: string, config: Partial<DaemonProjectConfig>): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_SET_PROJECT_CONFIG, projectId, config),
+  daemonListQueue: (projectId: string): Promise<QueueItem[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_LIST_QUEUE, projectId),
+  daemonQueueApprove: (projectId: string, cycleId: string): Promise<{ success: boolean; conflicts?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_QUEUE_APPROVE, projectId, cycleId),
+  daemonQueueReject: (projectId: string, cycleId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_QUEUE_REJECT, projectId, cycleId),
+  daemonListOpenQuestions: (projectId: string): Promise<OpenQuestion[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_LIST_OPEN_QUESTIONS, projectId),
+  daemonAnswerOpenQuestion: (projectId: string, cycleId: string, answer: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DAEMON_ANSWER_OPEN_QUESTION, projectId, cycleId, answer),
 }
 
 contextBridge.exposeInMainWorld('api', api)

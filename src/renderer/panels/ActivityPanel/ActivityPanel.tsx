@@ -69,7 +69,11 @@ export default function ActivityPanel() {
             Activity will appear here
           </div>
         ) : (
-          visible.map((card) => <CardView key={card.id} card={card} />)
+          visible.map((card) => (
+            <div key={card.id} className={card.source === 'daemon' ? 'ring-1 ring-inset ring-indigo-900/60 rounded-md' : undefined}>
+              <CardView card={card} />
+            </div>
+          ))
         )}
       </div>
     </div>

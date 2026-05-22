@@ -1,20 +1,18 @@
-import { spawn, type ChildProcess } from 'node:child_process'
-import { createInterface } from 'node:readline'
+import { type ChildProcess } from 'node:child_process'
 import type { AgentEvent } from '../../shared/types'
-import { getAllSecrets } from './secrets-store'
-import { getMcpConfigPath } from './mcp-config'
+import { runStandaloneTurn } from './standalone-turn'
 
-// Binary path — use full path so Electron's minimal PATH doesn't miss it
-const CLAUDE_BIN = process.env['CLAUDE_BIN'] ?? '/Users/mister/.local/bin/claude'
-
-// Track active processes keyed by sessionId so agent:abort can find them
+// Keyed by sneeblySessionId for abort support
 const activeProcesses = new Map<string, ChildProcess>()
+
+// Which projectIds have an active chat turn — read by the daemon's soft lock
+const activeChatProjectIds = new Set<string>()
 
 export interface TurnOpts {
   cwd: string
-  projectId: string             // for secrets injection
-  sneeblySessionId: string      // Sneebly's UUID — JSONL filename, process map key
-  claudeCodeSessionId?: string | null  // Claude's UUID — passed to --resume; null/undefined = first turn
+  projectId: string
+  sneeblySessionId: string
+  claudeCodeSessionId?: string | null
   prompt: string
   model: string
 }
@@ -24,74 +22,40 @@ export function startTurn(
   onEvent: (event: AgentEvent) => void,
   onDone: (claudeSessionId: string | null, error?: string) => void
 ): void {
-  const args: string[] = [
-    '-p', opts.prompt,
-    '--output-format', 'stream-json',
-    '--verbose',
-    '--model', opts.model,
-    '--permission-mode', 'bypassPermissions',
-    '--mcp-config', getMcpConfigPath(),
-  ]
-  if (opts.claudeCodeSessionId) args.push('--resume', opts.claudeCodeSessionId)
+  activeChatProjectIds.add(opts.projectId)
 
-  // Fetch secrets first, then spawn — errors silently fall back to no injection
-  getAllSecrets(opts.projectId).catch(() => ({} as Record<string, string>)).then((secrets) => {
-    const proc = spawn(CLAUDE_BIN, args, {
-      cwd: opts.cwd,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...secrets },
-    })
-
-    activeProcesses.set(opts.sneeblySessionId, proc)
-
-    let discoveredClaudeSessionId: string | null = null
-    const stderrChunks: string[] = []
-
-    proc.stderr?.on('data', (chunk: Buffer) => {
-      stderrChunks.push(chunk.toString())
-    })
-
-    const rl = createInterface({ input: proc.stdout!, terminal: false })
-
-    rl.on('line', (line) => {
-      if (!line.trim()) return
-      let event: AgentEvent
-      try {
-        event = JSON.parse(line) as AgentEvent
-      } catch {
-        return
-      }
-
-      if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
-        discoveredClaudeSessionId = event.session_id
-      }
-
-      onEvent(event)
-    })
-
-    proc.on('close', (code) => {
-      activeProcesses.delete(opts.sneeblySessionId)
-      if (code !== 0) {
-        const stderr = stderrChunks.join('').trim()
-        onDone(discoveredClaudeSessionId, stderr || `Process exited with code ${code}`)
-      } else {
-        onDone(discoveredClaudeSessionId)
-      }
-    })
-
-    proc.on('error', (err) => {
-      activeProcesses.delete(opts.sneeblySessionId)
-      onDone(discoveredClaudeSessionId, err.message)
-    })
+  runStandaloneTurn({
+    cwd: opts.cwd,
+    projectId: opts.projectId,
+    prompt: opts.prompt,
+    model: opts.model as 'claude-sonnet-4-6' | 'claude-opus-4-7' | 'claude-haiku-4-5',
+    permissionMode: 'bypassPermissions',
+    resumeSessionId: opts.claudeCodeSessionId,
+    onProcess: (proc) => {
+      activeProcesses.set(opts.sneeblySessionId, proc)
+    },
+    onEvent: (event) => {
+      onEvent({ ...event, source: 'chat' } as AgentEvent)
+    },
+  }).then((result) => {
+    activeProcesses.delete(opts.sneeblySessionId)
+    activeChatProjectIds.delete(opts.projectId)
+    onDone(result.claudeCodeSessionId, result.error)
+  }).catch((err: unknown) => {
+    activeProcesses.delete(opts.sneeblySessionId)
+    activeChatProjectIds.delete(opts.projectId)
+    onDone(null, err instanceof Error ? err.message : String(err))
   })
 }
 
-// Abort takes the Sneebly session ID (the process map key)
 export function abortSession(sneeblySessionId: string): void {
   const proc = activeProcesses.get(sneeblySessionId)
   if (!proc) return
   proc.kill('SIGTERM')
   const t = setTimeout(() => { if (!proc.killed) proc.kill('SIGKILL') }, 2000)
   proc.on('exit', () => clearTimeout(t))
+}
+
+export function getActiveChatProjectIds(): ReadonlySet<string> {
+  return activeChatProjectIds
 }

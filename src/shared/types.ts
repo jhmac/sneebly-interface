@@ -130,6 +130,7 @@ export interface AgentUserEvent {
 export interface AgentResultEvent {
   type: 'result'
   subtype: 'success' | 'error'
+  result?: string
   session_id?: string
   total_cost_usd?: number
   usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number }
@@ -142,12 +143,18 @@ export interface AgentErrorEvent {
   message: string
 }
 
-export type AgentEvent =
+// source is injected by the Interface layer — not in the claude CLI wire format.
+// 'chat' = triggered by user in the chat panel
+// 'daemon' = triggered by the autonomous background engine
+export type AgentEventSource = 'chat' | 'daemon'
+
+export type AgentEvent = (
   | AgentSystemEvent
   | AgentAssistantEvent
   | AgentUserEvent
   | AgentResultEvent
   | AgentErrorEvent
+) & { source?: AgentEventSource }
 
 // ── Activity card data types ───────────────────────────────────────────────
 
@@ -156,7 +163,7 @@ export type CardType =
   | 'search' | 'webfetch' | 'task' | 'permission' | 'error' | 'summary'
   | 'browsercheck'
 
-interface BaseCard { id: string; ts: number }
+interface BaseCard { id: string; ts: number; source?: AgentEventSource }
 
 export interface ThinkingCard extends BaseCard { cardType: 'thinking'; text: string }
 export interface ReadCard extends BaseCard {
@@ -278,4 +285,65 @@ export interface ElectronAPI {
   secretsDelete: (projectId: string, name: string) => Promise<void>
   secretsImportEnv: (projectId: string, envContent: string) => Promise<string[]>
   secretsExportEnv: (projectId: string) => Promise<string>
+
+  // ── Daemon ────────────────────────────────────────────────────────────────
+  daemonStatus: () => Promise<DaemonStatus>
+  daemonRunNow: (projectId: string, options?: { dryRun?: boolean }) => Promise<CycleResult>
+  daemonStart: () => Promise<void>
+  daemonStop: () => Promise<void>
+  daemonGetProjectConfig: (projectId: string) => Promise<DaemonProjectConfig>
+  daemonSetProjectConfig: (projectId: string, config: Partial<DaemonProjectConfig>) => Promise<void>
+  daemonListQueue: (projectId: string) => Promise<QueueItem[]>
+  daemonQueueApprove: (projectId: string, cycleId: string) => Promise<{ success: boolean; conflicts?: string }>
+  daemonQueueReject: (projectId: string, cycleId: string) => Promise<void>
+  daemonListOpenQuestions: (projectId: string) => Promise<OpenQuestion[]>
+  daemonAnswerOpenQuestion: (projectId: string, cycleId: string, answer: string) => Promise<void>
+}
+
+// ── Daemon types ───────────────────────────────────────────────────────────
+
+export interface DaemonStatus {
+  running: boolean
+  activeCycle: {
+    projectId: string
+    startedAt: number
+    cycleId: string
+    phase: 'planning' | 'building' | 'verifying' | 'reflecting' | 'committing'
+  } | null
+  queueLength: number
+  lastCycleAt: number | null
+  lastCycleOutcome: string | null
+}
+
+export interface DaemonProjectConfig {
+  enabled: boolean
+  schedule: 'manual' | 'hourly' | 'nightly' | 'continuous'
+  weight: number
+  lastCycleAt: number | null
+  lastCycleOutcome: string | null
+}
+
+export interface CycleResult {
+  cycleId: string
+  projectId: string
+  outcome: 'committed' | 'queued' | 'blocked' | 'failed' | 'phase-complete' | 'dry-run'
+  constraint?: string
+  durationMs: number
+  error?: string
+}
+
+export interface QueueItem {
+  cycleId: string
+  constraint: string
+  reason: string
+  type: 'verify-failed' | 'blocked' | 'queue-for-approval'
+  question?: string
+  ts: string
+}
+
+export interface OpenQuestion {
+  cycleId: string
+  question: string
+  constraint: string
+  ts: string
 }
