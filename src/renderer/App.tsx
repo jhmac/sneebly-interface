@@ -12,6 +12,7 @@ import { useChatStore } from './state/chatStore'
 import { useActivityStore } from './state/activityStore'
 import { useEditorStore } from './state/editorStore'
 import { useDaemonStore } from './state/daemonStore'
+import { useGitHubStore } from './state/githubStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -24,6 +25,11 @@ export default function App() {
     window.api.onboardingIsDone().then((done) => {
       if (!done) setShowOnboarding(true)
     })
+  }, [])
+
+  // ── GitHub auth status check ───────────────────────────────────────────
+  useEffect(() => {
+    useGitHubStore.getState().checkStatus()
   }, [])
 
   // ── Daemon status polling ──────────────────────────────────────────────
