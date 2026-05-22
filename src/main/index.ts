@@ -1,3 +1,6 @@
+import { fixMacOsPath } from './services/fix-path'
+fixMacOsPath()
+
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join, dirname } from 'path'
 import { mkdirSync, appendFileSync } from 'fs'

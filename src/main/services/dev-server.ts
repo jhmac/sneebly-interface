@@ -80,6 +80,7 @@ export async function startServer(projectId: string, projectPath: string): Promi
     cwd: projectPath,
     env: { ...process.env, ...secrets },
     stdio: 'pipe',
+    detached: true,  // gives the shell its own process group so we can kill the whole tree
   })
 
   const entry: ServerEntry = {
@@ -151,24 +152,28 @@ export async function startServer(projectId: string, projectPath: string): Promi
   })
 }
 
+function killGroup(proc: ChildProcess, signal: 'SIGTERM' | 'SIGKILL'): void {
+  if (proc.pid == null) return
+  try { process.kill(-proc.pid, signal) } catch {
+    // Process group may already be gone — fall back to direct kill
+    try { proc.kill(signal) } catch {}
+  }
+}
+
 export function stopServer(projectId: string): void {
   const entry = active.get(projectId)
   if (!entry) return
   entry.stopping = true
   clearTimeout(entry.killTimer)
-  try { entry.proc.kill('SIGTERM') } catch {}
-  entry.killTimer = setTimeout(() => {
-    try { entry.proc.kill('SIGKILL') } catch {}
-  }, 3000)
+  killGroup(entry.proc, 'SIGTERM')
+  entry.killTimer = setTimeout(() => killGroup(entry.proc, 'SIGKILL'), 3000)
 }
 
 export function stopAllServers(): void {
   for (const [, entry] of active) {
     clearTimeout(entry.killTimer)
-    try { entry.proc.kill('SIGTERM') } catch {}
-    setTimeout(() => {
-      try { entry.proc.kill('SIGKILL') } catch {}
-    }, 3000)
+    killGroup(entry.proc, 'SIGTERM')
+    setTimeout(() => killGroup(entry.proc, 'SIGKILL'), 3000)
   }
   active.clear()
 }
