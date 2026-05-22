@@ -9,6 +9,7 @@ const config: ForgeConfig = {
     appCategoryType: 'public.app-category.developer-tools',
     icon: 'resources/icon',
     asar: true,
+    extraResource: ['resources/tray-iconTemplate.png'],
     // Exclude source files, dev tooling, and temp build artifacts from the bundle
     ignore: [
       /^\/src\//,
