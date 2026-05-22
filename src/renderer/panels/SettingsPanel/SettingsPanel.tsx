@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
-import { X, FolderOpen, ChevronDown } from 'lucide-react'
+import { X, FolderOpen, ChevronDown, GitBranch, LogOut } from 'lucide-react'
 import type { AppSettings, ModelName } from '../../../shared/types'
+import { useGitHubStore } from '../../state/githubStore'
+import GitHubConnectModal from '../GitHubPanel/GitHubConnectModal'
+import type { GitHubUser } from '../../../shared/types'
 
 interface Props {
   open: boolean
@@ -22,6 +25,8 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [version, setVersion] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showConnect, setShowConnect] = useState(false)
+  const { connected, user, setConnected, setDisconnected } = useGitHubStore()
 
   useEffect(() => {
     Promise.all([window.api.settingsGet(), window.api.appVersion()]).then(([s, v]) => {
@@ -42,6 +47,16 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
   async function handlePickFolder() {
     const path = await window.api.appOpenFolderDialog()
     if (path) handleSave({ defaultProjectsFolder: path })
+  }
+
+  async function handleDisconnect() {
+    await window.api.githubDisconnect()
+    setDisconnected()
+  }
+
+  function handleConnected(connectedUser: GitHubUser) {
+    setConnected(connectedUser)
+    setShowConnect(false)
   }
 
   if (!settings) {
@@ -145,16 +160,47 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
 
         {/* GitHub */}
         <Section title="GitHub">
-          <Row label="GitHub account" description="OAuth integration coming in Phase 6">
-            <button
-              disabled
-              className="rounded-md bg-zinc-800 px-3 py-1.5 text-xs text-zinc-600 disabled:cursor-not-allowed"
-            >
-              Disconnect GitHub (not connected)
-            </button>
-          </Row>
+          {connected && user ? (
+            <Row label="GitHub account" description="Sneebly can read and clone your repositories">
+              <div className="flex items-center gap-2">
+                {user.avatarUrl && (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.login}
+                    className="h-6 w-6 rounded-full border border-zinc-700"
+                  />
+                )}
+                <span className="font-mono text-xs text-zinc-300">@{user.login}</span>
+                <button
+                  onClick={handleDisconnect}
+                  title="Disconnect GitHub"
+                  className="flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 text-[10px] text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 transition-colors"
+                >
+                  <LogOut className="h-3 w-3" />
+                  Disconnect
+                </button>
+              </div>
+            </Row>
+          ) : (
+            <Row label="GitHub account" description="Connect to browse and clone your repositories">
+              <button
+                onClick={() => setShowConnect(true)}
+                className="flex items-center gap-1.5 rounded-md bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition-colors"
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+                Connect GitHub
+              </button>
+            </Row>
+          )}
         </Section>
       </div>
+
+      {showConnect && (
+        <GitHubConnectModal
+          onClose={() => setShowConnect(false)}
+          onConnected={handleConnected}
+        />
+      )}
 
       {saving && (
         <div className="flex-shrink-0 border-t border-zinc-800 px-6 py-2 text-[10px] text-zinc-600">
