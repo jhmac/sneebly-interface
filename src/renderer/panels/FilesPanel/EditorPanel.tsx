@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState, Suspense } from 'react'
-import { X, ExternalLink } from 'lucide-react'
+import {
+  X, ExternalLink, FileText, Code2, Braces, Globe, Palette, Terminal, File,
+} from 'lucide-react'
 import { useEditorStore, type OpenFile } from '../../state/editorStore'
 import { useProjectStore } from '../../state/projectStore'
-import {
-  FileText, Code2, Braces, Globe, Palette, Terminal, File,
-} from 'lucide-react'
 
 // Lazy-load Monaco to keep initial bundle small
 const MonacoEditor = React.lazy(() =>
@@ -46,7 +45,7 @@ export default function EditorPanel() {
 function EditorPanelInner({ onClose }: { onClose: () => void }) {
   const {
     openFilesByProject, activeFilePath, closeFile, setContent, saveFile,
-    reloadFile, clearExternalChange,
+    reloadFile, clearExternalChange, setActiveFilePath,
   } = useEditorStore()
   const { activeProjectId, projects } = useProjectStore()
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
@@ -55,11 +54,15 @@ function EditorPanelInner({ onClose }: { onClose: () => void }) {
   const activeFile = openFiles.find((f) => f.relativePath === activeFilePath) ?? openFiles[0] ?? null
 
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })
-  const [closeConfirm, setCloseConfirm] = useState<string | null>(null) // relativePath to close
+  const [closeConfirm, setCloseConfirm] = useState<string | null>(null)
   const [escapeBlocked, setEscapeBlocked] = useState(false)
   const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null)
-  const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
   const prevFilePathRef = useRef<string | null>(null)
+  // Refs so the keyboard handler captures latest state without re-registering
+  const openFilesRef = useRef(openFiles)
+  const activeFileRef = useRef(activeFile)
+  openFilesRef.current = openFiles
+  activeFileRef.current = activeFile
 
   const isDirty = (f: OpenFile) => f.editedContent !== f.originalContent
 
@@ -75,10 +78,13 @@ function EditorPanelInner({ onClose }: { onClose: () => void }) {
   }, [activeFile?.relativePath])
 
   // Keyboard: Escape (close if clean), Cmd+W (close active tab)
+  // Uses refs so handler is registered once, not on every keystroke
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const files = openFilesRef.current
+      const file = activeFileRef.current
       if (e.key === 'Escape') {
-        const hasDirty = openFiles.some(isDirty)
+        const hasDirty = files.some(isDirty)
         if (hasDirty) {
           setEscapeBlocked(true)
           setTimeout(() => setEscapeBlocked(false), 2000)
@@ -86,26 +92,25 @@ function EditorPanelInner({ onClose }: { onClose: () => void }) {
           onClose()
         }
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w' && activeFile) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'w' && file) {
         e.preventDefault()
-        if (isDirty(activeFile)) {
-          setCloseConfirm(activeFile.relativePath)
+        if (isDirty(file)) {
+          setCloseConfirm(file.relativePath)
         } else {
-          closeFile(projectId, activeFile.relativePath)
-          if (openFiles.length <= 1) onClose()
+          closeFile(projectId, file.relativePath)
+          if (files.length <= 1) onClose()
         }
       }
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [openFiles, activeFile, projectId, onClose, closeFile])
+  }, [projectId, onClose, closeFile])
 
   function handleMount(
     editor: import('monaco-editor').editor.IStandaloneCodeEditor,
     monaco: typeof import('monaco-editor')
   ) {
     editorRef.current = editor
-    monacoRef.current = monaco
     prevFilePathRef.current = activeFile?.relativePath ?? null
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -159,7 +164,7 @@ function EditorPanelInner({ onClose }: { onClose: () => void }) {
               return (
                 <button
                   key={file.relativePath}
-                  onClick={() => useEditorStore.setState({ activeFilePath: file.relativePath })}
+                  onClick={() => setActiveFilePath(file.relativePath)}
                   className={[
                     'group flex flex-shrink-0 items-center gap-1.5 border-r border-zinc-800 px-3 py-2 text-xs transition-colors',
                     isActive ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-300',

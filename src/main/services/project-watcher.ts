@@ -41,6 +41,10 @@ export function startWatcher(projectId: string, projectPath: string): void {
     persistent: true,
   })
 
+  watcher.on('error', (err: Error) => {
+    console.error(`[watcher:${projectId}]`, err)
+  })
+
   watcher.on('add', (filePath: string) => {
     const rel = relative(projectPath, filePath).replace(/\\/g, '/')
     debounceEmit(projectId, rel, 'add')

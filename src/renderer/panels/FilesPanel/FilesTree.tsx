@@ -63,7 +63,11 @@ export default function FilesTree() {
           {activeProject?.name ?? 'No project'}
         </span>
         <button
-          onClick={() => activeProject && useFilesStore.getState().resetForProject() && loadTree(activeProject.path, activeProject.id)}
+          onClick={() => {
+            if (!activeProject) return
+            useFilesStore.getState().resetForProject()
+            loadTree(activeProject.path, activeProject.id)
+          }}
           title="Refresh tree"
           className="rounded p-1 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400"
         >

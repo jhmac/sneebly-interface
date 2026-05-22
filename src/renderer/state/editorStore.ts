@@ -35,6 +35,7 @@ interface EditorState {
 
   openModal: () => void
   closeModal: () => void
+  setActiveFilePath: (path: string | null) => void
   openFile: (projectPath: string, projectId: string, relativePath: string) => Promise<void>
   closeFile: (projectId: string, relativePath: string) => void
   setContent: (projectId: string, relativePath: string, content: string) => void
@@ -53,6 +54,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   openModal: () => set({ modalOpen: true }),
   closeModal: () => set({ modalOpen: false }),
+  setActiveFilePath: (path: string | null) => set({ activeFilePath: path }),
 
   openFile: async (projectPath: string, projectId: string, relativePath: string) => {
     const existing = get().openFilesByProject[projectId] ?? []
@@ -74,13 +76,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         isBinary: data.isBinary,
         externalChange: false,
       }
-      set((s) => ({
-        openFilesByProject: {
-          ...s.openFilesByProject,
-          [projectId]: [...existing, newFile],
-        },
-        activeFilePath: relativePath,
-      }))
+      set((s) => {
+        const current = s.openFilesByProject[projectId] ?? []
+        // Dedupe: another call may have added this file while we were awaiting
+        if (current.find((f) => f.relativePath === relativePath)) {
+          return { activeFilePath: relativePath }
+        }
+        return {
+          openFilesByProject: { ...s.openFilesByProject, [projectId]: [...current, newFile] },
+          activeFilePath: relativePath,
+        }
+      })
     } catch (err) {
       console.error('Failed to open file:', err)
     }
@@ -117,18 +123,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const file = files.find((f) => f.relativePath === relativePath)
     if (!file || file.isBinary) return
 
-    // Mark as self-write to suppress false external-change banner
-    const next = new Set(get().recentSelfWrites)
-    next.add(relativePath)
-    set({ recentSelfWrites: next })
-    setTimeout(() => {
-      const cur = new Set(get().recentSelfWrites)
-      cur.delete(relativePath)
-      set({ recentSelfWrites: cur })
-    }, 500)
-
     try {
       const result = await window.api.fsWriteFile(projectPath, relativePath, file.editedContent)
+      // Mark self-write after the write completes so chokidar's event arrives within the window
+      const next = new Set(get().recentSelfWrites)
+      next.add(relativePath)
+      set({ recentSelfWrites: next })
+      setTimeout(() => {
+        const cur = new Set(get().recentSelfWrites)
+        cur.delete(relativePath)
+        set({ recentSelfWrites: cur })
+      }, 500)
       set((s) => ({
         openFilesByProject: {
           ...s.openFilesByProject,
