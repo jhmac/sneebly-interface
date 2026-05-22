@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import Store from 'electron-store'
 import { listProjects } from '../project-registry'
 import { getActiveChatProjectIds } from '../agent-session'
@@ -11,14 +13,14 @@ const POLL_INTERVAL_MS = 30_000
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+type ActiveCyclePhase = 'planning' | 'building' | 'verifying' | 'reflecting' | 'committing'
+
 let activeCycle: {
   projectId: string
   startedAt: number
   cycleId: string
-  phase: DaemonStatus['activeCycle'] extends null ? never : NonNullable<DaemonStatus['activeCycle']>['phase']
+  phase: ActiveCyclePhase
 } | null = null
-
-let cycleQueue: string[] = []
 
 export function startDaemon(): void {
   const experimental = store.get('daemon.experimental', false) as boolean
@@ -87,7 +89,7 @@ export async function runCycleNow(
   } catch (err) {
     activeCycle = null
     const error = err instanceof Error ? err.message : String(err)
-    recordCycleOutcome(projectId, 'failed')
+    if (!options.dryRun) recordCycleOutcome(projectId, 'failed')
     return { cycleId: 'error', projectId, outcome: 'failed', durationMs: 0, error }
   }
 }
@@ -103,6 +105,10 @@ export function getDaemonStatus(): DaemonStatus {
     if (config.lastCycleAt && (!lastCycleAt || config.lastCycleAt > lastCycleAt)) {
       lastCycleAt = config.lastCycleAt
       lastCycleOutcome = config.lastCycleOutcome
+    }
+    const queueDir = join(p.path, '.sneebly', 'queue')
+    if (existsSync(queueDir)) {
+      try { totalQueueLength += readdirSync(queueDir).filter(f => f.endsWith('.plan.json')).length } catch { /* ignore */ }
     }
   }
 

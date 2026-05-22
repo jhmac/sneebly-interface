@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 export type JournalEvent =
   | 'cycle-start' | 'cycle-end'
-  | 'plan-complete' | 'build-complete' | 'verify-fail' | 'reflect-complete'
+  | 'plan-complete' | 'build-complete' | 'verify-complete' | 'verify-fail' | 'reflect-complete'
   | 'committed' | 'queued' | 'deployed-ok' | 'deployed-failed'
   | 'git-pull-failed' | 'checksum-mismatch' | 'security-alert'
   | 'phase-complete' | 'blocked'

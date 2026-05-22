@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import simpleGit from 'simple-git'
 import Store from 'electron-store'
@@ -141,7 +141,7 @@ export function registerDaemonHandlers(): void {
       const updated = content.includes('## Open Questions')
         ? content.replace('## Open Questions', `## Open Questions\n${answerEntry}`)
         : content + '\n## Open Questions\n' + answerEntry
-      require('node:fs').writeFileSync(goalsPath, updated)
+      writeFileSync(goalsPath, updated)
     }
 
     // Remove the blocked queue item

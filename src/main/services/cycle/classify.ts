@@ -38,9 +38,21 @@ export function keywordAppearsUnnegated(text: string, keyword: string): boolean 
 }
 
 function requiresApprovalByPath(filePath: string): boolean {
+  const segments = filePath.split('/')
+  const filename = segments[segments.length - 1]!
   return APPROVAL_REQUIRED_PATTERNS.some(pattern => {
-    const cleaned = pattern.replace(/\*\*\//, '').replace(/\*$/, '')
-    return filePath.includes(cleaned)
+    if (pattern.startsWith('**/')) {
+      // Any segment starts with the prefix (e.g. **/auth* → any segment starting with "auth")
+      const prefix = pattern.slice(3).replace(/\*$/, '')
+      return segments.some(s => s.startsWith(prefix))
+    }
+    if (pattern.endsWith('*')) {
+      // Filename glob (e.g. .env* → filename starts with ".env")
+      const prefix = pattern.slice(0, -1)
+      return filename.startsWith(prefix)
+    }
+    // Exact path or filename match
+    return filePath === pattern || filename === pattern
   })
 }
 

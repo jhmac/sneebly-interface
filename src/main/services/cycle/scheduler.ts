@@ -1,3 +1,5 @@
+import { statSync } from 'node:fs'
+import { join } from 'node:path'
 import Store from 'electron-store'
 import type { Project, DaemonProjectConfig } from '../../../shared/types'
 import { readJournal } from './journal'
@@ -68,12 +70,10 @@ function isScheduleEligible(projectId: string, schedule: DaemonProjectConfig['sc
   }
 }
 
-function goalsModifiedRecently(projectRoot: string): boolean {
-  const config = getProjectConfig(projectRoot)
+function goalsModifiedRecently(projectRoot: string, projectId: string): boolean {
+  const config = getProjectConfig(projectId)
   if (!config.lastCycleAt) return false
   try {
-    const { statSync } = require('node:fs') as typeof import('node:fs')
-    const { join } = require('node:path') as typeof import('node:path')
     const mtime = statSync(join(projectRoot, 'GOALS.md')).mtimeMs
     return mtime > config.lastCycleAt
   } catch { return false }
@@ -101,7 +101,7 @@ export function scoreProjects(projects: Project[], activeChatProjectIds: Readonl
     }
 
     let score = 0
-    if (goalsModifiedRecently(project.path)) score += 10
+    if (goalsModifiedRecently(project.path, project.id)) score += 10
     if (config.lastCycleOutcome === 'committed') score += 5
     score += (config.weight ?? 1.0) * 3
     if (cyclesToday >= SOFT_CAP) score -= 10

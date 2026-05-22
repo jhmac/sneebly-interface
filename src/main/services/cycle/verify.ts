@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { join, basename } from 'node:path'
+import { join } from 'node:path'
 import simpleGit from 'simple-git'
 import type { AgentEvent } from '../../../shared/types'
 import type { PlanResult } from './plan'
@@ -38,7 +38,7 @@ async function checkTypes(projectRoot: string, modifiedFiles: string[]): Promise
 
   const { exitCode, out } = await runProcess('npx', ['tsc', '--noEmit', '--pretty', 'false'], projectRoot, 90_000)
   const errors = out.split('\n').filter(line =>
-    tsFiles.some(f => line.includes(basename(f)))
+    tsFiles.some(f => line.includes(f))
   )
   return {
     passed: errors.length === 0,

@@ -110,7 +110,7 @@ export async function runCycle(
 
     // 6. Build phase
     logUI('Building…')
-    let buildResult = await runBuild(projectRoot, projectId, plan, cycleId, heartbeat, undefined, daemonEvent)
+    let buildResult = await runBuild(projectRoot, projectId, plan, undefined, daemonEvent)
     log('build-complete', { status: buildResult.status, filesModified: buildResult.filesModified })
 
     if (buildResult.status === 'blocked') {
@@ -137,7 +137,7 @@ export async function runCycle(
     // 8. Verify
     logUI('Verifying…')
     let verifyResult = await runVerify(projectRoot, projectId, plan, modifiedFiles, headBefore, daemonEvent)
-    log('verify-fail', verifyResult.passed ? { passed: true } : { passed: false, checks: verifyResult.checks })
+    log(verifyResult.passed ? 'verify-complete' : 'verify-fail', verifyResult.passed ? { passed: true } : { passed: false, checks: verifyResult.checks })
 
     // 9. Reflect on failure, optionally retry
     if (!verifyResult.passed) {
@@ -153,7 +153,7 @@ export async function runCycle(
         await rollback(git, headBefore)
         const retryContext = `Previous attempt failed. Verifier findings:\n${JSON.stringify(verifyResult.checks, null, 2)}\n\nReflection:\n${reflectResult.reasoning}`
         logUI('Retrying build with error context…')
-        buildResult = await runBuild(projectRoot, projectId, plan, cycleId, heartbeat, retryContext, daemonEvent)
+        buildResult = await runBuild(projectRoot, projectId, plan, retryContext, daemonEvent)
         if (buildResult.status === 'complete') {
           verifyResult = await runVerify(projectRoot, projectId, plan, buildResult.filesModified, headBefore, daemonEvent)
         }
@@ -201,7 +201,7 @@ export async function runCycle(
     notify('Sneebly', `${identityConfig.projectName || projectRoot.split('/').pop()}: committed — ${plan.constraint}`)
 
     // 12. Background deployed health check (fire-and-forget)
-    if (identityConfig.productionUrl && identityConfig.healthEndpoint !== '/health') {
+    if (identityConfig.productionUrl && identityConfig.healthEndpoint) {
       verifyDeployed(projectRoot, cycleId, identityConfig.productionUrl + identityConfig.healthEndpoint, heartbeat.deployedHealthTimeoutMs, logUI)
     }
 
@@ -216,9 +216,13 @@ export async function runCycle(
   }
 }
 
-async function rollback(git: ReturnType<typeof simpleGit>, _headBefore: string): Promise<void> {
+async function rollback(git: ReturnType<typeof simpleGit>, headBefore: string): Promise<void> {
   try {
-    await git.checkout(['.'])
+    if (headBefore) {
+      await git.reset(['--hard', headBefore])
+    } else {
+      await git.checkout(['.'])
+    }
     await git.clean('f', ['-d'])
   } catch { /* best-effort rollback */ }
 }

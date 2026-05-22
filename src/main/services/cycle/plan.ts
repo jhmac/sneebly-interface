@@ -53,7 +53,6 @@ export async function runPlan(
     maxTurns: 20,
     allowedTools: ['Read', 'Glob', 'Grep', 'LS'],
     appendSystemPrompt: 'You are the Sneebly planning agent. Think deeply before acting.',
-    extraArgs: ['--max-turns', '20'],
     onEvent,
   })
 
