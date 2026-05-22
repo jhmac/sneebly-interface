@@ -340,6 +340,7 @@ export interface DaemonStatus {
   queueLength: number
   lastCycleAt: number | null
   lastCycleOutcome: string | null
+  enabledProjectIds: string[]
 }
 
 export interface DaemonProjectConfig {

@@ -99,9 +99,11 @@ export function getDaemonStatus(): DaemonStatus {
   let totalQueueLength = 0
   let lastCycleAt: number | null = null
   let lastCycleOutcome: string | null = null
+  const enabledProjectIds: string[] = []
 
   for (const p of allProjects) {
     const config = getProjectConfig(p.id)
+    if (config.enabled) enabledProjectIds.push(p.id)
     if (config.lastCycleAt && (!lastCycleAt || config.lastCycleAt > lastCycleAt)) {
       lastCycleAt = config.lastCycleAt
       lastCycleOutcome = config.lastCycleOutcome
@@ -123,6 +125,7 @@ export function getDaemonStatus(): DaemonStatus {
     queueLength: totalQueueLength,
     lastCycleAt,
     lastCycleOutcome,
+    enabledProjectIds,
   }
 }
 

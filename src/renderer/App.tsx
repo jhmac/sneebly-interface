@@ -8,6 +8,7 @@ import { usePreviewStore } from './state/previewStore'
 import { useChatStore } from './state/chatStore'
 import { useActivityStore } from './state/activityStore'
 import { useEditorStore } from './state/editorStore'
+import { useDaemonStore } from './state/daemonStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -19,6 +20,19 @@ export default function App() {
     window.api.onboardingIsDone().then((done) => {
       if (!done) setShowOnboarding(true)
     })
+  }, [])
+
+  // ── Daemon status polling ──────────────────────────────────────────────
+  useEffect(() => {
+    const { refreshStatus, refreshQuestionCounts } = useDaemonStore.getState()
+    refreshStatus()
+    refreshQuestionCounts()
+    const statusTimer = setInterval(refreshStatus, 5000)
+    const questionTimer = setInterval(refreshQuestionCounts, 30000)
+    return () => {
+      clearInterval(statusTimer)
+      clearInterval(questionTimer)
+    }
   }, [])
 
   function handleOnboardingDismiss() {
