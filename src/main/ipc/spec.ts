@@ -5,7 +5,7 @@ import { generateSpecs, listExistingSpecs, specsNeedGeneration } from '../servic
 import { parseMilestones } from '../services/spec/milestone-parser'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ResearchDepth } from '../services/spec/spec-generator'
+import type { ResearchDepth } from '../../shared/types'
 
 // One active generation per project at a time
 const activeGenerations = new Set<string>()

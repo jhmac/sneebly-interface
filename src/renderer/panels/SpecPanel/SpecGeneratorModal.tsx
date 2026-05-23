@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, CheckCircle, Loader, AlertCircle, FileCode } from 'lucide-react'
+import { X, CheckCircle, Loader, AlertCircle, MinusCircle, FileCode } from 'lucide-react'
 import { useProjectStore } from '../../state/projectStore'
-import type { MilestoneRef, SpecProgressEvent } from '../../../shared/types'
-
-type Depth = 'light' | 'standard' | 'deep'
+import type { MilestoneRef, ResearchDepth, SpecProgressEvent } from '../../../shared/types'
 
 type MilestoneStatus = 'pending' | 'in-progress' | 'done' | 'skipped' | 'error'
 
@@ -15,16 +13,24 @@ interface MilestoneRow {
   hasExistingSpec: boolean
 }
 
-const DEPTH_LABELS: Record<Depth, string> = {
+const DEPTH_LABELS: Record<ResearchDepth, string> = {
   light: 'Light — Sonnet, ~5 min/spec, basic research',
   standard: 'Standard — Opus, ~15 min/spec, thorough research',
   deep: 'Deep — Opus, ~30 min/spec, exhaustive research + browser checks',
 }
 
-const DEPTH_COST: Record<Depth, string> = {
+const DEPTH_COST: Record<ResearchDepth, string> = {
   light: '~$0.10–0.30 per spec',
   standard: '~$0.30–0.80 per spec',
   deep: '~$0.50–2.00 per spec',
+}
+
+function loadSavedDepth(): ResearchDepth {
+  try {
+    const saved = localStorage.getItem('spec.depth') as ResearchDepth | null
+    if (saved && saved in DEPTH_LABELS) return saved
+  } catch { /* ignore */ }
+  return 'deep'
 }
 
 export default function SpecGeneratorModal({ onClose }: { onClose: () => void }) {
@@ -33,7 +39,7 @@ export default function SpecGeneratorModal({ onClose }: { onClose: () => void })
 
   const [rows, setRows] = useState<MilestoneRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [depth, setDepth] = useState<Depth>('deep')
+  const [depth, setDepth] = useState<ResearchDepth>(loadSavedDepth)
   const [overwrite, setOverwrite] = useState(false)
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
@@ -70,6 +76,11 @@ export default function SpecGeneratorModal({ onClose }: { onClose: () => void })
           r.ref.id === event.milestoneId ? { ...r, status: 'done' } : r
         ))
       }
+      if (event.type === 'milestone-skipped' && event.milestoneId) {
+        setRows((prev) => prev.map((r) =>
+          r.ref.id === event.milestoneId ? { ...r, status: 'skipped' } : r
+        ))
+      }
       if (event.type === 'error' && event.milestoneId) {
         setRows((prev) => prev.map((r) =>
           r.ref.id === event.milestoneId
@@ -101,11 +112,17 @@ export default function SpecGeneratorModal({ onClose }: { onClose: () => void })
       r.checked ? { ...r, status: 'pending' } : r
     ))
 
-    await window.api.specGenerate(activeProjectId, {
-      depth,
-      milestoneIds: selected,
-      overwriteExisting: overwrite,
-    })
+    try {
+      await window.api.specGenerate(activeProjectId, {
+        depth,
+        milestoneIds: selected,
+        overwriteExisting: overwrite,
+      })
+    } finally {
+      // If the 'complete' progress event didn't fire (e.g. generation was already
+      // in progress for this project), the running flag would be stuck. Reset it.
+      setRunning(false)
+    }
   }
 
   const selectedCount = rows.filter((r) => r.checked).length
@@ -204,11 +221,15 @@ export default function SpecGeneratorModal({ onClose }: { onClose: () => void })
                   </label>
                   <select
                     value={depth}
-                    onChange={(e) => setDepth(e.target.value as Depth)}
+                    onChange={(e) => {
+                      const v = e.target.value as ResearchDepth
+                      setDepth(v)
+                      try { localStorage.setItem('spec.depth', v) } catch { /* ignore */ }
+                    }}
                     disabled={running}
                     className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-zinc-600 disabled:opacity-50"
                   >
-                    {(Object.keys(DEPTH_LABELS) as Depth[]).map((d) => (
+                    {(Object.keys(DEPTH_LABELS) as ResearchDepth[]).map((d) => (
                       <option key={d} value={d}>{DEPTH_LABELS[d]}</option>
                     ))}
                   </select>
@@ -282,12 +303,16 @@ function MilestoneRowItem({
         ? 'border-green-900 bg-green-950/20'
         : row.status === 'error'
         ? 'border-red-900 bg-red-950/20'
+        : row.status === 'skipped'
+        ? 'border-zinc-800 bg-zinc-900 opacity-50'
         : 'border-zinc-800 bg-zinc-900',
     ].join(' ')}>
       {row.status === 'in-progress' ? (
         <Loader className="h-3.5 w-3.5 flex-shrink-0 text-purple-400 animate-spin" />
       ) : row.status === 'done' ? (
         <CheckCircle className="h-3.5 w-3.5 flex-shrink-0 text-green-500" />
+      ) : row.status === 'skipped' ? (
+        <MinusCircle className="h-3.5 w-3.5 flex-shrink-0 text-zinc-600" />
       ) : row.status === 'error' ? (
         <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 text-red-400" />
       ) : (

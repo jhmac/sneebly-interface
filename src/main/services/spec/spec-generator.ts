@@ -1,22 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
-import type { AgentEvent } from '../../../shared/types'
+import type { ResearchDepth, SpecProgressEvent } from '../../../shared/types'
 import { runStandaloneTurn } from '../standalone-turn'
-import { parseMilestones, injectSpecLinks, toUpperSnakeSlug } from './milestone-parser'
+import { parseMilestones, injectSpecLinks } from './milestone-parser'
 import { SPEC_TEMPLATE } from './spec-template'
 import { detectProjectName } from '../project-registry'
 
-export type ResearchDepth = 'light' | 'standard' | 'deep'
-
-export interface SpecProgressEvent {
-  type: 'start' | 'milestone-start' | 'milestone-event' | 'milestone-done' | 'complete' | 'error'
-  milestoneId?: string
-  milestoneText?: string
-  agentEvent?: AgentEvent
-  error?: string
-  generatedCount?: number
-  skippedCount?: number
-}
+export type { ResearchDepth }
 
 export interface SpecGenerationOptions {
   projectPath: string
@@ -47,15 +37,16 @@ function getFileTree(projectPath: string, maxDepth = 2): string {
     const filtered = entries.filter((e) =>
       !['node_modules', '.git', '.sneebly', 'dist', 'out', 'build', '.next'].includes(e)
     )
+    const visible = filtered.slice(0, 40)
     const lines: string[] = []
-    for (const entry of filtered.slice(0, 40)) {
-      lines.push(`${prefix}${entry}`)
+    for (const entry of visible) {
       const full = join(dir, entry)
-      try {
-        const isDir = readdirSync(full) !== null
-        if (isDir) lines.push(...walk(full, depth + 1, prefix + '  '))
-      } catch { /* file, not dir */ }
+      let isDir = false
+      try { isDir = statSync(full).isDirectory() } catch { /* permission error — skip */ }
+      lines.push(`${prefix}${entry}${isDir ? '/' : ''}`)
+      if (isDir) lines.push(...walk(full, depth + 1, prefix + '  '))
     }
+    if (filtered.length > 40) lines.push(`${prefix}… (${filtered.length - 40} more)`)
     return lines
   }
   return walk(projectPath, 0, '').join('\n')
@@ -178,7 +169,7 @@ export async function generateSpecs(opts: SpecGenerationOptions): Promise<SpecGe
     // Skip if exists and not overwriting
     if (existsSync(specFilePath) && !overwriteExisting) {
       result.skippedCount++
-      onProgress({ type: 'milestone-done', milestoneId: milestone.id, milestoneText: milestone.text })
+      onProgress({ type: 'milestone-skipped', milestoneId: milestone.id, milestoneText: milestone.text })
       continue
     }
 
@@ -253,9 +244,9 @@ export function listExistingSpecs(projectPath: string): string[] {
 export function specsNeedGeneration(projectPath: string): boolean {
   const goalsPath = join(projectPath, 'GOALS.md')
   if (!existsSync(goalsPath)) return false
-  const specsDir = join(projectPath, 'specs')
-  const existing = listExistingSpecs(projectPath)
-  if (existing.length > 0) return false
-  // GOALS.md exists but no specs — suggest generation
-  return true
+  if (listExistingSpecs(projectPath).length > 0) return false
+  try {
+    const content = readFileSync(goalsPath, 'utf-8')
+    return parseMilestones(content).length > 0
+  } catch { return false }
 }

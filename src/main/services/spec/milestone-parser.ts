@@ -1,13 +1,7 @@
 import { parseGoals } from '../cycle/identity'
+import type { MilestoneRef } from '../../../shared/types'
 
-export interface MilestoneRef {
-  id: string            // 'user-can-search-products'
-  text: string          // raw milestone text (spec link stripped)
-  phase: string         // "Phase 2: Core CRUD"
-  checked: boolean
-  specPath: string | null  // relative path e.g. './specs/SPEC_X.md', null if none
-  specSlug: string      // 'USER_CAN_SEARCH_PRODUCTS'
-}
+export type { MilestoneRef }
 
 // ── Slug helpers ───────────────────────────────────────────────────────────────
 

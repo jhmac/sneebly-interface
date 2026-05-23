@@ -351,7 +351,7 @@ export interface ElectronAPI {
 
   // ── Spec Architect ────────────────────────────────────────────────────────
   specGenerate: (projectId: string, opts: {
-    depth: 'light' | 'standard' | 'deep'
+    depth: ResearchDepth
     milestoneIds?: string[]
     overwriteExisting: boolean
   }) => Promise<{ generatedCount: number; skippedCount: number; errors: Array<{ milestoneId: string; error: string }> }>
@@ -360,6 +360,8 @@ export interface ElectronAPI {
   specList: (projectPath: string) => Promise<string[]>
   specListMilestones: (projectPath: string) => Promise<MilestoneRef[]>
 }
+
+export type ResearchDepth = 'light' | 'standard' | 'deep'
 
 export interface MilestoneRef {
   id: string
@@ -371,7 +373,7 @@ export interface MilestoneRef {
 }
 
 export interface SpecProgressEvent {
-  type: 'start' | 'milestone-start' | 'milestone-event' | 'milestone-done' | 'complete' | 'error'
+  type: 'start' | 'milestone-start' | 'milestone-event' | 'milestone-done' | 'milestone-skipped' | 'complete' | 'error'
   milestoneId?: string
   milestoneText?: string
   agentEvent?: AgentEvent
