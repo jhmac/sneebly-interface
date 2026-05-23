@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { FolderOpen, FolderCode, Trash2 } from 'lucide-react'
+import { FolderOpen, FolderCode, Trash2, Sparkles } from 'lucide-react'
 import { useProjectStore } from '../state/projectStore'
 import { useDaemonStore } from '../state/daemonStore'
+import { useGoalsWizardStore } from '../state/goalsWizardStore'
 import type { Project } from '../../shared/types'
 
 function StatusDot({ className }: { className: string }) {
@@ -51,6 +52,7 @@ export default function Sidebar() {
   const { projects, activeProjectId, requestProjectSwitch, openProjectDialog, loading } =
     useProjectStore()
   const { status, questionCounts, openModal } = useDaemonStore()
+  const { openWizard } = useGoalsWizardStore()
   const [confirmDelete, setConfirmDelete] = useState<Project | null>(null)
 
   const totalQuestions = Object.values(questionCounts).reduce((a, b) => a + b, 0)
@@ -91,6 +93,17 @@ export default function Sidebar() {
             +
           </button>
         </div>
+      </div>
+
+      {/* New App button */}
+      <div className="px-2 pb-2">
+        <button
+          onClick={openWizard}
+          className="flex w-full items-center gap-2 rounded-md border border-dashed border-purple-800/50 px-2 py-2 text-xs text-purple-400 hover:border-purple-600/70 hover:bg-purple-900/20 hover:text-purple-300 transition-colors"
+        >
+          <Sparkles className="h-3 w-3 flex-shrink-0" />
+          <span>New App</span>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">

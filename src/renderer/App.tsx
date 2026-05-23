@@ -14,6 +14,7 @@ import { useEditorStore } from './state/editorStore'
 import { useDaemonStore } from './state/daemonStore'
 import { useGitHubStore } from './state/githubStore'
 import { useGitStatusStore } from './state/gitStatusStore'
+import GoalsWizardModal from './panels/GoalsWizard/GoalsWizardModal'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -134,6 +135,7 @@ export default function App() {
       {modalOpen === 'settings' && <DaemonSettingsModal onClose={closeModal} />}
       {modalOpen === 'queue' && <DaemonQueueModal onClose={closeModal} />}
       {modalOpen === 'questions' && <DaemonQuestionsModal onClose={closeModal} />}
+      <GoalsWizardModal />
       <Sidebar />
       <div className="flex flex-1 overflow-hidden">
         {activeProjectId ? <Workspace /> : <Welcome />}
