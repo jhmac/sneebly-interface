@@ -349,6 +349,12 @@ export interface ElectronAPI {
     pushAfter: boolean
   }) => Promise<{ commitSha?: string; pushed: boolean; error?: string }>
 
+  // ── Goals Wizard ──────────────────────────────────────────────────────────
+  goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>
+  goalsGenerate: (ideaSeed: string, messages: GrillMessage[]) => Promise<GoalsGenerateResult>
+  goalsWrite: (projectId: string, content: string) => Promise<void>
+  goalsUpdateStack: (goalsMd: string, stackReport: string) => Promise<string>
+
   // ── Spec Architect ────────────────────────────────────────────────────────
   specGenerate: (projectId: string, opts: {
     depth: ResearchDepth
@@ -376,6 +382,23 @@ export interface MilestoneRef {
   checked: boolean
   specPath: string | null
   specSlug: string
+}
+
+// ── Goals Wizard types ─────────────────────────────────────────────────────
+
+export interface GrillMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface GrillTurnResult {
+  message: string
+  ready: boolean
+}
+
+export interface GoalsGenerateResult {
+  goalsMd: string
+  buildPrompt: string
 }
 
 export interface SpecProgressEvent {

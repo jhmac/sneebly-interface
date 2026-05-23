@@ -29,6 +29,7 @@ import type {
   GitDiffResult,
   SpecProgressEvent,
   MilestoneRef,
+  GrillMessage,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -220,6 +221,19 @@ const api: ElectronAPI = {
     pushAfter: boolean
   }): Promise<{ commitSha?: string; pushed: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_AND_PUSH, opts),
+
+  // ── Goals Wizard ──────────────────────────────────────────────────────────
+  goalsGrillTurn: (messages: GrillMessage[], userMessage: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GOALS_GRILL_TURN, messages, userMessage),
+
+  goalsGenerate: (ideaSeed: string, messages: GrillMessage[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GOALS_GENERATE, ideaSeed, messages),
+
+  goalsWrite: (projectId: string, content: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GOALS_WRITE, projectId, content),
+
+  goalsUpdateStack: (goalsMd: string, stackReport: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GOALS_UPDATE_STACK, goalsMd, stackReport),
 
   // ── Spec Architect ────────────────────────────────────────────────────────
   specGenerate: (projectId: string, opts: {
