@@ -10,6 +10,7 @@ import {
   removeProject,
 } from '../services/project-registry'
 import { stopServer } from '../services/dev-server'
+import { maybeAutoSuggestSpecs } from './spec'
 import { parseGoalsFile } from '../services/cycle/identity'
 import { startWatcher, stopWatcher } from '../services/project-watcher'
 
@@ -78,6 +79,7 @@ export function registerProjectHandlers(): void {
       startWatcher(id, project.path)
       currentWatchedProjectId = id
 
+      maybeAutoSuggestSpecs(id, project.path)
       return { project, branch, goals }
     }
   )

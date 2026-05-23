@@ -27,6 +27,8 @@ import type {
   GitHubRepoListResult,
   GitStatusResult,
   GitDiffResult,
+  SpecProgressEvent,
+  MilestoneRef,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -218,6 +220,31 @@ const api: ElectronAPI = {
     pushAfter: boolean
   }): Promise<{ commitSha?: string; pushed: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_AND_PUSH, opts),
+
+  // ── Spec Architect ────────────────────────────────────────────────────────
+  specGenerate: (projectId: string, opts: {
+    depth: 'light' | 'standard' | 'deep'
+    milestoneIds?: string[]
+    overwriteExisting: boolean
+  }) => ipcRenderer.invoke(IPC_CHANNELS.SPEC_GENERATE, projectId, opts),
+
+  specOnProgress: (callback: (event: SpecProgressEvent) => void) => {
+    const handler = (_e: IpcRendererEvent, event: SpecProgressEvent) => callback(event)
+    ipcRenderer.on(IPC_CHANNELS.SPEC_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SPEC_PROGRESS, handler)
+  },
+
+  specOnAutoSuggest: (callback: (projectId: string) => void) => {
+    const handler = (_e: IpcRendererEvent, projectId: string) => callback(projectId)
+    ipcRenderer.on(IPC_CHANNELS.SPEC_AUTO_SUGGEST, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SPEC_AUTO_SUGGEST, handler)
+  },
+
+  specList: (projectPath: string): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SPEC_LIST, projectPath),
+
+  specListMilestones: (projectPath: string): Promise<MilestoneRef[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SPEC_LIST_MILESTONES, projectPath),
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -6,7 +6,7 @@ import {
   useGroupRef,
   type Layout,
 } from 'react-resizable-panels'
-import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, X } from 'lucide-react'
+import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X } from 'lucide-react'
 import type { LayoutSizes } from '../../shared/types'
 import { useProjectStore } from '../state/projectStore'
 import { useSecretsStore } from '../state/secretsStore'
@@ -15,6 +15,7 @@ import { useEditorStore } from '../state/editorStore'
 import { useActivityPanelStore } from '../state/activityPanelStore'
 import { useGitStatusStore } from '../state/gitStatusStore'
 import CommitPushModal from '../panels/GitHubPanel/CommitPushModal'
+import SpecGeneratorModal from '../panels/SpecPanel/SpecGeneratorModal'
 import PreviewPanel from '../panels/PreviewPanel'
 import ChatPanel from '../panels/ChatPanel/ChatPanel'
 import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
@@ -49,6 +50,7 @@ export default function Workspace() {
   const { setActiveTab } = useActivityPanelStore()
   const { status: gitStatus, openCommitModal, commitModalOpen, closeCommitModal } = useGitStatusStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [specModalOpen, setSpecModalOpen] = useState(false)
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
 
@@ -92,6 +94,7 @@ export default function Workspace() {
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <EditorPanel />
       {commitModalOpen && <CommitPushModal onClose={closeCommitModal} />}
+      {specModalOpen && <SpecGeneratorModal onClose={() => setSpecModalOpen(false)} />}
 
       {/* Project switch dirty-files guard */}
       {pendingProjectSwitch && (
@@ -118,6 +121,7 @@ export default function Workspace() {
         gitAhead={gitStatus?.ahead ?? 0}
         gitBehind={gitStatus?.behind ?? 0}
         onOpenCommit={openCommitModal}
+        onOpenSpecs={() => setSpecModalOpen(true)}
       />
 
       {/* Goals expander */}
@@ -225,6 +229,7 @@ function WorkspaceHeader({
   gitAhead,
   gitBehind,
   onOpenCommit,
+  onOpenSpecs,
 }: {
   projectName: string | null
   branch: string | null
@@ -239,6 +244,7 @@ function WorkspaceHeader({
   gitAhead: number
   gitBehind: number
   onOpenCommit: () => void
+  onOpenSpecs: () => void
 }) {
   const hasChanges = gitChangedFiles > 0
   const hasSyncInfo = gitAhead > 0 || gitBehind > 0
@@ -287,6 +293,15 @@ function WorkspaceHeader({
         >
           <KeyRound className="h-3 w-3" />
           Secrets
+        </button>
+
+        <button
+          onClick={onOpenSpecs}
+          title="Generate specs"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+        >
+          <FileCode className="h-3 w-3" />
+          Specs
         </button>
 
         <button

@@ -18,6 +18,7 @@ import { registerSecretsHandlers } from './ipc/secrets'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerDaemonHandlers } from './ipc/daemon'
 import { registerGitHubHandlers } from './ipc/github'
+import { registerSpecHandlers } from './ipc/spec'
 import { stopAllServers } from './services/dev-server'
 import { stopAllWatchers } from './services/project-watcher'
 import { ensureChromiumInstalled } from './services/playwright-setup'
@@ -93,6 +94,7 @@ function registerIpcHandlers(): void {
   registerSettingsHandlers()
   registerDaemonHandlers()
   registerGitHubHandlers()
+  registerSpecHandlers()
 }
 
 // ── Window ─────────────────────────────────────────────────────────────────

@@ -146,7 +146,7 @@ export interface AgentErrorEvent {
 // source is injected by the Interface layer — not in the claude CLI wire format.
 // 'chat' = triggered by user in the chat panel
 // 'daemon' = triggered by the autonomous background engine
-export type AgentEventSource = 'chat' | 'daemon'
+export type AgentEventSource = 'chat' | 'daemon' | 'spec-generator'
 
 export type AgentEvent = (
   | AgentSystemEvent
@@ -348,6 +348,36 @@ export interface ElectronAPI {
     body?: string
     pushAfter: boolean
   }) => Promise<{ commitSha?: string; pushed: boolean; error?: string }>
+
+  // ── Spec Architect ────────────────────────────────────────────────────────
+  specGenerate: (projectId: string, opts: {
+    depth: 'light' | 'standard' | 'deep'
+    milestoneIds?: string[]
+    overwriteExisting: boolean
+  }) => Promise<{ generatedCount: number; skippedCount: number; errors: Array<{ milestoneId: string; error: string }> }>
+  specOnProgress: (callback: (event: SpecProgressEvent) => void) => () => void
+  specOnAutoSuggest: (callback: (projectId: string) => void) => () => void
+  specList: (projectPath: string) => Promise<string[]>
+  specListMilestones: (projectPath: string) => Promise<MilestoneRef[]>
+}
+
+export interface MilestoneRef {
+  id: string
+  text: string
+  phase: string
+  checked: boolean
+  specPath: string | null
+  specSlug: string
+}
+
+export interface SpecProgressEvent {
+  type: 'start' | 'milestone-start' | 'milestone-event' | 'milestone-done' | 'complete' | 'error'
+  milestoneId?: string
+  milestoneText?: string
+  agentEvent?: AgentEvent
+  error?: string
+  generatedCount?: number
+  skippedCount?: number
 }
 
 export interface JournalEntry {
