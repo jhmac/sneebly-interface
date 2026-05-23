@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
-import type { ResearchDepth, SpecProgressEvent } from '../../../shared/types'
+import type { RefineMode, ResearchDepth, SpecProgressEvent } from '../../../shared/types'
 import { runStandaloneTurn } from '../standalone-turn'
 import { parseMilestones, injectSpecLinks } from './milestone-parser'
 import { SPEC_TEMPLATE } from './spec-template'
 import { detectProjectName } from '../project-registry'
 
-export type { ResearchDepth }
+export type { RefineMode, ResearchDepth }
 
 export interface SpecGenerationOptions {
   projectPath: string
@@ -249,4 +249,175 @@ export function specsNeedGeneration(projectPath: string): boolean {
     const content = readFileSync(goalsPath, 'utf-8')
     return parseMilestones(content).length > 0
   } catch { return false }
+}
+
+// ── Spec refinement ───────────────────────────────────────────────────────────
+
+export interface SpecRefineOptions {
+  projectPath: string
+  projectId: string
+  milestoneId: string
+  refinementPrompt: string
+  mode: RefineMode
+  onProgress: (event: SpecProgressEvent) => void
+}
+
+export interface SpecRefineResult {
+  success: boolean
+  error?: string
+  specPath?: string
+}
+
+function buildEditOnlyPrompt(opts: {
+  projectName: string
+  milestoneText: string
+  phase: string
+  existingSpecContent: string
+  refinementPrompt: string
+}): string {
+  return `You are the Sneebly Spec Architect refining an existing implementation spec.
+
+CONTEXT:
+- Project: ${opts.projectName}
+- Milestone: "${opts.milestoneText}" (under ${opts.phase})
+
+EXISTING SPEC (do not throw away — refine it):
+---
+${opts.existingSpecContent}
+---
+
+USER'S REFINEMENT INSTRUCTIONS:
+"${opts.refinementPrompt}"
+
+YOUR TASK:
+- Edit the spec to address the user's specific concerns
+- Preserve what's already good — do NOT throw away well-researched sections
+- Do NOT do new web searches — work from existing content and the user's notes
+- Maintain the same markdown template structure (headings, hierarchy)
+- If the user's request requires removing sections, do so cleanly
+- If the user's request adds new requirements, add them in the appropriate sections
+- Output the COMPLETE revised spec — not a diff, not a summary
+
+Begin.`
+}
+
+function buildResearchRefinementPrompt(opts: {
+  projectName: string
+  detectedStack: string
+  goalsMdContent: string
+  milestoneText: string
+  phase: string
+  projectFileTree: string
+  existingSpecContent: string
+  refinementPrompt: string
+}): string {
+  return `You are the Sneebly Spec Architect refining an existing implementation spec with NEW research.
+
+CONTEXT:
+- Project: ${opts.projectName}
+- Stack: ${opts.detectedStack}
+- Milestone: "${opts.milestoneText}" (under ${opts.phase})
+- Full GOALS.md content:
+${opts.goalsMdContent}
+
+- Existing project structure:
+${opts.projectFileTree}
+
+EXISTING SPEC (the user wants this changed):
+---
+${opts.existingSpecContent}
+---
+
+USER'S REFINEMENT INSTRUCTIONS:
+"${opts.refinementPrompt}"
+
+YOUR PROCESS:
+1. Identify what specifically the user wants changed
+2. Do 10-20 web searches targeted at the user's concerns
+3. Optionally use WebFetch on 1-2 reference URLs if needed
+4. Synthesize an improved spec that:
+   - Addresses the user's specific concerns with new research
+   - Preserves valid sections from the existing spec
+   - Adds new information where the user's request demands it
+   - Maintains the same markdown template structure
+5. Output the COMPLETE revised spec — starting with "# SPEC:"
+
+Begin.`
+}
+
+export async function refineSpec(opts: SpecRefineOptions): Promise<SpecRefineResult> {
+  const { projectPath, projectId, milestoneId, refinementPrompt, mode, onProgress } = opts
+
+  onProgress({ type: 'start' })
+
+  // Find milestone
+  const goalsPath = join(projectPath, 'GOALS.md')
+  if (!existsSync(goalsPath)) {
+    return { success: false, error: 'GOALS.md not found in project root.' }
+  }
+  const goalsMdContent = readFileSync(goalsPath, 'utf-8')
+  const milestone = parseMilestones(goalsMdContent).find((m) => m.id === milestoneId)
+  if (!milestone) {
+    return { success: false, error: `Milestone not found in GOALS.md: ${milestoneId}` }
+  }
+
+  // Find existing spec
+  const specFileName = `SPEC_${milestone.specSlug}.md`
+  const specFilePath = join(projectPath, 'specs', specFileName)
+  if (!existsSync(specFilePath)) {
+    return { success: false, error: `Spec file "${specFileName}" does not exist. Generate it first.` }
+  }
+  const existingSpecContent = readFileSync(specFilePath, 'utf-8')
+
+  const model: 'claude-sonnet-4-6' | 'claude-opus-4-7' = mode === 'edit-only' ? 'claude-sonnet-4-6' : 'claude-opus-4-7'
+  const allowedTools: string[] = mode === 'edit-only'
+    ? ['Read', 'Glob', 'Grep']
+    : ['Read', 'Glob', 'Grep', 'LS', 'WebSearch', 'WebFetch']
+
+  const projectName = detectProjectName(projectPath)
+  const prompt = mode === 'edit-only'
+    ? buildEditOnlyPrompt({ projectName, milestoneText: milestone.text, phase: milestone.phase, existingSpecContent, refinementPrompt })
+    : buildResearchRefinementPrompt({
+        projectName,
+        detectedStack: detectStack(projectPath),
+        goalsMdContent,
+        milestoneText: milestone.text,
+        phase: milestone.phase,
+        projectFileTree: getFileTree(projectPath),
+        existingSpecContent,
+        refinementPrompt,
+      })
+
+  onProgress({ type: 'milestone-start', milestoneId: milestone.id, milestoneText: milestone.text })
+
+  try {
+    const turnResult = await runStandaloneTurn({
+      cwd: projectPath,
+      projectId,
+      prompt,
+      model,
+      permissionMode: 'bypassPermissions',
+      maxTurns: mode === 'edit-only' ? 5 : 30,
+      allowedTools,
+      appendSystemPrompt: `You are the Sneebly Spec Architect. Output the complete revised spec document — nothing else. Start with "# SPEC:".`,
+      onEvent: (event) => {
+        onProgress({ type: 'milestone-event', milestoneId: milestone.id, agentEvent: event })
+      },
+    })
+
+    let specMd = turnResult.assistantText.trim()
+    if (!specMd.startsWith('# SPEC:')) {
+      const match = specMd.match(/# SPEC:[\s\S]+/)
+      specMd = match ? match[0].trim() : specMd
+    }
+
+    writeFileSync(specFilePath, specMd, 'utf-8')
+    onProgress({ type: 'milestone-done', milestoneId: milestone.id, milestoneText: milestone.text })
+    onProgress({ type: 'complete', generatedCount: 1, skippedCount: 0 })
+    return { success: true, specPath: specFilePath }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    onProgress({ type: 'error', milestoneId: milestone.id, error: errMsg })
+    return { success: false, error: errMsg }
+  }
 }

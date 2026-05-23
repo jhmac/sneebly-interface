@@ -362,6 +362,7 @@ export interface ElectronAPI {
 }
 
 export type ResearchDepth = 'light' | 'standard' | 'deep'
+export type RefineMode = 'edit-only' | 'research'
 
 export interface MilestoneRef {
   id: string
