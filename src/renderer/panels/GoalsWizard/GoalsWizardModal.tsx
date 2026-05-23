@@ -19,7 +19,7 @@ function useCopy(text: string): [boolean, () => void] {
 // ── Stage: Hook ───────────────────────────────────────────────────────────────
 
 function HookStage() {
-  const { ideaSeed, setIdeaSeed, setStage, messages, addMessages, setError, error } =
+  const { ideaSeed, setIdeaSeed, setStage, addMessages, setError, error } =
     useGoalsWizardStore()
   const [loading, setLoading] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -298,7 +298,7 @@ function GeneratingStage() {
 // ── Stage: Output ─────────────────────────────────────────────────────────────
 
 function OutputStage() {
-  const { goalsMd, buildPrompt, setStage, setGoalsMd, setError } = useGoalsWizardStore()
+  const { goalsMd, buildPrompt, setStage } = useGoalsWizardStore()
   const { activeProjectId, projects } = useProjectStore()
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
 
@@ -322,7 +322,7 @@ function OutputStage() {
     }
   }
 
-  async function handleStackReport() {
+  function handleStackReport() {
     setStage('stack-report')
   }
 
@@ -387,6 +387,11 @@ function OutputStage() {
   )
 }
 
+const DOC_PANEL_ACCENT = {
+  purple: { text: 'text-purple-400', border: 'border-purple-900/40' },
+  indigo: { text: 'text-indigo-400', border: 'border-indigo-900/40' },
+} as const
+
 function DocPanel({
   title,
   subtitle,
@@ -402,12 +407,12 @@ function DocPanel({
   onCopy: () => void
   accentColor: 'purple' | 'indigo'
 }) {
-  const accent = accentColor === 'purple' ? 'text-purple-400 border-purple-900/40' : 'text-indigo-400 border-indigo-900/40'
+  const { text: textCls, border: borderCls } = DOC_PANEL_ACCENT[accentColor]
   return (
-    <div className={`flex flex-1 flex-col border-r last:border-r-0 ${accent.split(' ')[1]}`}>
+    <div className={`flex flex-1 flex-col border-r last:border-r-0 ${borderCls}`}>
       <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-3">
         <div>
-          <p className={`text-xs font-semibold ${accent.split(' ')[0]}`}>{title}</p>
+          <p className={`text-xs font-semibold ${textCls}`}>{title}</p>
           <p className="text-[11px] text-zinc-600">{subtitle}</p>
         </div>
         <button
@@ -511,21 +516,17 @@ Database: PostgreSQL via Supabase
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
+const STAGE_TITLES: Record<string, string> = {
+  hook: 'New App',
+  grill: 'Define Your App',
+  generating: 'Generating',
+  output: 'Your Documents',
+  'stack-report': 'Stack Report',
+}
+
 export default function GoalsWizardModal() {
   const { open, stage, closeWizard, reset } = useGoalsWizardStore()
   if (!open) return null
-
-  const titles: Record<string, string> = {
-    hook: 'New App',
-    grill: 'Define Your App',
-    generating: 'Generating',
-    output: 'Your Documents',
-    'stack-report': 'Stack Report',
-  }
-
-  function handleClose() {
-    closeWizard()
-  }
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-zinc-950">
@@ -533,7 +534,7 @@ export default function GoalsWizardModal() {
       <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-3">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-purple-400" />
-          <span className="text-sm font-medium text-zinc-300">{titles[stage] ?? 'Goals Wizard'}</span>
+          <span className="text-sm font-medium text-zinc-300">{STAGE_TITLES[stage] ?? 'Goals Wizard'}</span>
         </div>
         <div className="flex items-center gap-2">
           {stage !== 'hook' && stage !== 'generating' && (
@@ -547,7 +548,7 @@ export default function GoalsWizardModal() {
             </button>
           )}
           <button
-            onClick={handleClose}
+            onClick={closeWizard}
             disabled={stage === 'generating'}
             className="rounded p-1 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400 disabled:opacity-30 transition-colors"
           >

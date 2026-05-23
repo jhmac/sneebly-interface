@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { runStandaloneTurn } from '../standalone-turn'
 import type { GrillMessage } from '../../../shared/types'
 
@@ -35,7 +36,7 @@ export async function grillTurn(
     : `USER: ${userMessage}\n\nASSISTANT:`
 
   const result = await runStandaloneTurn({
-    cwd: process.cwd(),
+    cwd: homedir(),
     projectId: 'goals-wizard',
     prompt: fullPrompt,
     model: 'claude-sonnet-4-6',
@@ -55,7 +56,9 @@ export async function grillTurn(
 // ── Generation prompt ──────────────────────────────────────────────────────────
 
 function buildGenerationPrompt(ideaSeed: string, messages: GrillMessage[]): string {
+  // messages[0] is always {role:'user', content: ideaSeed} — skip it to avoid duplication
   const history = messages
+    .slice(1)
     .map((m) => `${m.role === 'user' ? 'USER' : 'ASSISTANT'}: ${m.content}`)
     .join('\n\n')
 
@@ -138,7 +141,7 @@ export async function generateGoalsAndPrompt(
   const prompt = buildGenerationPrompt(ideaSeed, messages)
 
   const result = await runStandaloneTurn({
-    cwd: process.cwd(),
+    cwd: homedir(),
     projectId: 'goals-wizard',
     prompt,
     model: 'claude-opus-4-7',
@@ -177,7 +180,7 @@ ${stackReport}
 OUTPUT: The complete updated GOALS.md with the Tech Stack section filled in. Nothing else.`
 
   const result = await runStandaloneTurn({
-    cwd: process.cwd(),
+    cwd: homedir(),
     projectId: 'goals-wizard',
     prompt,
     model: 'claude-sonnet-4-6',

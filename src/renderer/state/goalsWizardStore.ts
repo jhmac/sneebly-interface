@@ -6,38 +6,33 @@ export type WizardStage = 'hook' | 'grill' | 'generating' | 'output' | 'stack-re
 interface GoalsWizardStore {
   open: boolean
   stage: WizardStage
-  // The user's initial idea (from the hook stage)
   ideaSeed: string
-  // Full conversation history for the grill
   messages: GrillMessage[]
-  // Set when Claude signals it has enough info
   grillReady: boolean
-  // Generated outputs
   goalsMd: string
   buildPrompt: string
-  // Stack report pasted by user
   stackReport: string
-  // Error from any async operation
   error: string | null
 
   openWizard: () => void
   closeWizard: () => void
   setStage: (stage: WizardStage) => void
   setIdeaSeed: (idea: string) => void
+  // Appends a user+assistant exchange; grillReady latches true and never goes false
   addMessages: (userMsg: string, assistantMsg: string, ready: boolean) => void
-  setGrillReady: (ready: boolean) => void
   setGenerated: (goalsMd: string, buildPrompt: string) => void
   setStackReport: (report: string) => void
   setGoalsMd: (md: string) => void
   setError: (err: string | null) => void
+  // Resets conversation state but keeps the wizard open
   reset: () => void
 }
 
-const INITIAL_STATE = {
+const BLANK: Omit<GoalsWizardStore, 'openWizard' | 'closeWizard' | 'setStage' | 'setIdeaSeed' | 'addMessages' | 'setGenerated' | 'setStackReport' | 'setGoalsMd' | 'setError' | 'reset'> = {
   open: false,
-  stage: 'hook' as WizardStage,
+  stage: 'hook',
   ideaSeed: '',
-  messages: [] as GrillMessage[],
+  messages: [],
   grillReady: false,
   goalsMd: '',
   buildPrompt: '',
@@ -46,9 +41,9 @@ const INITIAL_STATE = {
 }
 
 export const useGoalsWizardStore = create<GoalsWizardStore>((set) => ({
-  ...INITIAL_STATE,
+  ...BLANK,
 
-  openWizard: () => set({ ...INITIAL_STATE, open: true }),
+  openWizard: () => set({ ...BLANK, open: true }),
 
   closeWizard: () => set({ open: false }),
 
@@ -63,10 +58,9 @@ export const useGoalsWizardStore = create<GoalsWizardStore>((set) => ({
         { role: 'user', content: userMsg },
         { role: 'assistant', content: assistantMsg },
       ],
-      grillReady: ready,
+      // Latch: once true, stays true even if Claude omits the marker on a follow-up
+      grillReady: s.grillReady || ready,
     })),
-
-  setGrillReady: (grillReady) => set({ grillReady }),
 
   setGenerated: (goalsMd, buildPrompt) => set({ goalsMd, buildPrompt }),
 
@@ -76,5 +70,6 @@ export const useGoalsWizardStore = create<GoalsWizardStore>((set) => ({
 
   setError: (error) => set({ error }),
 
-  reset: () => set(INITIAL_STATE),
+  // Keeps wizard open, resets everything else back to the hook stage
+  reset: () => set({ ...BLANK, open: true }),
 }))
