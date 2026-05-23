@@ -43,6 +43,7 @@ export interface TurnState {
 export interface SourceFilters {
   chat: boolean
   daemon: boolean
+  'spec-generator': boolean
 }
 
 interface ActivityState {
@@ -75,10 +76,11 @@ function loadSourceFilters(): SourceFilters {
       return {
         chat: parsed.chat ?? true,
         daemon: parsed.daemon ?? true,
+        'spec-generator': parsed['spec-generator'] ?? true,
       }
     }
   } catch { /* ignore */ }
-  return { chat: true, daemon: true }
+  return { chat: true, daemon: true, 'spec-generator': true }
 }
 
 function toolNameToCardType(name: string): CardType | null {

@@ -34,6 +34,17 @@ export default function FilterBar() {
       >
         Daemon
       </button>
+      <button
+        onClick={() => toggleSourceFilter('spec-generator')}
+        className={[
+          'rounded px-2 py-0.5 text-[10px] transition-colors',
+          sourceFilters['spec-generator']
+            ? 'bg-purple-800 text-purple-200'
+            : 'bg-zinc-900 text-zinc-600 line-through hover:bg-zinc-800',
+        ].join(' ')}
+      >
+        Spec
+      </button>
 
       {/* Vertical separator */}
       <span className="self-stretch w-px bg-zinc-800 mx-0.5" />
