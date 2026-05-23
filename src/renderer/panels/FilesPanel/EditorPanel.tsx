@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState, Suspense } from 'react'
 import {
-  X, ExternalLink, FileText, Code2, Braces, Globe, Palette, Terminal, File,
+  X, ExternalLink, FileText, Code2, Braces, Globe, Palette, Terminal, File, Wand2,
 } from 'lucide-react'
 import { useEditorStore, type OpenFile } from '../../state/editorStore'
 import { useProjectStore } from '../../state/projectStore'
+import { useSpecStore } from '../../state/specStore'
 
 // Lazy-load Monaco to keep initial bundle small
 const MonacoEditor = React.lazy(() =>
@@ -36,6 +37,19 @@ function isEnvFile(path: string): boolean {
   return name === '.env' || name.startsWith('.env.')
 }
 
+function isSpecFile(relativePath: string): boolean {
+  return /^specs\/SPEC_.+\.md$/.test(relativePath)
+}
+
+function milestoneIdFromSpecPath(relativePath: string): string {
+  // specs/SPEC_ADD_SEARCH_FUNCTIONALITY.md → add-search-functionality
+  return relativePath
+    .replace(/^specs\/SPEC_/, '')
+    .replace(/\.md$/, '')
+    .toLowerCase()
+    .replace(/_/g, '-')
+}
+
 export default function EditorPanel() {
   const { modalOpen, closeModal } = useEditorStore()
   if (!modalOpen) return null
@@ -48,10 +62,12 @@ function EditorPanelInner({ onClose }: { onClose: () => void }) {
     reloadFile, clearExternalChange, setActiveFilePath,
   } = useEditorStore()
   const { activeProjectId, projects } = useProjectStore()
+  const { openModal: openSpecModal } = useSpecStore()
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
   const projectId = activeProjectId ?? ''
   const openFiles = openFilesByProject[projectId] ?? []
   const activeFile = openFiles.find((f) => f.relativePath === activeFilePath) ?? openFiles[0] ?? null
+  const activeIsSpec = activeFile ? isSpecFile(activeFile.relativePath) : false
 
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })
   const [closeConfirm, setCloseConfirm] = useState<string | null>(null)
@@ -151,7 +167,10 @@ function EditorPanelInner({ onClose }: { onClose: () => void }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="flex flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
+        className={[
+          'flex flex-col overflow-hidden rounded-xl bg-zinc-900 shadow-2xl',
+          activeIsSpec ? 'border border-purple-700/50 ring-1 ring-purple-700/20' : 'border border-zinc-700',
+        ].join(' ')}
         style={{ width: '90vw', height: '85vh' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -278,13 +297,29 @@ function EditorPanelInner({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Status bar */}
-        <div className="flex h-7 flex-shrink-0 items-center justify-between border-t border-zinc-800 bg-zinc-950 px-3 text-xs text-zinc-500">
+        <div className={[
+          'flex h-7 flex-shrink-0 items-center justify-between border-t px-3 text-xs',
+          activeIsSpec ? 'border-purple-900/40 bg-purple-950/20 text-zinc-500' : 'border-zinc-800 bg-zinc-950 text-zinc-500',
+        ].join(' ')}>
           <div className="flex items-center gap-4">
             <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
             <span>Spaces: 2</span>
             {activeFile && <span>{activeFile.language}</span>}
           </div>
           <div className="flex items-center gap-3">
+            {activeIsSpec && activeFile && (
+              <button
+                onClick={() => openSpecModal({
+                  initialMode: 'refine-config',
+                  preselectedMilestoneId: milestoneIdFromSpecPath(activeFile.relativePath),
+                })}
+                title="Refine this spec with AI"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-purple-400 hover:bg-purple-900/30 hover:text-purple-300 transition-colors"
+              >
+                <Wand2 className="h-3 w-3" />
+                Refine this spec
+              </button>
+            )}
             {activeFile && isDirty(activeFile) ? (
               <span className="text-amber-400">Modified</span>
             ) : (
