@@ -1,11 +1,11 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import { listProjects } from '../services/project-registry'
-import { generateSpecs, listExistingSpecs, specsNeedGeneration } from '../services/spec/spec-generator'
+import { generateSpecs, listExistingSpecs, specsNeedGeneration, refineSpec } from '../services/spec/spec-generator'
 import { parseMilestones } from '../services/spec/milestone-parser'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ResearchDepth } from '../../shared/types'
+import type { RefineMode, ResearchDepth } from '../../shared/types'
 
 // One active generation per project at a time
 const activeGenerations = new Set<string>()
@@ -46,6 +46,33 @@ export function registerSpecHandlers(): void {
         depth: opts.depth,
         milestoneIds: opts.milestoneIds,
         overwriteExisting: opts.overwriteExisting,
+        onProgress: (event) => pushSpecProgress(event),
+      })
+    } finally {
+      activeGenerations.delete(projectId)
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SPEC_REFINE, async (_e, projectId: string, opts: {
+    milestoneId: string
+    refinementPrompt: string
+    mode: RefineMode
+  }) => {
+    if (activeGenerations.has(projectId)) {
+      return { success: false, error: 'Another spec operation is already in progress for this project.' }
+    }
+    const projects = listProjects()
+    const project = projects.find((p) => p.id === projectId)
+    if (!project) return { success: false, error: 'Project not found.' }
+
+    activeGenerations.add(projectId)
+    try {
+      return await refineSpec({
+        projectPath: project.path,
+        projectId,
+        milestoneId: opts.milestoneId,
+        refinementPrompt: opts.refinementPrompt,
+        mode: opts.mode,
         onProgress: (event) => pushSpecProgress(event),
       })
     } finally {

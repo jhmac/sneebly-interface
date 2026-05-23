@@ -355,6 +355,11 @@ export interface ElectronAPI {
     milestoneIds?: string[]
     overwriteExisting: boolean
   }) => Promise<{ generatedCount: number; skippedCount: number; errors: Array<{ milestoneId: string; error: string }> }>
+  specRefine: (projectId: string, opts: {
+    milestoneId: string
+    refinementPrompt: string
+    mode: RefineMode
+  }) => Promise<{ success: boolean; error?: string; specPath?: string }>
   specOnProgress: (callback: (event: SpecProgressEvent) => void) => () => void
   specOnAutoSuggest: (callback: (projectId: string) => void) => () => void
   specList: (projectPath: string) => Promise<string[]>

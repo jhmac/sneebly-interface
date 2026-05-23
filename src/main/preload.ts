@@ -228,6 +228,12 @@ const api: ElectronAPI = {
     overwriteExisting: boolean
   }) => ipcRenderer.invoke(IPC_CHANNELS.SPEC_GENERATE, projectId, opts),
 
+  specRefine: (projectId: string, opts: {
+    milestoneId: string
+    refinementPrompt: string
+    mode: 'edit-only' | 'research'
+  }) => ipcRenderer.invoke(IPC_CHANNELS.SPEC_REFINE, projectId, opts),
+
   specOnProgress: (callback: (event: SpecProgressEvent) => void) => {
     const handler = (_e: IpcRendererEvent, event: SpecProgressEvent) => callback(event)
     ipcRenderer.on(IPC_CHANNELS.SPEC_PROGRESS, handler)
