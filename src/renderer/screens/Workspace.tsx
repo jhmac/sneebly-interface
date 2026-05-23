@@ -16,6 +16,7 @@ import { useActivityPanelStore } from '../state/activityPanelStore'
 import { useGitStatusStore } from '../state/gitStatusStore'
 import CommitPushModal from '../panels/GitHubPanel/CommitPushModal'
 import SpecGeneratorModal from '../panels/SpecPanel/SpecGeneratorModal'
+import { useSpecStore } from '../state/specStore'
 import PreviewPanel from '../panels/PreviewPanel'
 import ChatPanel from '../panels/ChatPanel/ChatPanel'
 import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
@@ -50,7 +51,7 @@ export default function Workspace() {
   const { setActiveTab } = useActivityPanelStore()
   const { status: gitStatus, openCommitModal, commitModalOpen, closeCommitModal } = useGitStatusStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [specModalOpen, setSpecModalOpen] = useState(false)
+  const { openModal: openSpecModal } = useSpecStore()
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
 
@@ -94,7 +95,7 @@ export default function Workspace() {
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <EditorPanel />
       {commitModalOpen && <CommitPushModal onClose={closeCommitModal} />}
-      {specModalOpen && <SpecGeneratorModal onClose={() => setSpecModalOpen(false)} />}
+      <SpecGeneratorModal />
 
       {/* Project switch dirty-files guard */}
       {pendingProjectSwitch && (
@@ -121,7 +122,7 @@ export default function Workspace() {
         gitAhead={gitStatus?.ahead ?? 0}
         gitBehind={gitStatus?.behind ?? 0}
         onOpenCommit={openCommitModal}
-        onOpenSpecs={() => setSpecModalOpen(true)}
+        onOpenSpecs={openSpecModal}
       />
 
       {/* Goals expander */}

@@ -3,8 +3,8 @@ import { useActivityStore } from '../../state/activityStore'
 import { useChatStore } from '../../state/chatStore'
 import { useActivityPanelStore } from '../../state/activityPanelStore'
 import { useProjectStore } from '../../state/projectStore'
+import { useSpecStore } from '../../state/specStore'
 import type { ActivityCardData, CardType } from '../../../shared/types'
-import SpecGeneratorModal from '../SpecPanel/SpecGeneratorModal'
 import StatusBar from './StatusBar'
 import FilterBar from './FilterBar'
 import FilesTree from '../FilesPanel/FilesTree'
@@ -44,8 +44,8 @@ export default function ActivityPanel() {
   const model = useChatStore((s) => s.defaultModel)
   const { activeTab, setActiveTab } = useActivityPanelStore()
   const { activeProjectId } = useProjectStore()
+  const { openModal: openSpecModal } = useSpecStore()
   const [showSpecBanner, setShowSpecBanner] = useState(false)
-  const [specModalOpen, setSpecModalOpen] = useState(false)
 
   // Listen for auto-suggest push from main
   useEffect(() => {
@@ -77,7 +77,6 @@ export default function ActivityPanel() {
 
   return (
     <div className="flex h-full flex-col bg-zinc-900 text-zinc-100">
-      {specModalOpen && <SpecGeneratorModal onClose={() => setSpecModalOpen(false)} />}
       <StatusBar model={model} />
       {showSpecBanner && (
         <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-purple-900/60 bg-purple-950/30 px-3 py-2">
@@ -86,7 +85,7 @@ export default function ActivityPanel() {
           </p>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setSpecModalOpen(true); setShowSpecBanner(false) }}
+              onClick={() => { openSpecModal(); setShowSpecBanner(false) }}
               className="rounded px-2 py-0.5 text-[11px] font-medium text-purple-300 bg-purple-900/40 hover:bg-purple-800/50 transition-colors"
             >
               Generate detailed specs
