@@ -179,6 +179,8 @@ export default function DaemonSettingsModal({ onClose }: { onClose: () => void }
   const [experimental, setExperimental] = useState(false)
   const [daemonEnabled, setDaemonEnabled] = useState(false)
   const [showInMenuBar, setShowInMenuBar] = useState(false)
+  const [specDepth, setSpecDepth] = useState<'light' | 'standard' | 'deep'>('deep')
+  const [specAutoSuggest, setSpecAutoSuggest] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
 
   // Load persisted global flags from localStorage
@@ -187,6 +189,9 @@ export default function DaemonSettingsModal({ onClose }: { onClose: () => void }
       setExperimental(localStorage.getItem('daemon.experimental') === 'true')
       setDaemonEnabled(status?.running ?? false)
       setShowInMenuBar(localStorage.getItem('daemon.showInMenuBar') === 'true')
+      const savedDepth = localStorage.getItem('spec.depth') as 'light' | 'standard' | 'deep' | null
+      if (savedDepth) setSpecDepth(savedDepth)
+      setSpecAutoSuggest(localStorage.getItem('spec.autoSuggest') !== 'false')
     } catch { /* ignore */ }
   }, [status?.running])
 
@@ -274,6 +279,41 @@ export default function DaemonSettingsModal({ onClose }: { onClose: () => void }
                 checked={showInMenuBar}
                 onChange={handleMenuBarToggle}
                 disabled={!daemonEnabled}
+              />
+            </SettingRow>
+          </section>
+
+          {/* Spec Architect */}
+          <section className="flex flex-col gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Spec Architect</h3>
+            <SettingRow
+              label="Research depth"
+              subtitle="Default depth used when generating specs"
+            >
+              <select
+                value={specDepth}
+                onChange={(e) => {
+                  const v = e.target.value as 'light' | 'standard' | 'deep'
+                  setSpecDepth(v)
+                  try { localStorage.setItem('spec.depth', v) } catch { /* ignore */ }
+                }}
+                className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-zinc-600"
+              >
+                <option value="light">Light — Sonnet (~$0.10–0.30/spec)</option>
+                <option value="standard">Standard — Opus (~$0.30–0.80/spec)</option>
+                <option value="deep">Deep — Opus (~$0.50–2.00/spec)</option>
+              </select>
+            </SettingRow>
+            <SettingRow
+              label="Auto-suggest on new project"
+              subtitle="Show a banner when a project has GOALS.md but no specs"
+            >
+              <Toggle
+                checked={specAutoSuggest}
+                onChange={(v) => {
+                  setSpecAutoSuggest(v)
+                  try { localStorage.setItem('spec.autoSuggest', String(v)) } catch { /* ignore */ }
+                }}
               />
             </SettingRow>
           </section>
