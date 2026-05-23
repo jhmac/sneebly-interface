@@ -353,19 +353,25 @@ export async function refineSpec(opts: SpecRefineOptions): Promise<SpecRefineRes
   // Find milestone
   const goalsPath = join(projectPath, 'GOALS.md')
   if (!existsSync(goalsPath)) {
-    return { success: false, error: 'GOALS.md not found in project root.' }
+    const err = 'GOALS.md not found in project root.'
+    onProgress({ type: 'error', error: err })
+    return { success: false, error: err }
   }
   const goalsMdContent = readFileSync(goalsPath, 'utf-8')
   const milestone = parseMilestones(goalsMdContent).find((m) => m.id === milestoneId)
   if (!milestone) {
-    return { success: false, error: `Milestone not found in GOALS.md: ${milestoneId}` }
+    const err = `Milestone not found in GOALS.md: ${milestoneId}`
+    onProgress({ type: 'error', error: err })
+    return { success: false, error: err }
   }
 
   // Find existing spec
   const specFileName = `SPEC_${milestone.specSlug}.md`
   const specFilePath = join(projectPath, 'specs', specFileName)
   if (!existsSync(specFilePath)) {
-    return { success: false, error: `Spec file "${specFileName}" does not exist. Generate it first.` }
+    const err = `Spec file "${specFileName}" does not exist. Generate it first.`
+    onProgress({ type: 'error', error: err })
+    return { success: false, error: err }
   }
   const existingSpecContent = readFileSync(specFilePath, 'utf-8')
 

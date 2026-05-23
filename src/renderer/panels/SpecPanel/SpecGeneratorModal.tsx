@@ -80,7 +80,6 @@ function SpecGeneratorModalInner({
 
   // Data
   const [rows, setRows] = useState<MilestoneRow[]>([])
-  const [existingSpecFiles, setExistingSpecFiles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   // Navigation
@@ -101,6 +100,7 @@ function SpecGeneratorModalInner({
   const [flowType, setFlowType] = useState<'generate' | 'refine'>('generate')
   const [done, setDone] = useState(false)
   const [summary, setSummary] = useState<{ generated: number; skipped: number } | null>(null)
+  const [refineError, setRefineError] = useState<string | null>(null)
   const unsubRef = useRef<(() => void) | null>(null)
 
   // Load data
@@ -117,7 +117,6 @@ function SpecGeneratorModalInner({
         status: 'pending',
         hasExistingSpec: existingSet.has(`SPEC_${m.specSlug}`),
       })))
-      setExistingSpecFiles(existingSpecs)
       setLoading(false)
     })
   }, [activeProject?.path])
@@ -203,6 +202,7 @@ function SpecGeneratorModalInner({
   async function handleRefine() {
     if (!activeProjectId || !selectedMilestoneId || running || !refinementPrompt.trim()) return
 
+    setRefineError(null)
     setFlowType('refine')
     setRunning(true)
     setStage('running')
@@ -213,11 +213,16 @@ function SpecGeneratorModalInner({
     ))
 
     try {
-      await window.api.specRefine(activeProjectId, {
+      const result = await window.api.specRefine(activeProjectId, {
         milestoneId: selectedMilestoneId,
         refinementPrompt: refinementPrompt.trim(),
         mode: refineMode,
       })
+      if (!result.success) {
+        setRefineError(result.error ?? 'Refinement failed.')
+        setStage('refine-config')
+      }
+      // Success: 'complete' progress event drives done state
     } finally {
       setRunning(false)
     }
@@ -225,7 +230,8 @@ function SpecGeneratorModalInner({
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  const selectedInGenerateStage = rows.filter((r) => r.checked).length
+  const selectedInMissingStage = rows.filter((r) => !r.hasExistingSpec && r.checked).length
+  const selectedInAllStage = rows.filter((r) => r.checked).length
 
   return (
     <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/60">
@@ -238,7 +244,10 @@ function SpecGeneratorModalInner({
           <div className="flex items-center gap-2">
             {(stage === 'generate-missing' || stage === 'regenerate-all' || stage === 'refine-select' || stage === 'refine-config') && !running && !done && (
               <button
-                onClick={() => setStage('mode-select')}
+                onClick={() => {
+                  if (stage === 'refine-config' && initialMode === 'refine-config') onClose()
+                  else setStage('mode-select')
+                }}
                 className="mr-1 text-zinc-600 hover:text-zinc-400 transition-colors"
                 title="Back"
               >
@@ -278,7 +287,7 @@ function SpecGeneratorModalInner({
           ) : stage === 'generate-missing' ? (
             <MilestoneListStage
               rows={rows.filter((r) => !r.hasExistingSpec)}
-              allRows={rows}
+
               depth={depth}
               setDepth={(v) => {
                 setDepth(v)
@@ -298,7 +307,7 @@ function SpecGeneratorModalInner({
           ) : stage === 'regenerate-all' ? (
             <MilestoneListStage
               rows={rows}
-              allRows={rows}
+
               depth={depth}
               setDepth={(v) => {
                 setDepth(v)
@@ -321,15 +330,22 @@ function SpecGeneratorModalInner({
               }}
             />
           ) : stage === 'refine-config' ? (
-            <RefineConfig
-              milestone={selectedMilestone}
-              refinableRows={refinableRows}
-              refinementPrompt={refinementPrompt}
-              setRefinementPrompt={setRefinementPrompt}
-              refineMode={refineMode}
-              setRefineMode={setRefineMode}
-              onChangeSpec={() => setStage('refine-select')}
-            />
+            <>
+              {refineError && (
+                <div className="mb-4 rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-400">
+                  {refineError}
+                </div>
+              )}
+              <RefineConfig
+                milestone={selectedMilestone}
+                refinableRows={refinableRows}
+                refinementPrompt={refinementPrompt}
+                setRefinementPrompt={setRefinementPrompt}
+                refineMode={refineMode}
+                setRefineMode={setRefineMode}
+                onChangeSpec={() => setStage('refine-select')}
+              />
+            </>
           ) : stage === 'running' ? (
             <RunningView
               flowType={flowType}
@@ -345,23 +361,26 @@ function SpecGeneratorModalInner({
         {!loading && !done && stage !== 'mode-select' && stage !== 'refine-select' && stage !== 'running' && (
           <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-zinc-800 px-5 py-3">
             <button
-              onClick={() => setStage('mode-select')}
+              onClick={() => {
+                if (stage === 'refine-config' && initialMode === 'refine-config') onClose()
+                else setStage('mode-select')
+              }}
               disabled={running}
               className="rounded-md px-3 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors disabled:opacity-40"
             >
-              Back
+              {stage === 'refine-config' && initialMode === 'refine-config' ? 'Cancel' : 'Back'}
             </button>
 
             {(stage === 'generate-missing' || stage === 'regenerate-all') && (
               <button
                 onClick={() => handleGenerate(stage === 'regenerate-all')}
-                disabled={running || selectedInGenerateStage === 0}
+                disabled={running || (stage === 'generate-missing' ? selectedInMissingStage === 0 : selectedInAllStage === 0)}
                 className="flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-purple-500 transition-colors disabled:opacity-50"
               >
                 <FileCode className="h-3.5 w-3.5" />
                 {stage === 'generate-missing'
-                  ? `Generate ${selectedInGenerateStage} spec${selectedInGenerateStage !== 1 ? 's' : ''}`
-                  : `Regenerate ${selectedInGenerateStage} spec${selectedInGenerateStage !== 1 ? 's' : ''}`}
+                  ? `Generate ${selectedInMissingStage} spec${selectedInMissingStage !== 1 ? 's' : ''}`
+                  : `Regenerate ${selectedInAllStage} spec${selectedInAllStage !== 1 ? 's' : ''}`}
               </button>
             )}
 
@@ -474,14 +493,12 @@ function ModeButton({
 
 function MilestoneListStage({
   rows,
-  allRows,
   depth,
   setDepth,
   onToggle,
   onToggleAll,
 }: {
-  rows: MilestoneRow[]        // rows to display (filtered subset or all)
-  allRows: MilestoneRow[]     // all rows (for checked count)
+  rows: MilestoneRow[]
   depth: ResearchDepth
   setDepth: (d: ResearchDepth) => void
   onToggle: (id: string) => void
