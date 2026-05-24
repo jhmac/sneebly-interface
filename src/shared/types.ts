@@ -8,6 +8,11 @@ export interface Skill {
   prompt: string
 }
 
+export interface SkillSeedResult {
+  copied: string[]
+  skipped: string[]
+}
+
 export interface PongPayload {
   message: string
   timestamp: number
@@ -284,6 +289,7 @@ export interface AppSettings {
 
 export interface ElectronAPI {
   skillsList: () => Promise<Skill[]>
+  skillsSeedIntoProject: (projectId: string) => Promise<SkillSeedResult>
   ping: () => Promise<PongPayload>
   layoutGetSizes: () => Promise<LayoutSizes | null>
   layoutSetSizes: (sizes: LayoutSizes) => Promise<void>

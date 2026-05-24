@@ -78,6 +78,7 @@ export const IPC_CHANNELS = {
   SPEC_AUTO_SUGGEST: 'spec:auto-suggest',
   WINDOW_OPEN_PROJECT: 'window:open-project',
   SKILLS_LIST: 'skills:list',
+  SKILLS_SEED_INTO_PROJECT: 'skills:seed-into-project',
   GOALS_GRILL_TURN: 'goals:grill-turn',
   GOALS_GENERATE: 'goals:generate',
   GOALS_WRITE: 'goals:write',

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { X, Copy, Check, Sparkles, ArrowRight, RotateCcw } from 'lucide-react'
 import { useGoalsWizardStore } from '../../state/goalsWizardStore'
 import { useProjectStore } from '../../state/projectStore'
+import type { SkillSeedResult } from '../../../shared/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -308,15 +309,27 @@ function OutputStage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [seedResult, setSeedResult] = useState<SkillSeedResult | null>(null)
+  const [seedError, setSeedError] = useState<string | null>(null)
 
   async function handleSave() {
     if (!activeProjectId || saving) return
     setSaving(true)
     setSaveError(null)
+    setSeedResult(null)
+    setSeedError(null)
     try {
       await window.api.goalsWrite(activeProjectId, goalsMd)
       if (contextMd) await window.api.goalsWriteContext(activeProjectId, contextMd)
       setSaved(true)
+      // Seeding is a bonus — failure does NOT roll back the save
+      try {
+        const result = await window.api.skillsSeedIntoProject(activeProjectId)
+        setSeedResult(result)
+      } catch (e) {
+        console.error('[GoalsWizard] skill seeding failed:', e)
+        setSeedError(e instanceof Error ? e.message : String(e))
+      }
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -371,10 +384,22 @@ function OutputStage() {
               Open a project to save docs there
             </p>
           ) : saved ? (
-            <span className="flex items-center gap-1.5 text-xs text-green-400">
-              <Check className="h-3.5 w-3.5" />
-              Saved to {activeProject.name}
-            </span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="flex items-center gap-1.5 text-xs text-green-400">
+                <Check className="h-3.5 w-3.5" />
+                Saved to {activeProject.name}
+              </span>
+              {seedResult && seedResult.copied.length + seedResult.skipped.length > 0 && (
+                <span className="text-[11px] text-zinc-500">
+                  {seedResult.copied.length === 0
+                    ? 'Skills already present'
+                    : `Seeded ${seedResult.copied.length} skill${seedResult.copied.length !== 1 ? 's' : ''}${seedResult.skipped.length > 0 ? ` (${seedResult.skipped.length} already present)` : ''}`}
+                </span>
+              )}
+              {seedError && (
+                <span className="text-[11px] text-amber-600">Could not seed skills</span>
+              )}
+            </div>
           ) : (
             <button
               onClick={handleSave}

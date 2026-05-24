@@ -36,6 +36,8 @@ import type {
 
 const api: ElectronAPI = {
   skillsList: () => ipcRenderer.invoke(IPC_CHANNELS.SKILLS_LIST),
+  skillsSeedIntoProject: (projectId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILLS_SEED_INTO_PROJECT, projectId),
 
   // ── Core ──────────────────────────────────────────────────────────────
   ping: (): Promise<PongPayload> => ipcRenderer.invoke(IPC_CHANNELS.PING),
