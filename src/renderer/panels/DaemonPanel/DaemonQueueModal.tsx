@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X, FileText } from 'lucide-react'
 import { useProjectStore } from '../../state/projectStore'
-import { useDaemonStore } from '../../state/daemonStore'
 import type { QueueItem } from '../../../shared/types'
 
 // ── Diff viewer ────────────────────────────────────────────────────────────
@@ -244,29 +243,25 @@ function QueueCard({
 // ── Main modal ─────────────────────────────────────────────────────────────
 
 export default function DaemonQueueModal({ onClose }: { onClose: () => void }) {
-  const { projects } = useProjectStore()
-  const [activeProjectId, setActiveProjectId] = useState(projects[0]?.id ?? '')
-  const [queues, setQueues] = useState<Record<string, QueueItem[]>>({})
+  const { projects, activeProjectId } = useProjectStore()
+  const [queue, setQueue] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(true)
 
-  async function loadQueues() {
+  const activeProject = projects.find((p) => p.id === activeProjectId)
+
+  async function loadQueue() {
+    if (!activeProjectId) { setLoading(false); return }
     setLoading(true)
-    const results: Record<string, QueueItem[]> = {}
-    await Promise.all(
-      projects.map(async (p) => {
-        try { results[p.id] = await window.api.daemonListQueue(p.id) }
-        catch { results[p.id] = [] }
-      })
-    )
-    setQueues(results)
-    setLoading(false)
+    try {
+      setQueue(await window.api.daemonListQueue(activeProjectId))
+    } catch {
+      setQueue([])
+    } finally {
+      setLoading(false)
+    }
   }
 
-  useEffect(() => { loadQueues() }, [])
-
-  const totalAcrossAll = Object.values(queues).reduce((s, q) => s + q.length, 0)
-  const activeProject = projects.find((p) => p.id === activeProjectId)
-  const activeQueue = queues[activeProjectId] ?? []
+  useEffect(() => { loadQueue() }, [activeProjectId])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -276,58 +271,35 @@ export default function DaemonQueueModal({ onClose }: { onClose: () => void }) {
       >
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-4">
-          <h2 className="text-sm font-semibold text-zinc-100">Queue Approval</h2>
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Queue Approval</h2>
+            {activeProject && (
+              <p className="text-xs text-zinc-500 mt-0.5">{activeProject.name}</p>
+            )}
+          </div>
           <button onClick={onClose} className="text-zinc-600 hover:text-zinc-400">
             <X className="h-4 w-4" />
           </button>
-        </div>
-
-        {/* Project tab strip */}
-        <div className="flex flex-shrink-0 overflow-x-auto border-b border-zinc-800 bg-zinc-900">
-          {projects.map((p) => {
-            const count = queues[p.id]?.length ?? 0
-            return (
-              <button
-                key={p.id}
-                onClick={() => setActiveProjectId(p.id)}
-                className={[
-                  'flex flex-shrink-0 items-center gap-1.5 px-4 py-2 text-xs transition-colors',
-                  activeProjectId === p.id
-                    ? 'border-b-2 border-indigo-500 text-zinc-200'
-                    : 'text-zinc-500 hover:text-zinc-300',
-                ].join(' ')}
-              >
-                {p.name}
-                {count > 0 && (
-                  <span className="rounded-full bg-indigo-600 px-1.5 text-[10px] text-white">
-                    {count}
-                  </span>
-                )}
-              </button>
-            )
-          })}
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {loading ? (
             <p className="text-center text-xs text-zinc-600 py-8">Loading…</p>
-          ) : totalAcrossAll === 0 ? (
+          ) : queue.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 py-12 text-zinc-600">
               <FileText className="h-8 w-8" />
               <p className="text-sm">No pending approvals</p>
             </div>
-          ) : activeQueue.length === 0 ? (
-            <p className="text-center text-xs text-zinc-600 py-8">No items for this project</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {activeQueue.map((item) => (
+              {queue.map((item) => (
                 <QueueCard
                   key={item.cycleId}
                   item={item}
-                  projectId={activeProjectId}
+                  projectId={activeProjectId ?? ''}
                   projectPath={activeProject?.path ?? ''}
-                  onDone={loadQueues}
+                  onDone={loadQueue}
                 />
               ))}
             </div>

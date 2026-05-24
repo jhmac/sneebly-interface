@@ -6,6 +6,7 @@ type ModalType = 'queue' | 'questions' | 'settings' | null
 interface DaemonState {
   status: DaemonStatus | null
   questionCounts: Record<string, number>
+  queueCounts: Record<string, number>
   modalOpen: ModalType
 
   refreshStatus: () => Promise<void>
@@ -17,6 +18,7 @@ interface DaemonState {
 export const useDaemonStore = create<DaemonState>((set, get) => ({
   status: null,
   questionCounts: {},
+  queueCounts: {},
   modalOpen: null,
 
   refreshStatus: async () => {
@@ -34,18 +36,24 @@ export const useDaemonStore = create<DaemonState>((set, get) => ({
       if (!status) return
       const { useProjectStore } = await import('./projectStore')
       const projects = useProjectStore.getState().projects
-      const counts: Record<string, number> = {}
+      const questionCounts: Record<string, number> = {}
+      const queueCounts: Record<string, number> = {}
       await Promise.all(
         projects.map(async (p) => {
           try {
-            const qs = await window.api.daemonListOpenQuestions(p.id)
-            counts[p.id] = qs.length
+            const [qs, queue] = await Promise.all([
+              window.api.daemonListOpenQuestions(p.id),
+              window.api.daemonListQueue(p.id),
+            ])
+            questionCounts[p.id] = qs.length
+            queueCounts[p.id] = queue.length
           } catch {
-            counts[p.id] = 0
+            questionCounts[p.id] = 0
+            queueCounts[p.id] = 0
           }
         })
       )
-      set({ questionCounts: counts })
+      set({ questionCounts, queueCounts })
     } catch {
       // Best-effort
     }

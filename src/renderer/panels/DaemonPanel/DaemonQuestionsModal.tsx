@@ -155,10 +155,11 @@ function ProjectSection({
 // ── Main modal ─────────────────────────────────────────────────────────────
 
 export default function DaemonQuestionsModal({ onClose }: { onClose: () => void }) {
-  const { projects } = useProjectStore()
+  const { projects, activeProjectId } = useProjectStore()
   const { questionCounts, refreshQuestionCounts } = useDaemonStore()
 
-  const totalQuestions = Object.values(questionCounts).reduce((a, b) => a + b, 0)
+  const activeProject = projects.find((p) => p.id === activeProjectId)
+  const activeQuestionCount = questionCounts[activeProjectId ?? ''] ?? 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -168,7 +169,12 @@ export default function DaemonQuestionsModal({ onClose }: { onClose: () => void 
       >
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-4">
-          <h2 className="text-sm font-semibold text-zinc-100">Open Questions</h2>
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Open Questions</h2>
+            {activeProject && (
+              <p className="text-xs text-zinc-500 mt-0.5">{activeProject.name}</p>
+            )}
+          </div>
           <button onClick={onClose} className="text-zinc-600 hover:text-zinc-400">
             <X className="h-4 w-4" />
           </button>
@@ -176,20 +182,15 @@ export default function DaemonQuestionsModal({ onClose }: { onClose: () => void 
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {totalQuestions === 0 ? (
+          {activeQuestionCount === 0 ? (
             <p className="text-center text-xs text-zinc-600 py-12">No open questions yet.</p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {projects.map((p) => (
-                <ProjectSection
-                  key={p.id}
-                  projectId={p.id}
-                  projectName={p.name}
-                  onChanged={refreshQuestionCounts}
-                />
-              ))}
-            </div>
-          )}
+          ) : activeProjectId && activeProject ? (
+            <ProjectSection
+              projectId={activeProjectId}
+              projectName={activeProject.name}
+              onChanged={refreshQuestionCounts}
+            />
+          ) : null}
         </div>
       </div>
     </div>

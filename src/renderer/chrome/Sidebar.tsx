@@ -51,11 +51,12 @@ function RemoveProjectModal({
 export default function Sidebar() {
   const { projects, activeProjectId, requestProjectSwitch, openProjectDialog, loading } =
     useProjectStore()
-  const { status, questionCounts, openModal } = useDaemonStore()
+  const { status, questionCounts, queueCounts, openModal } = useDaemonStore()
   const { openWizard } = useGoalsWizardStore()
   const [confirmDelete, setConfirmDelete] = useState<Project | null>(null)
 
-  const totalQuestions = Object.values(questionCounts).reduce((a, b) => a + b, 0)
+  const activeQuestionCount = questionCounts[activeProjectId ?? ''] ?? 0
+  const activeQueueCount = queueCounts[activeProjectId ?? ''] ?? 0
   const activeCycleProjectId = status?.activeCycle?.projectId ?? null
   const enabledSet = new Set(status?.enabledProjectIds ?? [])
 
@@ -206,9 +207,9 @@ export default function Sidebar() {
             className="flex w-full items-center justify-between rounded px-1 py-0.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
           >
             <span>Queue</span>
-            {(status?.queueLength ?? 0) > 0 && (
+            {activeQueueCount > 0 && (
               <span className="rounded-full bg-indigo-600 px-1.5 py-0 text-[10px] text-white">
-                {status?.queueLength}
+                {activeQueueCount}
               </span>
             )}
           </button>
@@ -217,9 +218,9 @@ export default function Sidebar() {
             className="flex w-full items-center justify-between rounded px-1 py-0.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
           >
             <span>Questions</span>
-            {totalQuestions > 0 && (
+            {activeQuestionCount > 0 && (
               <span className="rounded-full bg-amber-600 px-1.5 py-0 text-[10px] text-white">
-                {totalQuestions}
+                {activeQuestionCount}
               </span>
             )}
           </button>
