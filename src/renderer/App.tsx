@@ -15,6 +15,7 @@ import { useDaemonStore } from './state/daemonStore'
 import { useGitHubStore } from './state/githubStore'
 import { useGitStatusStore } from './state/gitStatusStore'
 import GoalsWizardModal from './panels/GoalsWizard/GoalsWizardModal'
+import { loadSkills } from './skills'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -31,6 +32,7 @@ export default function App() {
     window.api.onboardingIsDone().then((done) => {
       if (!done) setShowOnboarding(true)
     })
+    loadSkills().catch(console.error)
   }, [])
 
   // ── GitHub auth status check ───────────────────────────────────────────

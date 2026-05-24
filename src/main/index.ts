@@ -20,6 +20,7 @@ import { registerDaemonHandlers } from './ipc/daemon'
 import { registerGitHubHandlers } from './ipc/github'
 import { registerSpecHandlers } from './ipc/spec'
 import { registerGoalsHandlers } from './ipc/goals'
+import { registerSkillsHandlers } from './ipc/skills'
 import { stopAllServers } from './services/dev-server'
 import { stopAllWatchers } from './services/project-watcher'
 import { ensureChromiumInstalled } from './services/playwright-setup'
@@ -97,6 +98,7 @@ function registerIpcHandlers(): void {
   registerGitHubHandlers()
   registerSpecHandlers()
   registerGoalsHandlers()
+  registerSkillsHandlers()
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
     createProjectWindow(projectId)

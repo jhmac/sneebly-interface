@@ -35,6 +35,8 @@ import type {
 } from '../shared/types'
 
 const api: ElectronAPI = {
+  skillsList: () => ipcRenderer.invoke(IPC_CHANNELS.SKILLS_LIST),
+
   // ── Core ──────────────────────────────────────────────────────────────
   ping: (): Promise<PongPayload> => ipcRenderer.invoke(IPC_CHANNELS.PING),
 

@@ -1,3 +1,13 @@
+// ── Skills ─────────────────────────────────────────────────────────────────────
+
+export interface Skill {
+  id: string
+  name: string
+  description: string
+  category: 'debug' | 'build' | 'review' | 'plan'
+  prompt: string
+}
+
 export interface PongPayload {
   message: string
   timestamp: number
@@ -273,6 +283,7 @@ export interface AppSettings {
 }
 
 export interface ElectronAPI {
+  skillsList: () => Promise<Skill[]>
   ping: () => Promise<PongPayload>
   layoutGetSizes: () => Promise<LayoutSizes | null>
   layoutSetSizes: (sizes: LayoutSizes) => Promise<void>
