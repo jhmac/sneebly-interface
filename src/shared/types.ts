@@ -14,6 +14,18 @@ export interface Project {
   path: string
   addedAt: number
   lastOpenedAt: number
+  description?: string
+  iconPath?: string
+}
+
+export interface ProjectUpdateInput {
+  name?: string
+  description?: string
+  iconDataUrl?: string | null
+}
+
+export interface ProjectRemixResult {
+  newProject: Project
 }
 
 export interface GoalsMilestone {
@@ -268,6 +280,8 @@ export interface ElectronAPI {
   projectOpenDialog: () => Promise<Project | null>
   projectActivate: (id: string) => Promise<ProjectActivateResult>
   projectRemove: (id: string) => Promise<void>
+  projectUpdate: (id: string, input: ProjectUpdateInput) => Promise<Project | null>
+  projectRemix: (id: string) => Promise<ProjectRemixResult | null>
   windowOpenProject: (projectId: string) => Promise<void>
   previewStart: (projectId: string, projectPath: string) => Promise<void>
   previewStop: (projectId: string) => Promise<void>

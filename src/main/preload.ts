@@ -7,6 +7,8 @@ import type {
   PongPayload,
   Project,
   ProjectActivateResult,
+  ProjectUpdateInput,
+  ProjectRemixResult,
   PreviewStatusEvent,
   ChatMessage,
   SessionSummary,
@@ -49,6 +51,10 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.PROJECT_ACTIVATE, id),
   projectRemove: (id: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.PROJECT_REMOVE, id),
+  projectUpdate: (id: string, input: ProjectUpdateInput): Promise<Project | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECT_UPDATE, id, input),
+  projectRemix: (id: string): Promise<ProjectRemixResult | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECT_REMIX, id),
   windowOpenProject: (projectId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.WINDOW_OPEN_PROJECT, projectId),
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { GoalsMd, Project } from '../../shared/types'
+import type { GoalsMd, Project, ProjectUpdateInput } from '../../shared/types'
 
 interface ProjectState {
   projects: Project[]
@@ -17,6 +17,8 @@ interface ProjectState {
   confirmProjectSwitch: (action: 'save-all' | 'discard-all') => Promise<void>
   cancelProjectSwitch: () => void
   setGoalsExpanded: (v: boolean) => void
+  updateProject: (id: string, input: ProjectUpdateInput) => Promise<void>
+  remixProject: (id: string) => Promise<Project>
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -126,4 +128,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   cancelProjectSwitch: () => set({ pendingProjectSwitch: null }),
 
   setGoalsExpanded: (v: boolean) => set({ goalsExpanded: v }),
+
+  updateProject: async (id: string, input: ProjectUpdateInput) => {
+    const updated = await window.api.projectUpdate(id, input)
+    if (!updated) return
+    set((state) => ({
+      projects: state.projects.map((p) => (p.id === id ? updated : p)),
+    }))
+  },
+
+  remixProject: async (id: string): Promise<Project> => {
+    const result = await window.api.projectRemix(id)
+    if (!result) throw new Error('Remix failed — project not found')
+    set((state) => ({ projects: [...state.projects, result.newProject] }))
+    await get().activateProject(result.newProject.id)
+    return result.newProject
+  },
 }))

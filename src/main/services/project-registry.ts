@@ -52,6 +52,19 @@ export function touchProject(id: string): Project | null {
   return project
 }
 
+export function getProject(id: string): Project | null {
+  return readRegistry().projects.find((p) => p.id === id) ?? null
+}
+
+export function updateProject(id: string, patch: Partial<Project>): Project | null {
+  const registry = readRegistry()
+  const project = registry.projects.find((p) => p.id === id)
+  if (!project) return null
+  Object.assign(project, patch)
+  writeRegistry(registry)
+  return project
+}
+
 export function removeProject(id: string): void {
   const registry = readRegistry()
   registry.projects = registry.projects.filter((p) => p.id !== id)

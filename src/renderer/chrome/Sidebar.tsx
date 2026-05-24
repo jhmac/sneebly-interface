@@ -1,12 +1,28 @@
-import { useState } from 'react'
-import { FolderOpen, FolderCode, Trash2, Sparkles, SquareArrowOutUpRight } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { FolderOpen, FolderCode, Settings, Sparkles, SquareArrowOutUpRight } from 'lucide-react'
 import { useProjectStore } from '../state/projectStore'
 import { useDaemonStore } from '../state/daemonStore'
 import { useGoalsWizardStore } from '../state/goalsWizardStore'
+import EditProjectModal from '../panels/ProjectDetails/EditProjectModal'
 import type { Project } from '../../shared/types'
 
 function StatusDot({ className }: { className: string }) {
   return <span className={`inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 ${className}`} />
+}
+
+function ProjectIcon({ project }: { project: Project }) {
+  const [imgError, setImgError] = useState(false)
+  if (!project.iconPath || imgError) {
+    return <FolderCode className="h-3.5 w-3.5 flex-shrink-0" />
+  }
+  return (
+    <img
+      src={`file://${project.iconPath}`}
+      className="h-3.5 w-3.5 flex-shrink-0 rounded-sm object-cover"
+      alt=""
+      onError={() => setImgError(true)}
+    />
+  )
 }
 
 function RemoveProjectModal({
@@ -49,11 +65,18 @@ function RemoveProjectModal({
 }
 
 export default function Sidebar() {
-  const { projects, activeProjectId, requestProjectSwitch, openProjectDialog, loading } =
+  const { projects, activeProjectId, requestProjectSwitch, openProjectDialog, loading, remixProject } =
     useProjectStore()
   const { status, questionCounts, queueCounts, openModal } = useDaemonStore()
   const { openWizard } = useGoalsWizardStore()
+
   const [confirmDelete, setConfirmDelete] = useState<Project | null>(null)
+  const [editProject, setEditProject] = useState<Project | null>(null)
+  const [menuProject, setMenuProject] = useState<Project | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const [remixingId, setRemixingId] = useState<string | null>(null)
+  const [remixError, setRemixError] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const activeQuestionCount = questionCounts[activeProjectId ?? ''] ?? 0
   const activeQueueCount = queueCounts[activeProjectId ?? ''] ?? 0
@@ -64,10 +87,39 @@ export default function Sidebar() {
     ? (projects.find((p) => p.id === activeCycleProjectId)?.name ?? 'removed project')
     : null
 
+  // Close menu on Esc
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuProject(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  function openMenu(e: React.MouseEvent<HTMLButtonElement>, project: Project) {
+    e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    setMenuPos({ top: rect.top, left: rect.right + 4 })
+    setMenuProject(project)
+    setRemixError(null)
+  }
+
+  async function handleRemix(project: Project) {
+    setRemixingId(project.id)
+    setRemixError(null)
+    try {
+      await remixProject(project.id)
+      setMenuProject(null)
+    } catch (err) {
+      setRemixError(err instanceof Error ? err.message : 'Remix failed')
+    } finally {
+      setRemixingId(null)
+    }
+  }
+
   async function handleConfirmRemove() {
     if (!confirmDelete) return
     await window.api.projectRemove(confirmDelete.id)
-    // If the removed project was active, clear active state before reloading
     if (useProjectStore.getState().activeProjectId === confirmDelete.id) {
       useProjectStore.setState({ activeProjectId: null, activeProjectBranch: null, activeProjectGoals: null })
     }
@@ -123,6 +175,7 @@ export default function Sidebar() {
                     <div className="group relative">
                       <button
                         onClick={() => requestProjectSwitch(project.id)}
+                        title={project.description}
                         className={[
                           'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors',
                           isActive
@@ -130,7 +183,7 @@ export default function Sidebar() {
                             : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200',
                         ].join(' ')}
                       >
-                        <FolderCode className="h-3.5 w-3.5 flex-shrink-0" />
+                        <ProjectIcon project={project} />
                         <span className="truncate flex-1">{project.name}</span>
                         <span className="group-hover:hidden">
                           {isCycling ? (
@@ -154,14 +207,11 @@ export default function Sidebar() {
                           <SquareArrowOutUpRight className="h-3 w-3" />
                         </button>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setConfirmDelete(project)
-                          }}
-                          title={`Remove ${project.name}`}
-                          className="flex items-center justify-center h-5 w-5 rounded text-zinc-500 hover:bg-red-900/40 hover:text-red-400 transition-colors"
+                          onClick={(e) => openMenu(e, project)}
+                          title={`${project.name} settings`}
+                          className="flex items-center justify-center h-5 w-5 rounded text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 transition-colors"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Settings className="h-3 w-3" />
                         </button>
                       </div>
                     </div>
@@ -243,6 +293,52 @@ export default function Sidebar() {
           <span>Open folder…</span>
         </button>
       </div>
+
+      {/* Context menu */}
+      {menuProject && (
+        <>
+          <div
+            className="fixed inset-0 z-[60]"
+            onClick={() => setMenuProject(null)}
+          />
+          <div
+            ref={menuRef}
+            className="fixed z-[70] w-48 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
+            <button
+              onClick={() => { setMenuProject(null); setEditProject(menuProject) }}
+              className="flex w-full items-center px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors"
+            >
+              Edit project details
+            </button>
+            <button
+              onClick={() => handleRemix(menuProject)}
+              disabled={remixingId === menuProject.id}
+              className="flex w-full items-center px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-50"
+            >
+              {remixingId === menuProject.id ? 'Remixing…' : 'Remix'}
+            </button>
+            {remixError && (
+              <p className="px-3 py-1 text-[11px] text-red-400">{remixError}</p>
+            )}
+            <div className="my-1 border-t border-zinc-800" />
+            <button
+              onClick={() => { setMenuProject(null); setConfirmDelete(menuProject) }}
+              className="flex w-full items-center px-3 py-1.5 text-xs text-red-400 hover:bg-zinc-800 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
+
+      {editProject && (
+        <EditProjectModal
+          project={editProject}
+          onClose={() => setEditProject(null)}
+        />
+      )}
 
       {confirmDelete && (
         <RemoveProjectModal
