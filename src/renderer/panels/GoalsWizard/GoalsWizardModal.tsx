@@ -288,7 +288,7 @@ function GeneratingStage() {
       <div className="text-center">
         <p className="text-base font-medium text-zinc-200">Generating your documents</p>
         <p className="mt-1 text-sm text-zinc-500">
-          Building your GOALS.md and Replit build prompt…
+          Building GOALS.md, build prompt, and CONTEXT.md…
         </p>
       </div>
     </div>
@@ -350,7 +350,7 @@ function OutputStage() {
           content={contextMd}
           copied={contextCopied}
           onCopy={copyContext}
-          accentColor="teal"
+          accentColor="emerald"
         />
       </div>
 
@@ -391,9 +391,9 @@ function OutputStage() {
 }
 
 const DOC_PANEL_ACCENT = {
-  purple: { text: 'text-purple-400', border: 'border-purple-900/40' },
-  indigo: { text: 'text-indigo-400', border: 'border-indigo-900/40' },
-  teal: { text: 'text-teal-400', border: 'border-teal-900/40' },
+  purple:  { text: 'text-purple-400',  border: 'border-purple-900/40'  },
+  indigo:  { text: 'text-indigo-400',  border: 'border-indigo-900/40'  },
+  emerald: { text: 'text-emerald-400', border: 'border-emerald-900/40' },
 } as const
 
 function DocPanel({
@@ -409,7 +409,7 @@ function DocPanel({
   content: string
   copied: boolean
   onCopy: () => void
-  accentColor: 'purple' | 'indigo' | 'teal'
+  accentColor: 'purple' | 'indigo' | 'emerald'
 }) {
   const { text: textCls, border: borderCls } = DOC_PANEL_ACCENT[accentColor]
   return (
