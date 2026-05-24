@@ -1,8 +1,8 @@
 import chokidar from 'chokidar'
-import { BrowserWindow } from 'electron'
 import { relative } from 'path'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { FileChangedEvent } from '../../shared/types'
+import { sendToProjectWindows } from './window-registry'
 
 const SKIP_NAMES = new Set([
   'node_modules', '.git', 'dist', 'out', '.next', 'build',
@@ -13,9 +13,7 @@ const watchers = new Map<string, chokidar.FSWatcher>()
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function sendFileChanged(event: FileChangedEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(IPC_CHANNELS.FS_FILE_CHANGED, event)
-  }
+  sendToProjectWindows(event.projectId, IPC_CHANNELS.FS_FILE_CHANGED, event)
 }
 
 function debounceEmit(projectId: string, relativePath: string, kind: 'add' | 'change' | 'unlink'): void {
@@ -29,6 +27,7 @@ function debounceEmit(projectId: string, relativePath: string, kind: 'add' | 'ch
 }
 
 export function startWatcher(projectId: string, projectPath: string): void {
+  if (watchers.has(projectId)) return  // already watching — no restart needed
   stopWatcher(projectId)
 
   const watcher = chokidar.watch(projectPath, {

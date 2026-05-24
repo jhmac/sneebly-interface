@@ -1,5 +1,6 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
+import { sendToProjectWindows } from '../services/window-registry'
 import { listProjects } from '../services/project-registry'
 import { generateSpecs, listExistingSpecs, specsNeedGeneration, refineSpec } from '../services/spec/spec-generator'
 import { parseMilestones } from '../services/spec/milestone-parser'
@@ -10,16 +11,12 @@ import type { RefineMode, ResearchDepth } from '../../shared/types'
 // One active generation per project at a time
 const activeGenerations = new Set<string>()
 
-function pushSpecProgress(event: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(IPC_CHANNELS.SPEC_PROGRESS, event)
-  }
+function pushSpecProgress(event: unknown, projectId: string): void {
+  sendToProjectWindows(projectId, IPC_CHANNELS.SPEC_PROGRESS, event)
 }
 
 export function pushSpecAutoSuggest(projectId: string): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(IPC_CHANNELS.SPEC_AUTO_SUGGEST, projectId)
-  }
+  sendToProjectWindows(projectId, IPC_CHANNELS.SPEC_AUTO_SUGGEST, projectId)
 }
 
 export function registerSpecHandlers(): void {
@@ -46,7 +43,7 @@ export function registerSpecHandlers(): void {
         depth: opts.depth,
         milestoneIds: opts.milestoneIds,
         overwriteExisting: opts.overwriteExisting,
-        onProgress: (event) => pushSpecProgress(event),
+        onProgress: (event) => pushSpecProgress(event, projectId),
       })
     } finally {
       activeGenerations.delete(projectId)
@@ -73,7 +70,7 @@ export function registerSpecHandlers(): void {
         milestoneId: opts.milestoneId,
         refinementPrompt: opts.refinementPrompt,
         mode: opts.mode,
-        onProgress: (event) => pushSpecProgress(event),
+        onProgress: (event) => pushSpecProgress(event, projectId),
       })
     } finally {
       activeGenerations.delete(projectId)

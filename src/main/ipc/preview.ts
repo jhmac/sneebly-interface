@@ -1,5 +1,6 @@
-import { ipcMain, shell, BrowserWindow } from 'electron'
+import { ipcMain, shell } from 'electron'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
+import { sendToProjectWindows } from '../services/window-registry'
 import type { PreviewStatusEvent } from '../../shared/types'
 import {
   startServer,
@@ -10,9 +11,7 @@ import {
 
 export function registerPreviewHandlers(): void {
   setStatusCallback((event: PreviewStatusEvent) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(IPC_CHANNELS.PREVIEW_STATUS, event)
-    }
+    sendToProjectWindows(event.projectId, IPC_CHANNELS.PREVIEW_STATUS, event)
   })
 
   ipcMain.handle(

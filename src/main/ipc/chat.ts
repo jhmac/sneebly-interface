@@ -1,17 +1,16 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { ChatMessage, ModelName } from '../../shared/types'
 import * as sessionStore from '../services/session-store'
 import { startTurn } from '../services/agent-session'
 import { pushAgentEvent } from './agent'
+import { sendToProjectWindows } from '../services/window-registry'
 
 const store = new Store()
 
-function pushMessage(sessionId: string, message: ChatMessage): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, message)
-  }
+function pushMessage(sessionId: string, message: ChatMessage, projectId: string): void {
+  sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, message)
 }
 
 export function registerChatHandlers(): void {
@@ -93,7 +92,7 @@ export function registerChatHandlers(): void {
             }
           }
 
-          pushAgentEvent(event)
+          pushAgentEvent(event, projectId)
         },
         (claudeSessionId, error) => {
           // Persist the discovered Claude session ID in case it wasn't in system_init
@@ -102,7 +101,7 @@ export function registerChatHandlers(): void {
           }
 
           if (error) {
-            pushAgentEvent({ type: 'error', message: error })
+            pushAgentEvent({ type: 'error', message: error }, projectId)
           }
 
           // Always use the Sneebly session ID for JSONL writes
@@ -114,7 +113,7 @@ export function registerChatHandlers(): void {
               ts: Date.now(),
             }
             sessionStore.appendMessage(projectPath, sessionId, assistantMsg)
-            pushMessage(sessionId, assistantMsg)
+            pushMessage(sessionId, assistantMsg, projectId)
           } else if (error) {
             const errMsg: ChatMessage = {
               id: crypto.randomUUID(),
@@ -123,7 +122,7 @@ export function registerChatHandlers(): void {
               ts: Date.now(),
             }
             sessionStore.appendMessage(projectPath, sessionId, errMsg)
-            pushMessage(sessionId, errMsg)
+            pushMessage(sessionId, errMsg, projectId)
           }
         }
       )

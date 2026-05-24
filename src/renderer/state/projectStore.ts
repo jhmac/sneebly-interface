@@ -10,7 +10,7 @@ interface ProjectState {
   loading: boolean
   pendingProjectSwitch: { toProjectId: string } | null
 
-  loadProjects: () => Promise<void>
+  loadProjects: (overrideProjectId?: string) => Promise<void>
   openProjectDialog: () => Promise<void>
   activateProject: (id: string) => Promise<void>
   requestProjectSwitch: (id: string) => Promise<void>
@@ -28,21 +28,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   loading: false,
   pendingProjectSwitch: null,
 
-  loadProjects: async () => {
+  loadProjects: async (overrideProjectId?: string) => {
     const projects = await window.api.projectList()
     set({ projects })
 
-    // Auto-activate the most recently opened project
-    if (projects.length > 0) {
-      const sorted = [...projects].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
-      const result = await window.api.projectActivate(sorted[0].id)
-      if (result) {
-        set({
-          activeProjectId: result.project.id,
-          activeProjectBranch: result.branch,
-          activeProjectGoals: result.goals,
-        })
-      }
+    if (projects.length === 0) return
+
+    // If a specific project was requested (e.g. new window opened for that project),
+    // activate it; otherwise activate the most recently opened one.
+    const idToActivate = overrideProjectId
+      ?? [...projects].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)[0].id
+
+    const result = await window.api.projectActivate(idToActivate)
+    if (result) {
+      set({
+        activeProjectId: result.project.id,
+        activeProjectBranch: result.branch,
+        activeProjectGoals: result.goals,
+      })
     }
   },
 

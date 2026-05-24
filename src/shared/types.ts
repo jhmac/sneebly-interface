@@ -154,7 +154,7 @@ export type AgentEvent = (
   | AgentUserEvent
   | AgentResultEvent
   | AgentErrorEvent
-) & { source?: AgentEventSource }
+) & { source?: AgentEventSource; projectId?: string }
 
 // ── Activity card data types ───────────────────────────────────────────────
 
@@ -268,6 +268,7 @@ export interface ElectronAPI {
   projectOpenDialog: () => Promise<Project | null>
   projectActivate: (id: string) => Promise<ProjectActivateResult>
   projectRemove: (id: string) => Promise<void>
+  windowOpenProject: (projectId: string) => Promise<void>
   previewStart: (projectId: string, projectPath: string) => Promise<void>
   previewStop: (projectId: string) => Promise<void>
   previewRestart: (projectId: string, projectPath: string) => Promise<void>

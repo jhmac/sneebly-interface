@@ -23,7 +23,11 @@ export default function App() {
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
   useEffect(() => {
-    loadProjects()
+    // If this window was opened for a specific project (via "Open in new window"),
+    // activate that project instead of the most-recently-opened one.
+    const params = new URLSearchParams(window.location.search)
+    const initialProjectId = params.get('projectId') ?? undefined
+    loadProjects(initialProjectId)
     window.api.onboardingIsDone().then((done) => {
       if (!done) setShowOnboarding(true)
     })

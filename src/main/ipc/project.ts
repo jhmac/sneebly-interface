@@ -13,8 +13,11 @@ import { stopServer } from '../services/dev-server'
 import { maybeAutoSuggestSpecs } from './spec'
 import { parseGoalsFile } from '../services/cycle/identity'
 import { startWatcher, stopWatcher } from '../services/project-watcher'
-
-let currentWatchedProjectId: string | null = null
+import {
+  registerWindow,
+  unregisterWindow,
+  isProjectOpen,
+} from '../services/window-registry'
 
 async function getBranch(projectPath: string): Promise<string | null> {
   try {
@@ -63,21 +66,31 @@ export function registerProjectHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.PROJECT_ACTIVATE,
-    async (_event, id: string): Promise<ProjectActivateResult | null> => {
+    async (event, id: string): Promise<ProjectActivateResult | null> => {
       const project = touchProject(id)
       if (!project) return null
+
+      const wcId = event.sender.id
+
+      // Track which project was previously active in this window
+      const prevProjectId = registerWindow(wcId, id)
+
+      // Set the OS window title so Mission Control / Exposé shows the project name
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (win) win.setTitle(project.name)
+
+      // Start watcher for new project (idempotent — won't restart if already watching)
+      startWatcher(id, project.path)
+
+      // Stop previous project's watcher only if no other window still has it open
+      if (prevProjectId && prevProjectId !== id && !isProjectOpen(prevProjectId)) {
+        stopWatcher(prevProjectId)
+      }
 
       const [branch, goals] = await Promise.all([
         getBranch(project.path),
         Promise.resolve(parseGoalsFile(project.path)),
       ])
-
-      // Stop previous watcher and start one for the new project
-      if (currentWatchedProjectId && currentWatchedProjectId !== id) {
-        stopWatcher(currentWatchedProjectId)
-      }
-      startWatcher(id, project.path)
-      currentWatchedProjectId = id
 
       maybeAutoSuggestSpecs(id, project.path)
       return { project, branch, goals }
@@ -89,4 +102,12 @@ export function registerProjectHandlers(): void {
     try { stopWatcher(id) } catch { /* already stopped */ }
     removeProject(id)
   })
+}
+
+// Called from index.ts when a BrowserWindow closes — cleans up registry + watcher.
+export function handleWindowClosed(webContentsId: number): void {
+  const projectId = unregisterWindow(webContentsId)
+  if (projectId && !isProjectOpen(projectId)) {
+    stopWatcher(projectId)
+  }
 }

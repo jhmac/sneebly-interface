@@ -8,7 +8,7 @@ import { homedir } from 'os'
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type { LayoutSizes, PongPayload } from '../shared/types'
-import { registerProjectHandlers } from './ipc/project'
+import { registerProjectHandlers, handleWindowClosed } from './ipc/project'
 import { registerPreviewHandlers } from './ipc/preview'
 import { registerChatHandlers } from './ipc/chat'
 import { registerAgentHandlers } from './ipc/agent'
@@ -97,18 +97,17 @@ function registerIpcHandlers(): void {
   registerGitHubHandlers()
   registerSpecHandlers()
   registerGoalsHandlers()
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
+    createProjectWindow(projectId)
+  })
 }
 
 // ── Window ─────────────────────────────────────────────────────────────────
-let mainWindow: BrowserWindow | null = null
 let isAppQuitting = false
 
-export function getMainWindow(): BrowserWindow | null {
-  return mainWindow
-}
-
-function createWindow(): void {
-  mainWindow = new BrowserWindow({
+function createProjectWindow(initialProjectId?: string): BrowserWindow {
+  const win = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1200,
@@ -123,25 +122,31 @@ function createWindow(): void {
     },
   })
 
-  mainWindow.on('close', (event) => {
+  win.on('close', (event) => {
     const showInMenuBar = store.get('daemon.runAfterQuit', false) as boolean
     const daemonRunning = getDaemonStatus().running
     if (showInMenuBar && daemonRunning && !isAppQuitting) {
       event.preventDefault()
-      mainWindow?.hide()
+      win.hide()
     }
   })
 
-  mainWindow.on('closed', () => {
-    mainWindow = null
-    stopAllServers()
+  win.on('closed', () => {
+    handleWindowClosed(win.webContents.id)
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    const url = new URL(process.env['ELECTRON_RENDERER_URL'])
+    if (initialProjectId) url.searchParams.set('projectId', initialProjectId)
+    win.loadURL(url.toString())
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(
+      join(__dirname, '../renderer/index.html'),
+      initialProjectId ? { query: { projectId: initialProjectId } } : {}
+    )
   }
+
+  return win
 }
 
 // ── App lifecycle ──────────────────────────────────────────────────────────
@@ -150,14 +155,16 @@ app.whenReady().then(() => {
   generateMcpConfig()
   ensureChromiumInstalled()
   initAutoUpdater()
-  createWindow()
+  createProjectWindow()
   setupTray()
   app.on('activate', () => {
-    if (mainWindow) {
-      mainWindow.show()
-      mainWindow.focus()
+    const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
+    if (wins.length > 0) {
+      const win = BrowserWindow.getFocusedWindow() ?? wins[0]
+      win.show()
+      win.focus()
     } else {
-      createWindow()
+      createProjectWindow()
     }
   })
 })

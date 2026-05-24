@@ -1,6 +1,5 @@
-import { Tray, Menu, app } from 'electron'
+import { Tray, Menu, app, BrowserWindow } from 'electron'
 import { join } from 'path'
-import { getMainWindow } from '../index'
 import { getDaemonStatus, startDaemon, stopDaemon } from './cycle/daemon-runner'
 
 let tray: Tray | null = null
@@ -28,11 +27,8 @@ function rebuildMenu(): void {
     {
       label: 'Show window',
       click: () => {
-        const win = getMainWindow()
-        if (win) {
-          win.show()
-          win.focus()
-        }
+        const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
+        wins.forEach((w) => { w.show(); w.focus() })
       },
     },
     status.running

@@ -74,6 +74,7 @@ export const IPC_CHANNELS = {
   SPEC_LIST: 'spec:list',
   SPEC_LIST_MILESTONES: 'spec:list-milestones',
   SPEC_AUTO_SUGGEST: 'spec:auto-suggest',
+  WINDOW_OPEN_PROJECT: 'window:open-project',
   GOALS_GRILL_TURN: 'goals:grill-turn',
   GOALS_GENERATE: 'goals:generate',
   GOALS_WRITE: 'goals:write',

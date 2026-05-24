@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FolderOpen, FolderCode, Trash2, Sparkles } from 'lucide-react'
+import { FolderOpen, FolderCode, Trash2, Sparkles, SquareArrowOutUpRight } from 'lucide-react'
 import { useProjectStore } from '../state/projectStore'
 import { useDaemonStore } from '../state/daemonStore'
 import { useGoalsWizardStore } from '../state/goalsWizardStore'
@@ -141,16 +141,28 @@ export default function Sidebar() {
                           )}
                         </span>
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setConfirmDelete(project)
-                        }}
-                        title={`Remove ${project.name}`}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center justify-center h-5 w-5 rounded text-zinc-500 hover:bg-red-900/40 hover:text-red-400 transition-colors"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            window.api.windowOpenProject(project.id)
+                          }}
+                          title={`Open ${project.name} in new window`}
+                          className="flex items-center justify-center h-5 w-5 rounded text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 transition-colors"
+                        >
+                          <SquareArrowOutUpRight className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setConfirmDelete(project)
+                          }}
+                          title={`Remove ${project.name}`}
+                          className="flex items-center justify-center h-5 w-5 rounded text-zinc-500 hover:bg-red-900/40 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   </li>
                 )

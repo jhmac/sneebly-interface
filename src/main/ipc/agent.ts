@@ -1,11 +1,17 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import { abortSession } from '../services/agent-session'
+import { sendToProjectWindows, broadcastToAllWindows } from '../services/window-registry'
 import type { AgentEvent } from '../../shared/types'
 
-export function pushAgentEvent(event: AgentEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(IPC_CHANNELS.AGENT_EVENT, event)
+// If projectId is provided, routes to windows watching that project.
+// Falls back to broadcast for daemon events (cycle.ts calls without projectId).
+export function pushAgentEvent(event: AgentEvent, projectId?: string): void {
+  const stamped: AgentEvent = projectId ? { ...event, projectId } : event
+  if (projectId) {
+    sendToProjectWindows(projectId, IPC_CHANNELS.AGENT_EVENT, stamped)
+  } else {
+    broadcastToAllWindows(IPC_CHANNELS.AGENT_EVENT, stamped)
   }
 }
 
