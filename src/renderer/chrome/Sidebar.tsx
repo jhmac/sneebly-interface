@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FolderOpen, FolderCode, Settings, Sparkles, SquareArrowOutUpRight } from 'lucide-react'
 import { useProjectStore } from '../state/projectStore'
 import { useDaemonStore } from '../state/daemonStore'
@@ -76,7 +76,6 @@ export default function Sidebar() {
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const [remixingId, setRemixingId] = useState<string | null>(null)
   const [remixError, setRemixError] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
 
   const activeQuestionCount = questionCounts[activeProjectId ?? ''] ?? 0
   const activeQueueCount = queueCounts[activeProjectId ?? ''] ?? 0
@@ -302,7 +301,6 @@ export default function Sidebar() {
             onClick={() => setMenuProject(null)}
           />
           <div
-            ref={menuRef}
             className="fixed z-[70] w-48 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
             style={{ top: menuPos.top, left: menuPos.left }}
           >

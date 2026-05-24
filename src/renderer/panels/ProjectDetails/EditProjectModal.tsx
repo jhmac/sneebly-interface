@@ -109,7 +109,7 @@ export default function EditProjectModal({
             >
               Upload new
             </button>
-            {(hasIcon || project.iconPath) && (
+            {hasIcon && (
               <button
                 onClick={handleClearIcon}
                 className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors"
