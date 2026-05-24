@@ -11,6 +11,7 @@ interface GoalsWizardStore {
   grillReady: boolean
   goalsMd: string
   buildPrompt: string
+  contextMd: string
   stackReport: string
   error: string | null
 
@@ -20,7 +21,7 @@ interface GoalsWizardStore {
   setIdeaSeed: (idea: string) => void
   // Appends a user+assistant exchange; grillReady latches true and never goes false
   addMessages: (userMsg: string, assistantMsg: string, ready: boolean) => void
-  setGenerated: (goalsMd: string, buildPrompt: string) => void
+  setGenerated: (goalsMd: string, buildPrompt: string, contextMd: string) => void
   setStackReport: (report: string) => void
   setGoalsMd: (md: string) => void
   setError: (err: string | null) => void
@@ -36,6 +37,7 @@ const BLANK: Omit<GoalsWizardStore, 'openWizard' | 'closeWizard' | 'setStage' | 
   grillReady: false,
   goalsMd: '',
   buildPrompt: '',
+  contextMd: '',
   stackReport: '',
   error: null,
 }
@@ -62,7 +64,7 @@ export const useGoalsWizardStore = create<GoalsWizardStore>((set) => ({
       grillReady: s.grillReady || ready,
     })),
 
-  setGenerated: (goalsMd, buildPrompt) => set({ goalsMd, buildPrompt }),
+  setGenerated: (goalsMd, buildPrompt, contextMd) => set({ goalsMd, buildPrompt, contextMd }),
 
   setStackReport: (stackReport) => set({ stackReport }),
 

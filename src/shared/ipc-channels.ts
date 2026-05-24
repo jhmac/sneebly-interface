@@ -80,5 +80,6 @@ export const IPC_CHANNELS = {
   GOALS_GRILL_TURN: 'goals:grill-turn',
   GOALS_GENERATE: 'goals:generate',
   GOALS_WRITE: 'goals:write',
+  GOALS_WRITE_CONTEXT: 'goals:write-context',
   GOALS_UPDATE_STACK: 'goals:update-stack',
 } as const

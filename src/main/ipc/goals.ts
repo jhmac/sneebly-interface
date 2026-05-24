@@ -6,6 +6,7 @@ import {
   generateGoalsAndPrompt,
   updateStackSection,
   writeGoalsMd,
+  writeContextMd,
 } from '../services/goals/goals-generator'
 import { listProjects } from '../services/project-registry'
 
@@ -30,6 +31,15 @@ export function registerGoalsHandlers(): void {
       const project = listProjects().find((p) => p.id === projectId)
       if (!project) throw new Error(`Project not found: ${projectId}`)
       writeGoalsMd(project.path, content)
+    },
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.GOALS_WRITE_CONTEXT,
+    async (_event, projectId: string, content: string) => {
+      const project = listProjects().find((p) => p.id === projectId)
+      if (!project) throw new Error(`Project not found: ${projectId}`)
+      writeContextMd(project.path, content)
     },
   )
 

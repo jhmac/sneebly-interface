@@ -92,8 +92,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_ACTIVE, projectId, sessionId),
 
   // ── Chat ──────────────────────────────────────────────────────────────
-  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, projectPath, sessionId, message, model, projectId),
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string, skillPrompt?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, projectPath, sessionId, message, model, projectId, skillPrompt),
   chatOnMessageAppended: (
     callback: (sessionId: string, message: ChatMessage) => void
   ): (() => void) => {
@@ -239,6 +239,9 @@ const api: ElectronAPI = {
 
   goalsWrite: (projectId: string, content: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GOALS_WRITE, projectId, content),
+
+  goalsWriteContext: (projectId: string, content: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GOALS_WRITE_CONTEXT, projectId, content),
 
   goalsUpdateStack: (goalsMd: string, stackReport: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GOALS_UPDATE_STACK, goalsMd, stackReport),

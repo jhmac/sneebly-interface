@@ -62,7 +62,7 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.CHAT_SEND,
-    async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string, projectId: string) => {
+    async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string, projectId: string, skillPrompt?: string) => {
       sessionStore.appendMessage(projectPath, sessionId, userMessage)
 
       // BUG 2 FIX: look up Claude's session ID for this Sneebly session
@@ -78,6 +78,7 @@ export function registerChatHandlers(): void {
           claudeCodeSessionId,
           prompt: userMessage.text,
           model: model || 'claude-sonnet-4-6',
+          appendSystemPrompt: skillPrompt,
         },
         (event) => {
           // BUG 2 FIX: persist Claude's session ID the moment we see system_init

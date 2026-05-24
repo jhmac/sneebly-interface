@@ -62,7 +62,7 @@ function buildGenerationPrompt(ideaSeed: string, messages: GrillMessage[]): stri
     .map((m) => `${m.role === 'user' ? 'USER' : 'ASSISTANT'}: ${m.content}`)
     .join('\n\n')
 
-  return `You are the Sneebly App Strategist. Based on the following interview, produce two documents.
+  return `You are the Sneebly App Strategist. Based on the following interview, produce three documents.
 
 INITIAL IDEA:
 ${ideaSeed}
@@ -70,7 +70,7 @@ ${ideaSeed}
 INTERVIEW TRANSCRIPT:
 ${history}
 
-OUTPUT TWO DOCUMENTS in this exact format — no preamble, nothing else:
+OUTPUT THREE DOCUMENTS in this exact format — no preamble, nothing else:
 
 <GOALS_MD>
 # Mission
@@ -129,7 +129,22 @@ Other: [any other significant libraries]
 ---END STACK REPORT---
 </BUILD_PROMPT>
 
-Generate both documents now.`
+<CONTEXT_MD>
+# [App Name]
+
+[One or two sentence description of what this project does and who it serves.]
+
+## Language
+
+[For each important domain term, one entry in this format:]
+**[Term]**:
+[1-2 sentence definition — what it IS, not what it does]
+_Avoid_: [synonyms to not use]
+
+[Include 5-10 terms that are central to this domain: the main entities, key actions, and any non-obvious vocabulary used in the interview.]
+</CONTEXT_MD>
+
+Generate all three documents now.`
 }
 
 // ── Generate goals + build prompt ──────────────────────────────────────────────
@@ -137,7 +152,7 @@ Generate both documents now.`
 export async function generateGoalsAndPrompt(
   ideaSeed: string,
   messages: GrillMessage[],
-): Promise<{ goalsMd: string; buildPrompt: string }> {
+): Promise<{ goalsMd: string; buildPrompt: string; contextMd: string }> {
   const prompt = buildGenerationPrompt(ideaSeed, messages)
 
   const result = await runStandaloneTurn({
@@ -148,18 +163,20 @@ export async function generateGoalsAndPrompt(
     permissionMode: 'bypassPermissions',
     maxTurns: 1,
     allowedTools: [],
-    appendSystemPrompt: `You are the Sneebly App Strategist. Output only the two XML-tagged documents. No preamble.`,
+    appendSystemPrompt: `You are the Sneebly App Strategist. Output only the three XML-tagged documents. No preamble.`,
   })
 
   const text = result.assistantText
 
   const goalsMatch = text.match(/<GOALS_MD>([\s\S]*?)<\/GOALS_MD>/)
   const buildMatch = text.match(/<BUILD_PROMPT>([\s\S]*?)<\/BUILD_PROMPT>/)
+  const contextMatch = text.match(/<CONTEXT_MD>([\s\S]*?)<\/CONTEXT_MD>/)
 
   const goalsMd = goalsMatch ? goalsMatch[1]!.trim() : text.trim()
   const buildPrompt = buildMatch ? buildMatch[1]!.trim() : ''
+  const contextMd = contextMatch ? contextMatch[1]!.trim() : ''
 
-  return { goalsMd, buildPrompt }
+  return { goalsMd, buildPrompt, contextMd }
 }
 
 // ── Update stack section ───────────────────────────────────────────────────────
@@ -193,8 +210,12 @@ OUTPUT: The complete updated GOALS.md with the Tech Stack section filled in. Not
   return result.assistantText.trim()
 }
 
-// ── Write GOALS.md ─────────────────────────────────────────────────────────────
+// ── Write GOALS.md / CONTEXT.md ───────────────────────────────────────────────
 
 export function writeGoalsMd(projectPath: string, content: string): void {
   writeFileSync(join(projectPath, 'GOALS.md'), content, 'utf-8')
+}
+
+export function writeContextMd(projectPath: string, content: string): void {
+  writeFileSync(join(projectPath, 'CONTEXT.md'), content, 'utf-8')
 }

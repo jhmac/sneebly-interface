@@ -295,7 +295,7 @@ export interface ElectronAPI {
   sessionClear: (projectPath: string, sessionId: string) => Promise<void>
   sessionGetActive: (projectId: string) => Promise<string | null>
   sessionSetActive: (projectId: string, sessionId: string | null) => Promise<void>
-  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string) => Promise<void>
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string, skillPrompt?: string) => Promise<void>
   chatOnMessageAppended: (callback: (sessionId: string, message: ChatMessage) => void) => () => void
   modelGet: () => Promise<string>
   modelSet: (model: ModelName) => Promise<void>
@@ -368,6 +368,7 @@ export interface ElectronAPI {
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>
   goalsGenerate: (ideaSeed: string, messages: GrillMessage[]) => Promise<GoalsGenerateResult>
   goalsWrite: (projectId: string, content: string) => Promise<void>
+  goalsWriteContext: (projectId: string, content: string) => Promise<void>
   goalsUpdateStack: (goalsMd: string, stackReport: string) => Promise<string>
 
   // ── Spec Architect ────────────────────────────────────────────────────────
@@ -414,6 +415,7 @@ export interface GrillTurnResult {
 export interface GoalsGenerateResult {
   goalsMd: string
   buildPrompt: string
+  contextMd: string
 }
 
 export interface SpecProgressEvent {

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { ChatMessage, ModelName, PendingAttachment, SessionSummary } from '../../shared/types'
 import { useProjectStore } from './projectStore'
+import { getSkill } from '../skills'
 
 interface ChatState {
   activeSessionId: string | null
@@ -10,6 +11,7 @@ interface ChatState {
   composerAttachments: PendingAttachment[]
   pendingSend: boolean
   defaultModel: ModelName
+  activeSkillId: string | null
 
   loadForProject: (projectPath: string, projectId: string) => Promise<void>
   sendMessage: () => void
@@ -17,6 +19,7 @@ interface ChatState {
   switchSession: (sessionId: string) => Promise<void>
   clearCurrentSession: () => Promise<void>
   switchModel: (model: ModelName) => void
+  setActiveSkill: (id: string | null) => void
   appendIncomingMessage: (sessionId: string, message: ChatMessage) => void
   setPendingSend: (v: boolean) => void
   addAttachment: (a: PendingAttachment) => void
@@ -38,6 +41,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   composerAttachments: [],
   pendingSend: false,
   defaultModel: 'claude-sonnet-4-6',
+  activeSkillId: null,
 
   loadForProject: async (projectPath: string, projectId: string) => {
     const [sessions, savedId, savedModel] = await Promise.all([
@@ -66,7 +70,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sendMessage: () => {
     const project = activeProject()
-    const { activeSessionId, composerText, composerAttachments, defaultModel } = get()
+    const { activeSessionId, composerText, composerAttachments, defaultModel, activeSkillId } = get()
     if (!project || !activeSessionId || !composerText.trim()) return
 
     const message: ChatMessage = {
@@ -88,8 +92,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingSend: true,
     }))
 
+    const skillPrompt = activeSkillId ? getSkill(activeSkillId)?.prompt : undefined
     // Fire-and-forget — agent completes async via agent:event / chat:message-appended
-    window.api.chatSend(project.path, activeSessionId, message, defaultModel, project.id).catch(console.error)
+    window.api.chatSend(project.path, activeSessionId, message, defaultModel, project.id, skillPrompt).catch(console.error)
   },
 
   createNewSession: async () => {
@@ -121,6 +126,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ defaultModel: model })
     window.api.modelSet(model)
   },
+
+  setActiveSkill: (id: string | null) => set({ activeSkillId: id }),
 
   appendIncomingMessage: (sessionId: string, message: ChatMessage) => {
     set((s) => {

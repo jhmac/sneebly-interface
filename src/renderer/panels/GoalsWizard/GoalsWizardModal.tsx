@@ -139,7 +139,7 @@ function GrillStage() {
     setError(null)
     try {
       const result = await window.api.goalsGenerate(ideaSeed, messages)
-      setGenerated(result.goalsMd, result.buildPrompt)
+      setGenerated(result.goalsMd, result.buildPrompt, result.contextMd)
       setStage('output')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -298,12 +298,13 @@ function GeneratingStage() {
 // ── Stage: Output ─────────────────────────────────────────────────────────────
 
 function OutputStage() {
-  const { goalsMd, buildPrompt, setStage } = useGoalsWizardStore()
+  const { goalsMd, buildPrompt, contextMd, setStage } = useGoalsWizardStore()
   const { activeProjectId, projects } = useProjectStore()
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
 
   const [goalsCopied, copyGoals] = useCopy(goalsMd)
   const [promptCopied, copyPrompt] = useCopy(buildPrompt)
+  const [contextCopied, copyContext] = useCopy(contextMd)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -314,6 +315,7 @@ function OutputStage() {
     setSaveError(null)
     try {
       await window.api.goalsWrite(activeProjectId, goalsMd)
+      if (contextMd) await window.api.goalsWriteContext(activeProjectId, contextMd)
       setSaved(true)
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e))
@@ -322,15 +324,10 @@ function OutputStage() {
     }
   }
 
-  function handleStackReport() {
-    setStage('stack-report')
-  }
-
   return (
     <div className="flex h-full flex-col">
       {/* Documents */}
       <div className="flex flex-1 min-h-0 gap-0">
-        {/* GOALS.md */}
         <DocPanel
           title="GOALS.md"
           subtitle="Your project roadmap for Sneebly"
@@ -339,8 +336,6 @@ function OutputStage() {
           onCopy={copyGoals}
           accentColor="purple"
         />
-
-        {/* Build Prompt */}
         <DocPanel
           title="Replit Build Prompt"
           subtitle="Paste this into Replit to start building"
@@ -349,13 +344,21 @@ function OutputStage() {
           onCopy={copyPrompt}
           accentColor="indigo"
         />
+        <DocPanel
+          title="CONTEXT.md"
+          subtitle="Domain glossary for AI agents"
+          content={contextMd}
+          copied={contextCopied}
+          onCopy={copyContext}
+          accentColor="teal"
+        />
       </div>
 
       {/* Bottom action bar */}
       <div className="flex flex-shrink-0 items-center justify-between border-t border-zinc-800 bg-zinc-950 px-5 py-3">
         <div className="flex items-center gap-3">
           <button
-            onClick={handleStackReport}
+            onClick={() => setStage('stack-report')}
             className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
           >
             Update with Stack Report
@@ -365,7 +368,7 @@ function OutputStage() {
           {saveError && <p className="text-xs text-red-400">{saveError}</p>}
           {!activeProject ? (
             <p className="text-xs text-zinc-600">
-              Open a project to save GOALS.md there
+              Open a project to save docs there
             </p>
           ) : saved ? (
             <span className="flex items-center gap-1.5 text-xs text-green-400">
@@ -390,6 +393,7 @@ function OutputStage() {
 const DOC_PANEL_ACCENT = {
   purple: { text: 'text-purple-400', border: 'border-purple-900/40' },
   indigo: { text: 'text-indigo-400', border: 'border-indigo-900/40' },
+  teal: { text: 'text-teal-400', border: 'border-teal-900/40' },
 } as const
 
 function DocPanel({
@@ -405,7 +409,7 @@ function DocPanel({
   content: string
   copied: boolean
   onCopy: () => void
-  accentColor: 'purple' | 'indigo'
+  accentColor: 'purple' | 'indigo' | 'teal'
 }) {
   const { text: textCls, border: borderCls } = DOC_PANEL_ACCENT[accentColor]
   return (

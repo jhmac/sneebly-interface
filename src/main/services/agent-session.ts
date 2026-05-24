@@ -15,6 +15,7 @@ export interface TurnOpts {
   claudeCodeSessionId?: string | null
   prompt: string
   model: string
+  appendSystemPrompt?: string
 }
 
 export function startTurn(
@@ -31,6 +32,7 @@ export function startTurn(
     model: opts.model as 'claude-sonnet-4-6' | 'claude-opus-4-7' | 'claude-haiku-4-5',
     permissionMode: 'bypassPermissions',
     resumeSessionId: opts.claudeCodeSessionId,
+    appendSystemPrompt: opts.appendSystemPrompt,
     onProcess: (proc) => {
       activeProcesses.set(opts.sneeblySessionId, proc)
     },
