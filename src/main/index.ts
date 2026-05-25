@@ -187,6 +187,11 @@ function scheduleReflections(): void {
 }
 
 app.whenReady().then(() => {
+  // Set dock icon in dev mode (packaged builds pick it up from the bundle automatically)
+  if (!app.isPackaged && process.platform === 'darwin') {
+    app.dock.setIcon(join(__dirname, '../../resources/icon.png'))
+  }
+
   registerIpcHandlers()
   generateMcpConfig()
   ensureChromiumInstalled()
