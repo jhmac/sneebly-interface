@@ -1,5 +1,6 @@
 import { listReflections } from './reflector'
 import { readFileSync, existsSync } from 'fs'
+import { dateStrToLocalTs } from '../../shared/utils'
 
 // The Reflector prompt asks Claude to answer three questions:
 //   1. What got stuck — repeated failures, user corrections, permission denials.
@@ -17,10 +18,6 @@ function extractBody(rawContent: string): string {
   return rawContent.slice(end + 3).trimStart()
 }
 
-function wordCount(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length
-}
-
 function truncateToWords(text: string, maxWords: number): string {
   const words = text.trim().split(/\s+/)
   if (words.length <= maxWords) return text.trim()
@@ -30,6 +27,7 @@ function truncateToWords(text: string, maxWords: number): string {
 export interface LearningsResult {
   text: string
   sourceReflections: string[]
+  wordCount: number
 }
 
 export function buildLearningsAddendum(
@@ -41,7 +39,7 @@ export function buildLearningsAddendum(
 
   const cutoff = Date.now() - opts.maxAgeDays * 86_400_000
   const recent = entries
-    .filter((e) => new Date(e.date).getTime() >= cutoff)
+    .filter((e) => dateStrToLocalTs(e.date) >= cutoff)
     .slice(0, 3)
 
   if (recent.length === 0) return null
@@ -73,14 +71,15 @@ export function buildLearningsAddendum(
   const text = [
     '## Context from prior sessions',
     '',
-    "Recent observations from Sneebly's nightly reflection:",
+    'Recent observations from your prior sessions:',
     '',
     capped,
     '',
     "Don't re-litigate these in this session; apply them silently when relevant.",
   ].join('\n')
 
-  return { text, sourceReflections: used }
+  const wc = capped.trim().split(/\s+/).filter(Boolean).length
+  return { text, sourceReflections: used, wordCount: wc }
 }
 
 // Extract the substantive body of a reflection. If markdown headings are present, return all

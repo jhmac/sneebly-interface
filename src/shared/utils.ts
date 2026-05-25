@@ -31,3 +31,12 @@ export function tsToDateKey(ts: number): string {
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
+// Parse a YYYY-MM-DD date string as LOCAL midnight (not UTC midnight).
+// Use this when the string came from a filename written by tsToDateKey,
+// because `new Date(yyyymmdd).getTime()` parses as UTC and produces
+// off-by-one-day errors near midnight in non-UTC timezones.
+export function dateStrToLocalTs(s: string): number {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}

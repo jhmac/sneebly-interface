@@ -115,6 +115,8 @@ export function registerChatHandlers(): void {
     IPC_CHANNELS.SESSION_CLEAR,
     (_e, projectPath: string, sessionId: string) => {
       store.delete(`claudeSessionIds.${sessionId}`)
+      sessionLearningsMap.delete(sessionId)
+      dismissedSessions.delete(sessionId)
       return sessionStore.clearSession(projectPath, sessionId)
     }
   )
@@ -197,10 +199,9 @@ export function registerChatHandlers(): void {
         appendSystemPrompt = composed.text ?? undefined
 
         if (composed.learnings) {
-          const wc = composed.learnings.text.trim().split(/\s+/).filter(Boolean).length
           sessionLearningsMap.set(sessionId, {
             sourceReflections: composed.learnings.sourceReflections,
-            wordCount: wc,
+            wordCount: composed.learnings.wordCount,
           })
           if (recordEvents) {
             appendEvent(projectPath, sessionId, {
@@ -213,7 +214,7 @@ export function registerChatHandlers(): void {
               payload: {
                 learningsHash: composed.learnings.sourceReflections.join('|'),
                 sourceReflections: composed.learnings.sourceReflections,
-                addendumWordCount: wc,
+                addendumWordCount: composed.learnings.wordCount,
               },
             })
           }

@@ -26,11 +26,16 @@ export function composeSystemPromptAddendum(
   const remainingBudget = Math.max(0, Math.min(opts.maxWords, TOTAL_WORD_CAP - skillWordCount))
 
   if (opts.applyLearnings && remainingBudget > 0) {
-    learnings = buildLearningsAddendum(projectPath, {
-      maxAgeDays: opts.maxAgeDays,
-      maxWords: remainingBudget,
-    })
-    if (learnings) parts.push(learnings.text)
+    try {
+      learnings = buildLearningsAddendum(projectPath, {
+        maxAgeDays: opts.maxAgeDays,
+        maxWords: remainingBudget,
+      })
+      if (learnings) parts.push(learnings.text)
+    } catch (e) {
+      console.error('[composer] failed to build learnings addendum:', e)
+      // Continue without learnings — skill prompt alone is still useful
+    }
   }
 
   const text = parts.length > 0 ? parts.join('\n\n---\n\n') : null
