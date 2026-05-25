@@ -20,6 +20,12 @@ const MODEL_OPTIONS: Array<{ value: ModelName; label: string }> = [
   { value: 'claude-haiku-4-5',  label: 'Claude Haiku 4.5' },
 ]
 
+const REVIEW_MODEL_OPTIONS: Array<{ value: ModelName; label: string }> = [
+  { value: 'claude-opus-4-7',   label: 'Opus 4.7 (more thorough, slower)' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6 (balanced)' },
+  { value: 'claude-haiku-4-5',  label: 'Haiku 4.5 (faster, cheaper)' },
+]
+
 export default function SettingsPanel({ open, onClose }: Props) {
   if (!open) return null
   return <SettingsPanelInner onClose={onClose} />
@@ -211,38 +217,54 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
             />
           </Row>
           {(settings.autoSelfReview ?? true) && (
-            <Row label="Review threshold" description="Trigger review when files touched or lines changed meets either limit.">
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <input
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={settings.autoSelfReviewThresholdFiles ?? 3}
-                    onChange={(e) => {
-                      const v = Number(e.target.value)
-                      if (Number.isInteger(v) && v >= 1) handleSave({ autoSelfReviewThresholdFiles: v })
-                    }}
-                    className="w-14 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
-                  />
-                  files
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <input
-                    type="number"
-                    min={1}
-                    max={2000}
-                    value={settings.autoSelfReviewThresholdLines ?? 100}
-                    onChange={(e) => {
-                      const v = Number(e.target.value)
-                      if (Number.isInteger(v) && v >= 1) handleSave({ autoSelfReviewThresholdLines: v })
-                    }}
-                    className="w-16 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
-                  />
-                  lines
-                </label>
-              </div>
-            </Row>
+            <>
+              <Row label="Review threshold" description="Trigger review when files touched or lines changed meets either limit.">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={settings.autoSelfReviewThresholdFiles ?? 3}
+                      onChange={(e) => {
+                        const v = Number(e.target.value)
+                        if (Number.isInteger(v) && v >= 1) handleSave({ autoSelfReviewThresholdFiles: v })
+                      }}
+                      className="w-14 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+                    />
+                    files
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                    <input
+                      type="number"
+                      min={1}
+                      max={2000}
+                      value={settings.autoSelfReviewThresholdLines ?? 100}
+                      onChange={(e) => {
+                        const v = Number(e.target.value)
+                        if (Number.isInteger(v) && v >= 1) handleSave({ autoSelfReviewThresholdLines: v })
+                      }}
+                      className="w-16 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+                    />
+                    lines
+                  </label>
+                </div>
+              </Row>
+              <Row label="Review model" description="Model used for the auto-review pass. Opus gives deeper analysis; Haiku is faster and cheaper.">
+                <div className="relative">
+                  <select
+                    value={settings.autoSelfReviewModel ?? 'claude-opus-4-7'}
+                    onChange={(e) => handleSave({ autoSelfReviewModel: e.target.value as ModelName })}
+                    className="appearance-none rounded-md bg-zinc-800 py-1.5 pl-3 pr-8 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+                  >
+                    {REVIEW_MODEL_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-500" />
+                </div>
+              </Row>
+            </>
           )}
           {activeProject && (
             <Row label="Delete all events and reflections" description="Wipes all stored events and reflection files for the current project.">

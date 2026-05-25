@@ -19,6 +19,9 @@ import type {
   BrowserCheckResultData,
 } from '../../shared/types'
 
+const IN_FLIGHT_TIMEOUT_MS = 5 * 60 * 1000
+const inFlightTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
 const READ_TOOLS = new Set(['Read', 'View', 'ReadFile'])
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'EditFile'])
 const WRITE_TOOLS = new Set(['Write', 'WriteFile', 'Create'])
@@ -52,6 +55,7 @@ interface ActivityState {
   filters: Record<CardType, boolean>
   sourceFilters: SourceFilters
   pendingSessionId: string | null
+  chatInFlightProjectIds: Set<string>
 
   appendEvent: (event: AgentEvent) => void
   startTurn: (sessionId: string | null) => void
@@ -59,6 +63,7 @@ interface ActivityState {
   respondToPermission: (requestId: string, decision: 'allow' | 'deny') => void
   toggleFilter: (cardType: CardType) => void
   toggleSourceFilter: (source: keyof SourceFilters) => void
+  setChatInFlight: (projectId: string, inFlight: boolean) => void
   reset: () => void
 }
 
@@ -190,6 +195,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   filters: { ...DEFAULT_FILTERS },
   sourceFilters: loadSourceFilters(),
   pendingSessionId: null,
+  chatInFlightProjectIds: new Set<string>(),
 
   appendEvent: (event: AgentEvent) => {
     const ts = Date.now()
@@ -347,6 +353,33 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       try { localStorage.setItem('activity.sourceFilters', JSON.stringify(next)) } catch { /* ignore */ }
       return { sourceFilters: next }
     })
+  },
+
+  setChatInFlight: (projectId, inFlight) => {
+    const existing = inFlightTimeouts.get(projectId)
+    if (existing !== undefined) {
+      clearTimeout(existing)
+      inFlightTimeouts.delete(projectId)
+    }
+    if (inFlight) {
+      const handle = setTimeout(() => {
+        console.warn(`[Sneebly] Chat in-flight state for ${projectId} auto-cleared after timeout`)
+        inFlightTimeouts.delete(projectId)
+        set((s) => {
+          const next = new Set(s.chatInFlightProjectIds)
+          next.delete(projectId)
+          return { chatInFlightProjectIds: next }
+        })
+      }, IN_FLIGHT_TIMEOUT_MS)
+      inFlightTimeouts.set(projectId, handle)
+      set((s) => ({ chatInFlightProjectIds: new Set([...s.chatInFlightProjectIds, projectId]) }))
+    } else {
+      set((s) => {
+        const next = new Set(s.chatInFlightProjectIds)
+        next.delete(projectId)
+        return { chatInFlightProjectIds: next }
+      })
+    }
   },
 
   reset: () => set({ cards: [], currentTurn: null }),

@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Plus } from 'lucide-react'
 import { useChatStore } from '../../state/chatStore'
 import { useSettingsStore } from '../../state/settingsStore'
+import { useActivityStore } from '../../state/activityStore'
+import { useProjectStore } from '../../state/projectStore'
 import type { ModelName, SessionSummary } from '../../../shared/types'
 import { timeAgo } from '../../../shared/utils'
 import MessageList from './MessageList'
@@ -53,6 +55,8 @@ function ChatHeader({
   const modelRef = useRef<HTMLDivElement>(null)
   const sessionsRef = useRef<HTMLDivElement>(null)
   const autoSelfReview = useSettingsStore((s) => s.settings?.autoSelfReview ?? true)
+  const activeProjectId = useProjectStore((s) => s.activeProjectId)
+  const isReviewing = useActivityStore((s) => s.chatInFlightProjectIds.has(activeProjectId ?? ''))
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -101,10 +105,17 @@ function ChatHeader({
         {autoSelfReview && (
           <button
             onClick={onOpenSettings}
-            title="Auto-review is on — click to configure"
+            title={isReviewing ? 'Auto-review in progress…' : 'Auto-review is on — click to configure'}
             className="rounded-md px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-indigo-950/60 hover:bg-indigo-900/60 transition-colors"
           >
-            Review
+            {isReviewing ? (
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                Reviewing…
+              </span>
+            ) : (
+              'Review'
+            )}
           </button>
         )}
         <SkillSelector />

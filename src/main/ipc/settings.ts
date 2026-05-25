@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoSelfReview: true,
   autoSelfReviewThresholdFiles: 3,
   autoSelfReviewThresholdLines: 100,
+  autoSelfReviewModel: 'claude-opus-4-7',
 }
 
 export function registerSettingsHandlers(): void {

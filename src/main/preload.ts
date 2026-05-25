@@ -33,6 +33,7 @@ import type {
   MilestoneRef,
   GrillMessage,
   ReflectionEntry,
+  ChatInFlightPayload,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -242,6 +243,11 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.REFLECTION_READ, filePath),
   eventsDeleteAll: (projectId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.EVENTS_DELETE_ALL, projectId),
+  chatOnInFlightChanged: (callback: (payload: ChatInFlightPayload) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, payload: ChatInFlightPayload) => callback(payload)
+    ipcRenderer.on(IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, h)
+  },
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) =>

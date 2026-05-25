@@ -117,6 +117,13 @@ export default function App() {
     })
   }, [])
 
+  // ── Chat in-flight push channel ────────────────────────────────────────
+  useEffect(() => {
+    return window.api.chatOnInFlightChanged((payload) => {
+      useActivityStore.getState().setChatInFlight(payload.projectId, payload.inFlight)
+    })
+  }, [])
+
   // ── File watcher push channel ──────────────────────────────────────────
   useEffect(() => {
     return window.api.fsOnFileChanged((event) => {

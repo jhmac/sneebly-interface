@@ -130,6 +130,10 @@ export function abortSession(sneeblySessionId: string): void {
   proc.on('exit', () => clearTimeout(t))
 }
 
+export function isChatTurnInFlight(projectId: string): boolean {
+  return activeChatProjectIds.has(projectId)
+}
+
 export function getActiveChatProjectIds(): ReadonlySet<string> {
   return activeChatProjectIds
 }

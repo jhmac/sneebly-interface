@@ -87,4 +87,5 @@ export const IPC_CHANNELS = {
   REFLECTION_LIST: 'reflection:list',
   REFLECTION_READ: 'reflection:read',
   EVENTS_DELETE_ALL: 'events:delete-all',
+  CHAT_IN_FLIGHT_CHANGED: 'chat:in-flight-changed',
 } as const

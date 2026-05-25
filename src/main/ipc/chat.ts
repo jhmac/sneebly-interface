@@ -3,7 +3,7 @@ import Store from 'electron-store'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { ChatMessage, ModelName } from '../../shared/types'
 import * as sessionStore from '../services/session-store'
-import { startTurn, type TurnMetrics } from '../services/agent-session'
+import { startTurn, isChatTurnInFlight, type TurnMetrics } from '../services/agent-session'
 import { pushAgentEvent } from './agent'
 import { sendToProjectWindows } from '../services/window-registry'
 import { appendEvent, CORRECTION_RE } from '../services/event-stream'
@@ -19,11 +19,10 @@ function maybeRunAutoReview(opts: {
   projectPath: string
   sessionId: string
   projectId: string
-  model: string
   recordEvents: boolean
   metrics: TurnMetrics | undefined
 }): void {
-  const { projectPath, sessionId, projectId, model, recordEvents, metrics } = opts
+  const { projectPath, sessionId, projectId, recordEvents, metrics } = opts
   const appSettings = store.get('appSettings', {}) as Record<string, unknown>
   if ((appSettings['autoSelfReview'] as boolean | undefined) === false) return
 
@@ -36,8 +35,11 @@ function maybeRunAutoReview(opts: {
   const reviewPrompt = getSkillPrompt('self-review')
   if (!reviewPrompt) return
 
+  const reviewModel = (appSettings['autoSelfReviewModel'] as ModelName | undefined) ?? 'claude-opus-4-7'
   const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
   let reviewText = ''
+
+  sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: true })
 
   startTurn(
     {
@@ -46,7 +48,7 @@ function maybeRunAutoReview(opts: {
       sneeblySessionId: sessionId,
       claudeCodeSessionId,
       prompt: 'Please perform a self-review of the changes you just made.',
-      model: model || 'claude-sonnet-4-6',
+      model: reviewModel,
       appendSystemPrompt: reviewPrompt,
       recordEvents,
       isAutoReview: true,
@@ -63,6 +65,8 @@ function maybeRunAutoReview(opts: {
       pushAgentEvent(event, projectId)
     },
     (reviewClaudeSessionId, reviewError) => {
+      sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: false })
+
       if (reviewClaudeSessionId) {
         store.set(`claudeSessionIds.${sessionId}`, reviewClaudeSessionId)
       }
@@ -134,6 +138,18 @@ export function registerChatHandlers(): void {
     IPC_CHANNELS.CHAT_SEND,
     async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string, projectId: string, skillPrompt?: string) => {
       sessionStore.appendMessage(projectPath, sessionId, userMessage)
+
+      if (isChatTurnInFlight(projectId ?? '')) {
+        const busyMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: 'Still finishing the previous turn — give me a moment, then send again.',
+          ts: Date.now(),
+        }
+        sessionStore.appendMessage(projectPath, sessionId, busyMsg)
+        pushMessage(sessionId, busyMsg, projectId)
+        return
+      }
 
       const appSettings = store.get('appSettings', {}) as Record<string, unknown>
       const recordEvents = (appSettings['recordEventStream'] as boolean | undefined) ?? true
@@ -214,7 +230,7 @@ export function registerChatHandlers(): void {
 
           // Auto-review if thresholds crossed on a successful non-error turn
           if (!error) {
-            maybeRunAutoReview({ projectPath, sessionId, projectId, model, recordEvents, metrics })
+            maybeRunAutoReview({ projectPath, sessionId, projectId, recordEvents, metrics })
           }
         }
       )

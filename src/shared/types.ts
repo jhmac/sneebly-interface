@@ -327,6 +327,12 @@ export interface AppSettings {
   autoSelfReview: boolean
   autoSelfReviewThresholdFiles: number
   autoSelfReviewThresholdLines: number
+  autoSelfReviewModel: ModelName
+}
+
+export interface ChatInFlightPayload {
+  projectId: string
+  inFlight: boolean
 }
 
 export interface ElectronAPI {
@@ -427,6 +433,7 @@ export interface ElectronAPI {
   reflectionList: (projectId: string) => Promise<ReflectionEntry[]>
   reflectionRead: (path: string) => Promise<string>
   eventsDeleteAll: (projectId: string) => Promise<void>
+  chatOnInFlightChanged: (callback: (payload: ChatInFlightPayload) => void) => () => void
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>
