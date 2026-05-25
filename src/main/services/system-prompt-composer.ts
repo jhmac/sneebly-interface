@@ -43,5 +43,5 @@ export function composeSystemPromptAddendum(
 }
 
 function wordCount(text: string): number {
-  return text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0
+  return text.trim().split(/\s+/).filter(Boolean).length
 }

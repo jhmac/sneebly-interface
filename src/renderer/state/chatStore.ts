@@ -71,8 +71,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       defaultModel: savedModel as ModelName,
       learningsStatus: null,
     })
+    const capturedSessionId = sessionId
     window.api.chatLearningsStatus(projectId).then((status) => {
-      set({ learningsStatus: status })
+      if (get().activeSessionId === capturedSessionId) set({ learningsStatus: status })
     }).catch(() => {})
   },
 
@@ -121,7 +122,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const messages = await window.api.sessionLoad(project.path, sessionId)
     set({ activeSessionId: sessionId, messages, learningsStatus: null })
     window.api.chatLearningsStatus(project.id).then((status) => {
-      set({ learningsStatus: status })
+      if (get().activeSessionId === sessionId) set({ learningsStatus: status })
     }).catch(() => {})
   },
 
@@ -130,7 +131,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { activeSessionId } = get()
     if (!project || !activeSessionId) return
     await window.api.sessionClear(project.path, activeSessionId)
-    set({ messages: [] })
+    set({ messages: [], learningsStatus: null })
   },
 
   switchModel: (model: ModelName) => {

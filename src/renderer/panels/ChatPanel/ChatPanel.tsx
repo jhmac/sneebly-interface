@@ -110,10 +110,10 @@ function ChatHeader({
   const autoSelfReview = useSettingsStore((s) => s.settings?.autoSelfReview ?? true)
   const activeProjectId = useProjectStore((s) => s.activeProjectId)
   const isInFlight = useActivityStore((s) => s.chatInFlightProjectIds.has(activeProjectId ?? ''))
-  const isReviewing = isInFlight
   const learningsStatus = useChatStore((s) => s.learningsStatus)
   const activeSessionId = useChatStore((s) => s.activeSessionId)
-  const { refreshLearnings, dismissLearnings } = useChatStore()
+  const refreshLearnings = useChatStore((s) => s.refreshLearnings)
+  const dismissLearnings = useChatStore((s) => s.dismissLearnings)
 
   // Refresh learnings status when a turn completes
   const prevInFlight = useRef(false)
@@ -177,10 +177,10 @@ function ChatHeader({
         {autoSelfReview && (
           <button
             onClick={onOpenSettings}
-            title={isReviewing ? 'Auto-review in progress…' : 'Auto-review is on — click to configure'}
+            title={isInFlight ? 'Auto-review in progress…' : 'Auto-review is on — click to configure'}
             className="rounded-md px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-indigo-950/60 hover:bg-indigo-900/60 transition-colors"
           >
-            {isReviewing ? (
+            {isInFlight ? (
               <span className="flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
                 Reviewing…

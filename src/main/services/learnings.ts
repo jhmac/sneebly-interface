@@ -45,6 +45,7 @@ export function buildLearningsAddendum(
   if (recent.length === 0) return null
 
   const budgetPerFile = Math.floor(opts.maxWords / recent.length)
+  if (budgetPerFile < 1) return null
   const parts: string[] = []
   const used: string[] = []
 
