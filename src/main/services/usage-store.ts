@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { SessionUsage, ProjectTokensFile, UsageSummary, UsageDailyStat } from '../../shared/types'
+import { tsToDateKey } from '../../shared/utils'
 
 function sneeblyDir(projectPath: string): string {
   return join(projectPath, '.sneebly-interface')
@@ -82,6 +83,8 @@ export function summarize(projectPath: string, fromTs: number, toTs: number): Us
   return {
     totalInput: sessions.reduce((n, s) => n + s.inputTokens, 0),
     totalOutput: sessions.reduce((n, s) => n + s.outputTokens, 0),
+    totalCacheRead: sessions.reduce((n, s) => n + s.cacheReadTokens, 0),
+    totalCacheCreation: sessions.reduce((n, s) => n + s.cacheCreationTokens, 0),
     totalDurationMs: sessions.reduce((n, s) => n + s.durationMs, 0),
     sessionCount: sessions.length,
     turnCount: sessions.reduce((n, s) => n + s.turnCount, 0),
@@ -96,8 +99,7 @@ export function timeseries(projectPath: string, fromTs: number, toTs: number): U
 
   const byDate = new Map<string, UsageDailyStat>()
   for (const s of sessions) {
-    const d = new Date(s.endedAt)
-    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const date = tsToDateKey(s.endedAt)
     const existing = byDate.get(date) ?? { date, totalInput: 0, totalOutput: 0, durationMs: 0, sessionCount: 0 }
     byDate.set(date, {
       date,

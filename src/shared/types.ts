@@ -352,6 +352,8 @@ export interface ProjectTokensFile {
 export interface UsageSummary {
   totalInput: number
   totalOutput: number
+  totalCacheRead: number
+  totalCacheCreation: number
   totalDurationMs: number
   sessionCount: number
   turnCount: number

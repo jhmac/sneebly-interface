@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectStore } from '../../state/projectStore'
 import { useSettingsStore } from '../../state/settingsStore'
+import { fmtTokens, fmtDuration, tsToDateKey } from '../../../shared/utils'
 
 interface Props {
   open: boolean
@@ -473,25 +474,6 @@ function Row({
 
 // ── Usage section ──────────────────────────────────────────────────────────
 
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
-  return String(n)
-}
-
-function fmtMinutes(ms: number): string {
-  const total = Math.round(ms / 60_000)
-  if (total < 60) return `${total}m`
-  const h = Math.floor(total / 60)
-  const m = total % 60
-  return m === 0 ? `${h}h` : `${h}h ${m}m`
-}
-
-function dateKey(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function UsageSection({ projectId }: { projectId: string }) {
   const [data, setData] = useState<UsageDailyStat[]>([])
   const [loading, setLoading] = useState(true)
@@ -511,22 +493,26 @@ function UsageSection({ projectId }: { projectId: string }) {
     </Section>
   )
 
-  // Fill in all days in the last 30 days
   const today = Date.now()
-  const days: UsageDailyStat[] = []
+
+  // Fill in all 30 days (including zero-activity days) for the chart.
+  // tsToDateKey produces local-time date strings so chart alignment is correct.
   const byDate = new Map(data.map((d) => [d.date, d]))
+  const days: UsageDailyStat[] = []
   for (let i = 29; i >= 0; i--) {
-    const key = dateKey(today - i * 86_400_000)
+    const key = tsToDateKey(today - i * 86_400_000)
     days.push(byDate.get(key) ?? { date: key, totalInput: 0, totalOutput: 0, durationMs: 0, sessionCount: 0 })
   }
 
   const maxTokens = Math.max(...days.map((d) => d.totalInput + d.totalOutput), 1)
 
-  // Compute this week vs last week from the raw data
-  const thisWeekStart = today - 7 * 86_400_000
-  const lastWeekStart = thisWeekStart - 7 * 86_400_000
-  const thisWeek = data.filter((d) => new Date(d.date).getTime() >= thisWeekStart)
-  const lastWeek = data.filter((d) => { const t = new Date(d.date).getTime(); return t >= lastWeekStart && t < thisWeekStart })
+  // Date-string comparisons are safe for YYYY-MM-DD: lexicographic order == chronological order.
+  // tsToDateKey uses local time, matching how dates are stored in usage-store.ts.
+  const thisWeekStartKey = tsToDateKey(today - 7 * 86_400_000)
+  const lastWeekStartKey = tsToDateKey(today - 14 * 86_400_000)
+  const thisWeek = data.filter((d) => d.date >= thisWeekStartKey)
+  const lastWeek = data.filter((d) => d.date >= lastWeekStartKey && d.date < thisWeekStartKey)
+
   const thisMs = thisWeek.reduce((n, d) => n + d.durationMs, 0)
   const lastMs = lastWeek.reduce((n, d) => n + d.durationMs, 0)
   const thisTokens = thisWeek.reduce((n, d) => n + d.totalInput + d.totalOutput, 0)
@@ -534,12 +520,12 @@ function UsageSection({ projectId }: { projectId: string }) {
   const timeDelta = lastMs > 0 ? Math.round(((thisMs - lastMs) / lastMs) * 100) : null
   const tokenDelta = lastTokens > 0 ? Math.round(((thisTokens - lastTokens) / lastTokens) * 100) : null
 
-  // Build 4-week table (newest first)
+  // Build 4-week table (newest first) using date-string boundaries.
   const weeks: Array<{ label: string; tokens: number; durationMs: number; sessions: number }> = []
   for (let w = 0; w < 4; w++) {
-    const wEnd = today - w * 7 * 86_400_000
-    const wStart = wEnd - 7 * 86_400_000
-    const wData = data.filter((d) => { const t = new Date(d.date).getTime(); return t >= wStart && t < wEnd })
+    const wEndKey = tsToDateKey(today - w * 7 * 86_400_000 + 1)
+    const wStartKey = tsToDateKey(today - (w + 1) * 7 * 86_400_000)
+    const wData = data.filter((d) => d.date >= wStartKey && d.date < wEndKey)
     const label = w === 0 ? 'This week' : w === 1 ? 'Last week' : `${w + 1} weeks ago`
     weeks.push({
       label,
@@ -554,7 +540,7 @@ function UsageSection({ projectId }: { projectId: string }) {
       {/* Headline */}
       <div className="rounded-md bg-zinc-950 border border-zinc-800 px-3 py-2 mb-3">
         <p className="text-xs text-zinc-300">
-          This week: <span className="font-medium">{fmtMinutes(thisMs)}</span> · <span className="font-medium">{fmtTokens(thisTokens)} tokens</span>
+          This week: <span className="font-medium">{fmtDuration(thisMs)}</span> · <span className="font-medium">{fmtTokens(thisTokens)} tokens</span>
           {timeDelta !== null && (
             <span className={['ml-2 text-[10px]', timeDelta < 0 ? 'text-green-400' : 'text-zinc-500'].join(' ')}>
               {timeDelta > 0 ? '+' : ''}{timeDelta}% time vs last week
@@ -602,7 +588,7 @@ function UsageSection({ projectId }: { projectId: string }) {
           <div key={w.label} className="grid grid-cols-4 px-2 py-1.5 border-t border-zinc-800 text-zinc-400">
             <span className="text-zinc-300">{w.label}</span>
             <span className="text-right font-mono">{w.tokens > 0 ? fmtTokens(w.tokens) : '—'}</span>
-            <span className="text-right font-mono">{w.durationMs > 0 ? fmtMinutes(w.durationMs) : '—'}</span>
+            <span className="text-right font-mono">{w.durationMs > 0 ? fmtDuration(w.durationMs) : '—'}</span>
             <span className="text-right font-mono">{w.sessions > 0 ? String(w.sessions) : '—'}</span>
           </div>
         ))}
