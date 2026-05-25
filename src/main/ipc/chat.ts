@@ -102,7 +102,6 @@ export function registerChatHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.SESSION_CLEAR,
     (_e, projectPath: string, sessionId: string) => {
-      // BUG 2 FIX: clear the Claude session ID mapping so the next turn starts fresh
       store.delete(`claudeSessionIds.${sessionId}`)
       return sessionStore.clearSession(projectPath, sessionId)
     }
@@ -154,7 +153,6 @@ export function registerChatHandlers(): void {
         })
       }
 
-      // BUG 2 FIX: look up Claude's session ID for this Sneebly session
       const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
 
       let assistantText = ''
@@ -171,7 +169,6 @@ export function registerChatHandlers(): void {
           recordEvents,
         },
         (event) => {
-          // BUG 2 FIX: persist Claude's session ID the moment we see system_init
           if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
             store.set(`claudeSessionIds.${sessionId}`, event.session_id)
           }
@@ -186,7 +183,6 @@ export function registerChatHandlers(): void {
           pushAgentEvent(event, projectId)
         },
         (claudeSessionId, error, metrics) => {
-          // Persist the discovered Claude session ID in case it wasn't in system_init
           if (claudeSessionId) {
             store.set(`claudeSessionIds.${sessionId}`, claudeSessionId)
           }

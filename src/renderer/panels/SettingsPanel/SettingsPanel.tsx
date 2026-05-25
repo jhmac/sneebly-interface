@@ -219,7 +219,10 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
                     min={1}
                     max={50}
                     value={settings.autoSelfReviewThresholdFiles ?? 3}
-                    onChange={(e) => handleSave({ autoSelfReviewThresholdFiles: Math.max(1, Number(e.target.value)) })}
+                    onChange={(e) => {
+                      const v = Number(e.target.value)
+                      if (Number.isInteger(v) && v >= 1) handleSave({ autoSelfReviewThresholdFiles: v })
+                    }}
                     className="w-14 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
                   />
                   files
@@ -230,7 +233,10 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
                     min={1}
                     max={2000}
                     value={settings.autoSelfReviewThresholdLines ?? 100}
-                    onChange={(e) => handleSave({ autoSelfReviewThresholdLines: Math.max(1, Number(e.target.value)) })}
+                    onChange={(e) => {
+                      const v = Number(e.target.value)
+                      if (Number.isInteger(v) && v >= 1) handleSave({ autoSelfReviewThresholdLines: v })
+                    }}
                     className="w-16 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
                   />
                   lines

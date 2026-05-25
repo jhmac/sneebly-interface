@@ -62,18 +62,15 @@ export function startTurn(
           if (block.name === 'Edit' || block.name === 'Write') {
             const fp = (input['file_path'] ?? input['path']) as string | undefined
             if (fp) filesTouched.add(fp)
-            if (block.name === 'Edit') {
-              linesChanged += ((input['old_string'] as string) ?? '').split('\n').length
-              linesChanged += ((input['new_string'] as string) ?? '').split('\n').length
-            } else {
-              linesChanged += ((input['content'] as string) ?? '').split('\n').length
-            }
+            const newContent = block.name === 'Edit'
+              ? (input['new_string'] as string) ?? ''
+              : (input['content'] as string) ?? ''
+            linesChanged += newContent.split('\n').length
           } else if (block.name === 'MultiEdit') {
             const fp = (input['file_path'] ?? input['path']) as string | undefined
             if (fp) filesTouched.add(fp)
             const edits = (input['edits'] as Array<{ old_string: string; new_string: string }>) ?? []
             for (const edit of edits) {
-              linesChanged += (edit.old_string ?? '').split('\n').length
               linesChanged += (edit.new_string ?? '').split('\n').length
             }
           }
