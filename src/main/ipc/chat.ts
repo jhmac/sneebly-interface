@@ -1,13 +1,25 @@
 import { ipcMain } from 'electron'
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
-import type { ChatMessage, ModelName } from '../../shared/types'
+import type { ChatMessage, ModelName, AppSettings } from '../../shared/types'
 import * as sessionStore from '../services/session-store'
 import { startTurn } from '../services/agent-session'
 import { pushAgentEvent } from './agent'
 import { sendToProjectWindows } from '../services/window-registry'
+import { appendEvent } from '../services/event-stream'
 
 const store = new Store()
+
+const CORRECTION_RE = /^(no|stop|wrong|undo|actually|instead)\b/i
+
+const DEFAULT_SETTINGS: Partial<AppSettings> = {
+  recordEventStream: true,
+  runNightlyReflections: true,
+}
+
+function getSettings(): AppSettings {
+  return { ...DEFAULT_SETTINGS, ...(store.get('appSettings', {}) as Partial<AppSettings>) } as AppSettings
+}
 
 function pushMessage(sessionId: string, message: ChatMessage, projectId: string): void {
   sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, message)
@@ -65,6 +77,25 @@ export function registerChatHandlers(): void {
     async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string, projectId: string, skillPrompt?: string) => {
       sessionStore.appendMessage(projectPath, sessionId, userMessage)
 
+      const settings = getSettings()
+      const recordEvents = settings.recordEventStream
+
+      if (recordEvents) {
+        appendEvent(projectPath, sessionId, {
+          id: crypto.randomUUID(),
+          sessionId,
+          projectId: projectId ?? '',
+          ts: userMessage.ts,
+          kind: 'user_message',
+          source: 'chat',
+          payload: {
+            text: userMessage.text,
+            isCorrection: CORRECTION_RE.test(userMessage.text.trimStart()),
+          },
+          frictionTags: CORRECTION_RE.test(userMessage.text.trimStart()) ? ['user_correction'] : [],
+        })
+      }
+
       // BUG 2 FIX: look up Claude's session ID for this Sneebly session
       const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
 
@@ -79,6 +110,7 @@ export function registerChatHandlers(): void {
           prompt: userMessage.text,
           model: model || 'claude-sonnet-4-6',
           appendSystemPrompt: skillPrompt,
+          recordEvents,
         },
         (event) => {
           // BUG 2 FIX: persist Claude's session ID the moment we see system_init

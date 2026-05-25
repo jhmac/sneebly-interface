@@ -12,6 +12,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultModel: 'claude-sonnet-4-6',
   defaultProjectsFolder: join(homedir(), 'SneeblyProjects'),
   mcpServers: [],
+  recordEventStream: true,
+  runNightlyReflections: true,
 }
 
 export function registerSettingsHandlers(): void {

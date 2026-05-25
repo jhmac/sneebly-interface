@@ -21,6 +21,10 @@ import { registerGitHubHandlers } from './ipc/github'
 import { registerSpecHandlers } from './ipc/spec'
 import { registerGoalsHandlers } from './ipc/goals'
 import { registerSkillsHandlers } from './ipc/skills'
+import { registerReflectionHandlers } from './ipc/reflections'
+import { listProjects } from './services/project-registry'
+import { runReflection, reflectionNeeded, hasEnoughEventsToday } from './services/reflector'
+import type { AppSettings } from '../shared/types'
 import { stopAllServers } from './services/dev-server'
 import { stopAllWatchers } from './services/project-watcher'
 import { ensureChromiumInstalled } from './services/playwright-setup'
@@ -99,6 +103,7 @@ function registerIpcHandlers(): void {
   registerSpecHandlers()
   registerGoalsHandlers()
   registerSkillsHandlers()
+  registerReflectionHandlers()
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
     createProjectWindow(projectId)
@@ -152,6 +157,35 @@ function createProjectWindow(initialProjectId?: string): BrowserWindow {
 }
 
 // ── App lifecycle ──────────────────────────────────────────────────────────
+function scheduleReflections(): void {
+  const settings = store.get('appSettings', {}) as Partial<AppSettings>
+  if (!settings.runNightlyReflections && settings.runNightlyReflections !== undefined) return
+  if (!settings.recordEventStream && settings.recordEventStream !== undefined) return
+
+  const projects = listProjects()
+  const queue = projects.filter(
+    (p) => reflectionNeeded(p.path) && hasEnoughEventsToday(p.path)
+  )
+
+  if (queue.length === 0) return
+
+  async function runNext(idx: number): Promise<void> {
+    if (idx >= queue.length) return
+    const project = queue[idx]!
+    try {
+      await runReflection(project.path, project.id, new Date())
+    } catch (err) {
+      console.error(`[Sneebly] Reflection failed for ${project.id}:`, err)
+    }
+    await runNext(idx + 1)
+  }
+
+  // Off the critical path — don't block app startup
+  setTimeout(() => {
+    runNext(0).catch((err: unknown) => console.error('[Sneebly] Reflection queue error:', err))
+  }, 5000)
+}
+
 app.whenReady().then(() => {
   registerIpcHandlers()
   generateMcpConfig()
@@ -159,6 +193,7 @@ app.whenReady().then(() => {
   initAutoUpdater()
   createProjectWindow()
   setupTray()
+  scheduleReflections()
   app.on('activate', () => {
     const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
     if (wins.length > 0) {

@@ -32,6 +32,7 @@ import type {
   SpecProgressEvent,
   MilestoneRef,
   GrillMessage,
+  ReflectionEntry,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -233,6 +234,14 @@ const api: ElectronAPI = {
     pushAfter: boolean
   }): Promise<{ commitSha?: string; pushed: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_AND_PUSH, opts),
+
+  // ── Reflections ───────────────────────────────────────────────────────────
+  reflectionList: (projectId: string): Promise<ReflectionEntry[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.REFLECTION_LIST, projectId),
+  reflectionRead: (filePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.REFLECTION_READ, filePath),
+  eventsDeleteAll: (projectId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.EVENTS_DELETE_ALL, projectId),
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) =>

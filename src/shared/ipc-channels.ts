@@ -84,4 +84,7 @@ export const IPC_CHANNELS = {
   GOALS_WRITE: 'goals:write',
   GOALS_WRITE_CONTEXT: 'goals:write-context',
   GOALS_UPDATE_STACK: 'goals:update-stack',
+  REFLECTION_LIST: 'reflection:list',
+  REFLECTION_READ: 'reflection:read',
+  EVENTS_DELETE_ALL: 'events:delete-all',
 } as const

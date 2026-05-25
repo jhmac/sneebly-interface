@@ -1,3 +1,40 @@
+// ── Semantic Event Stream ────────────────────────────────────────────────────
+
+export type SemanticEventKind =
+  | 'tool_call'
+  | 'tool_result'
+  | 'user_message'
+  | 'assistant_message'
+  | 'turn_start'
+  | 'turn_end'
+  | 'permission_denied'
+
+export type FrictionTag =
+  | 'user_correction'
+  | 'permission_denied'
+  | 'tool_retry'
+  | 'turn_stopped'
+  | 'tool_error'
+
+export interface SemanticEvent {
+  id: string
+  sessionId: string
+  projectId: string
+  ts: number
+  kind: SemanticEventKind
+  source: AgentEventSource
+  payload: Record<string, unknown>
+  frictionTags?: FrictionTag[]
+}
+
+export interface ReflectionEntry {
+  date: string
+  path: string
+  eventCount: number
+  frictionCount: number
+  summary: string
+}
+
 // ── Skills ─────────────────────────────────────────────────────────────────────
 
 export interface Skill {
@@ -285,6 +322,8 @@ export interface AppSettings {
   defaultModel: ModelName
   defaultProjectsFolder: string
   mcpServers: Array<{ name: string; command: string; args: string[] }>
+  recordEventStream: boolean
+  runNightlyReflections: boolean
 }
 
 export interface ElectronAPI {
@@ -380,6 +419,11 @@ export interface ElectronAPI {
     body?: string
     pushAfter: boolean
   }) => Promise<{ commitSha?: string; pushed: boolean; error?: string }>
+
+  // ── Reflections ───────────────────────────────────────────────────────────
+  reflectionList: (projectId: string) => Promise<ReflectionEntry[]>
+  reflectionRead: (path: string) => Promise<string>
+  eventsDeleteAll: (projectId: string) => Promise<void>
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>
