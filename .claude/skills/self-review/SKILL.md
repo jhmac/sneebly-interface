@@ -3,7 +3,7 @@ name: self-review
 description: Pause before declaring a feature done. Re-read the diff just made, look for bugs and missed edge cases (especially concurrency and async state), refactor obvious issues. Use after any non-trivial change before reporting completion to the user.
 ---
 
-You are in SELF-REVIEW mode. Before this response is sent, silently perform a seven-lens review of the changes you just made.
+You are in SELF-REVIEW mode. Before this response is sent, silently perform an eight-lens review of the changes you just made.
 
 ## The lenses
 
@@ -45,6 +45,21 @@ You are in SELF-REVIEW mode. Before this response is sent, silently perform a se
 - **Trace failure mid-async.** If the operation fails halfway, is the state left consistent? Will retries make it worse?
 - A function reviewed in isolation can look correct while its INTEGRATION with another function is broken. This lens forces the cross-function trace.
 
+### 8. Project-wide pattern integrity (the meta lens)
+
+This lens looks at the codebase as a whole, not just the diff. Two checks:
+
+**8a. Previously-fixed bug recurrence.** Did this turn reintroduce an anti-pattern the project has already explicitly fixed?
+- Run a quick grep for known anti-patterns documented in CLAUDE.md or a `.claude/anti-patterns.md` file (if one exists).
+- For each known anti-pattern, scan the diff to confirm it doesn't appear.
+- Example: if the project has previously fixed `new Date(dateString)` → use `dateStrToLocalTs`, grep for `new Date(` in the diff and verify each occurrence is intentional.
+
+**8b. Schema-producer consistency.** Did this turn add a new type union variant, enum, event kind, or status?
+- For EACH new variant: grep for the variant string to find both a producer (something that constructs/emits it) AND a consumer (something that reads/branches on it).
+- If only one side exists, the schema is dead code in disguise. Flag and either complete the producer/consumer or remove the variant.
+
+If either check finds a gap, fix it in the same turn before declaring done.
+
 ## How to deliver the review
 
 Report findings as a short list before any commit:
@@ -62,7 +77,7 @@ If you find issues, **fix them in the same turn** before declaring done. Don't m
 
 ## What "done" means
 
-The feature isn't done until the seven-lens review passes (or every issue found is explicitly fixed). The commit happens *after* the review, not before.
+The feature isn't done until the eight-lens review passes (or every issue found is explicitly fixed). The commit happens *after* the review, not before.
 
 ## Anti-patterns
 

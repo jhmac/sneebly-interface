@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 
 import { join } from 'path'
 import { readEventsForDateRange, tagFriction } from './event-stream'
 import { runStandaloneTurn } from './standalone-turn'
+import { proposeLearnings, proposeOpenQuestion } from './learning-proposer'
 import type { SemanticEvent, ReflectionEntry } from '../../shared/types'
 
 // ── Paths ──────────────────────────────────────────────────────────────────
@@ -72,6 +73,12 @@ function buildEventsPrompt(events: SemanticEvent[]): string {
       case 'permission_denied':
         lines.push(`${t} PERMISSION_DENIED${friction}`)
         break
+      case 'shortcut_rejected': {
+        const label = String(ev.payload['label'] ?? '')
+        const wasPinned = ev.payload['wasPinned'] ? ' (was pinned)' : ''
+        lines.push(`${t} SHORTCUT_REJECTED "${label}"${wasPinned}`)
+        break
+      }
     }
   }
   return lines.join('\n')
@@ -86,7 +93,8 @@ function countFriction(events: SemanticEvent[]): number {
 export async function runReflection(
   projectPath: string,
   projectId: string,
-  date: Date
+  date: Date,
+  opts: { generateLearningProposals?: boolean; runShadowSessions?: boolean } = {}
 ): Promise<{ path: string; summary: string }> {
   const dateStr = dateString(date)
   const { fromTs, toTs } = dayRange(date)
@@ -132,6 +140,21 @@ export async function runReflection(
   writeFileSync(outPath, content, 'utf-8')
 
   const summary = body.split(/\n{2,}/)[0]?.slice(0, 280) ?? body.slice(0, 280)
+
+  if (opts.generateLearningProposals && frictionCount >= 3) {
+    proposeLearnings(projectPath, projectId, body, frictionCount, dateStr, {
+      runShadowSessions: opts.runShadowSessions,
+    }).catch((err) => {
+      console.error('[reflector] learning proposal failed:', err)
+    })
+  }
+
+  if (opts.generateLearningProposals && frictionCount >= 1) {
+    proposeOpenQuestion(projectPath, projectId, body, dateStr).catch((err) => {
+      console.error('[reflector] open question proposal failed:', err)
+    })
+  }
+
   return { path: outPath, summary }
 }
 

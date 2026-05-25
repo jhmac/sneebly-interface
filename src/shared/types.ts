@@ -10,6 +10,14 @@ export type SemanticEventKind =
   | 'permission_denied'
   // payload: { learningsHash: string; sourceReflections: string[]; addendumWordCount: number }
   | 'learnings_applied'
+  | 'learning_proposed'
+  | 'learning_promoted'
+  | 'learning_rejected'
+  | 'shadow_session_started'
+  | 'shadow_session_completed'
+  | 'goals_md_auto_appended'
+  | 'skill_selected'
+  | 'shortcut_rejected'
 
 export type FrictionTag =
   | 'user_correction'
@@ -35,6 +43,65 @@ export interface ReflectionEntry {
   eventCount: number
   frictionCount: number
   summary: string
+}
+
+export type ConventionKey = 'package-manager' | 'test-command' | 'indent-style'
+
+export type ShortcutAction =
+  | { kind: 'open-file'; path: string }
+  | { kind: 'select-skill'; skillId: string }
+  | { kind: 'refine-spec'; milestoneId: string }
+
+export interface Shortcut {
+  id: string
+  label: string
+  icon: string
+  action: ShortcutAction
+  reason: string
+  pinned: boolean
+  createdAt: number
+  lastSuggestedAt: number
+}
+
+export interface ShortcutsFile {
+  pinned: Shortcut[]
+  suggested: Shortcut[]
+  lastRefreshedAt: number
+  rejections: Array<{ patternId: string; rejectedAt: number }>
+}
+export type LearningScope = 'system-prompt' | 'goals-md' | 'conventions-md'
+
+export interface ShadowResult {
+  ranAt: number
+  durationMs: number
+  assistantText: string
+  tokensIn: number
+  tokensOut: number
+}
+
+export interface PendingLearning {
+  id: string
+  proposedAt: number
+  sourceReflectionDate: string
+  title: string
+  rationale: string
+  proposedChange: string
+  frictionCount: number
+  shadowRuns: ShadowResult[]
+  targetScope?: LearningScope
+  conventionKey?: ConventionKey
+  lastObservedAt?: number
+  supersedes?: string
+}
+
+export interface PromotedLearning {
+  id: string
+  promotedAt: number
+  sourceReflectionDate: string
+  title: string
+  proposedChange: string
+  targetScope?: LearningScope
+  conventionKey?: ConventionKey
 }
 
 // ── Skills ─────────────────────────────────────────────────────────────────────
@@ -334,6 +401,9 @@ export interface AppSettings {
   applyLearnings: boolean
   learningsMaxAgeDays: number
   learningsMaxWords: number
+  generateLearningProposals: boolean
+  runShadowSessions: boolean
+  showSuggestedShortcuts: boolean
 }
 
 export interface SessionUsage {
@@ -403,7 +473,7 @@ export interface ElectronAPI {
   sessionClear: (projectPath: string, sessionId: string) => Promise<void>
   sessionGetActive: (projectId: string) => Promise<string | null>
   sessionSetActive: (projectId: string, sessionId: string | null) => Promise<void>
-  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string, skillPrompt?: string) => Promise<void>
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string, skillPrompt?: string, skillId?: string) => Promise<void>
   chatOnMessageAppended: (callback: (sessionId: string, message: ChatMessage) => void) => () => void
   modelGet: () => Promise<string>
   modelSet: (model: ModelName) => Promise<void>
@@ -485,6 +555,21 @@ export interface ElectronAPI {
   // ── Learnings / reflection context ────────────────────────────────────────
   chatLearningsStatus: (projectId: string) => Promise<{ sourceReflections: string[]; wordCount: number } | null>
   chatDismissLearnings: (sessionId: string) => Promise<void>
+
+  // ── Learnings inbox ───────────────────────────────────────────────────────
+  learningsListPending: (projectId: string) => Promise<PendingLearning[]>
+  learningsListPromoted: (projectId: string) => Promise<PromotedLearning[]>
+  learningsPromote: (projectId: string, learningId: string) => Promise<void>
+  learningsReject: (projectId: string, learningId: string) => Promise<void>
+  learningsRevert: (projectId: string, learningId: string) => Promise<void>
+  learningsBadgeCount: (projectId: string) => Promise<number>
+  learningsRunShadow: (projectId: string, learningId: string) => Promise<PendingLearning | null>
+
+  // ── Shortcuts ─────────────────────────────────────────────────────────────
+  shortcutsList: (projectId: string) => Promise<ShortcutsFile>
+  shortcutsRefresh: (projectId: string) => Promise<ShortcutsFile>
+  shortcutsPin: (projectId: string, id: string) => Promise<ShortcutsFile>
+  shortcutsUnpin: (projectId: string, id: string) => Promise<ShortcutsFile>
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>

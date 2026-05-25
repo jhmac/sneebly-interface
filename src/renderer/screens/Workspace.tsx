@@ -6,8 +6,8 @@ import {
   useGroupRef,
   type Layout,
 } from 'react-resizable-panels'
-import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X } from 'lucide-react'
-import type { LayoutSizes, UsageSummary } from '../../shared/types'
+import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X, Sparkles } from 'lucide-react'
+import type { LayoutSizes, UsageSummary, ShortcutAction } from '../../shared/types'
 import { fmtTokens, fmtDuration } from '../../shared/utils'
 import { useProjectStore } from '../state/projectStore'
 import { useSecretsStore } from '../state/secretsStore'
@@ -15,6 +15,10 @@ import { useFilesStore } from '../state/filesStore'
 import { useEditorStore } from '../state/editorStore'
 import { useActivityPanelStore } from '../state/activityPanelStore'
 import { useGitStatusStore } from '../state/gitStatusStore'
+import { useLearningsStore } from '../state/learningsStore'
+import { useShortcutsStore } from '../state/shortcutsStore'
+import { useSettingsStore } from '../state/settingsStore'
+import { useChatStore } from '../state/chatStore'
 import CommitPushModal from '../panels/GitHubPanel/CommitPushModal'
 import SpecGeneratorModal from '../panels/SpecPanel/SpecGeneratorModal'
 import { useSpecStore } from '../state/specStore'
@@ -24,6 +28,8 @@ import ActivityPanel from '../panels/ActivityPanel/ActivityPanel'
 import SecretsPanel from '../panels/SecretsPanel/SecretsPanel'
 import SettingsPanel from '../panels/SettingsPanel/SettingsPanel'
 import EditorPanel from '../panels/FilesPanel/EditorPanel'
+import LearningsPanel from '../panels/LearningsPanel/LearningsPanel'
+import ShortcutsBar from '../panels/ShortcutsBar/ShortcutsBar'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -52,9 +58,47 @@ export default function Workspace() {
   const { setActiveTab } = useActivityPanelStore()
   const { status: gitStatus, openCommitModal, commitModalOpen, closeCommitModal } = useGitStatusStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [learningsOpen, setLearningsOpen] = useState(false)
   const { openModal: openSpecModal } = useSpecStore()
+  const learningsBadge = useLearningsStore((s) => s.badgeCount)
+  const refreshLearningsBadge = useLearningsStore((s) => s.refreshBadge)
+  const loadShortcuts = useShortcutsStore((s) => s.load)
+  const { settings } = useSettingsStore()
+  const showSuggestedShortcuts = settings?.showSuggestedShortcuts ?? true
+  const setActiveSkill = useChatStore((s) => s.setActiveSkill)
+  const editorOpenFile = useEditorStore((s) => s.openFile)
+
+  useEffect(() => {
+    if (activeProjectId) refreshLearningsBadge(activeProjectId)
+  }, [activeProjectId])
+
+  useEffect(() => {
+    if (activeProjectId) loadShortcuts(activeProjectId)
+  }, [activeProjectId])
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
+
+  const handleShortcutAction = useCallback((action: ShortcutAction) => {
+    if (!activeProject) return
+    switch (action.kind) {
+      case 'open-file': {
+        if (!action.path.startsWith(activeProject.path + '/')) {
+          console.warn('[shortcut] open-file path outside current project, skipping:', action.path)
+          break
+        }
+        const rel = action.path.slice(activeProject.path.length + 1)
+        editorOpenFile(activeProject.path, activeProject.id, rel)
+        setActiveTab('files')
+        break
+      }
+      case 'select-skill':
+        setActiveSkill(action.skillId)
+        break
+      case 'refine-spec':
+        openSpecModal({ initialMode: 'refine-config', preselectedMilestoneId: action.milestoneId })
+        break
+    }
+  }, [activeProject, editorOpenFile, setActiveSkill, setActiveTab, openSpecModal])
 
   // Open files count badge
   const openFilesCount = useEditorStore(
@@ -94,6 +138,7 @@ export default function Workspace() {
       {/* Modals */}
       <SecretsPanel />
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeProjectId={activeProjectId} />
+      <LearningsPanel open={learningsOpen} onClose={() => setLearningsOpen(false)} projectId={activeProjectId} />
       <EditorPanel />
       {commitModalOpen && <CommitPushModal onClose={closeCommitModal} />}
       <SpecGeneratorModal />
@@ -125,7 +170,17 @@ export default function Workspace() {
         gitBehind={gitStatus?.behind ?? 0}
         onOpenCommit={openCommitModal}
         onOpenSpecs={openSpecModal}
+        learningsBadge={learningsBadge}
+        onOpenLearnings={() => setLearningsOpen(true)}
       />
+
+      {activeProjectId && (
+        <ShortcutsBar
+          projectId={activeProjectId}
+          showSuggested={showSuggestedShortcuts}
+          onAction={handleShortcutAction}
+        />
+      )}
 
       {/* Goals expander */}
       {goalsExpanded && activeProjectGoals && (
@@ -234,6 +289,8 @@ function WorkspaceHeader({
   gitBehind,
   onOpenCommit,
   onOpenSpecs,
+  learningsBadge,
+  onOpenLearnings,
 }: {
   projectName: string | null
   activeProjectId: string | null
@@ -250,6 +307,8 @@ function WorkspaceHeader({
   gitBehind: number
   onOpenCommit: () => void
   onOpenSpecs: () => void
+  learningsBadge: number
+  onOpenLearnings: () => void
 }) {
   const hasChanges = gitChangedFiles > 0
   const hasSyncInfo = gitAhead > 0 || gitBehind > 0
@@ -285,6 +344,19 @@ function WorkspaceHeader({
       </div>
 
       <div className="flex items-center gap-1">
+        <button
+          onClick={onOpenLearnings}
+          title="Learnings inbox"
+          className="relative flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+        >
+          <Sparkles className="h-3 w-3" />
+          Learnings
+          {learningsBadge > 0 && (
+            <span className="ml-0.5 rounded-full bg-purple-700 px-1.5 text-[9px] font-semibold text-purple-100">
+              {learningsBadge}
+            </span>
+          )}
+        </button>
         <button
           onClick={onOpenSettings}
           title="Settings"

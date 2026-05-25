@@ -103,7 +103,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const skillPrompt = activeSkillId ? getSkill(activeSkillId)?.prompt : undefined
     // Fire-and-forget — agent completes async via agent:event / chat:message-appended
-    window.api.chatSend(project.path, activeSessionId, message, defaultModel, project.id, skillPrompt).catch(console.error)
+    window.api.chatSend(project.path, activeSessionId, message, defaultModel, project.id, skillPrompt, activeSkillId ?? undefined).catch(console.error)
   },
 
   createNewSession: async () => {

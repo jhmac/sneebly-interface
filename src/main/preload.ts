@@ -36,6 +36,9 @@ import type {
   ChatInFlightPayload,
   UsageSummary,
   UsageDailyStat,
+  PendingLearning,
+  PromotedLearning,
+  ShortcutsFile,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -100,8 +103,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_ACTIVE, projectId, sessionId),
 
   // ── Chat ──────────────────────────────────────────────────────────────
-  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string, skillPrompt?: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, projectPath, sessionId, message, model, projectId, skillPrompt),
+  chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string, skillPrompt?: string, skillId?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, projectPath, sessionId, message, model, projectId, skillPrompt, skillId),
   chatOnMessageAppended: (
     callback: (sessionId: string, message: ChatMessage) => void
   ): (() => void) => {
@@ -262,6 +265,32 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.CHAT_LEARNINGS_STATUS, projectId),
   chatDismissLearnings: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.CHAT_DISMISS_LEARNINGS, sessionId),
+
+  // ── Learnings inbox ───────────────────────────────────────────────────────
+  learningsListPending: (projectId: string): Promise<PendingLearning[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.LEARNINGS_LIST_PENDING, projectId),
+  learningsListPromoted: (projectId: string): Promise<PromotedLearning[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.LEARNINGS_LIST_PROMOTED, projectId),
+  learningsPromote: (projectId: string, learningId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.LEARNINGS_PROMOTE, projectId, learningId),
+  learningsReject: (projectId: string, learningId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.LEARNINGS_REJECT, projectId, learningId),
+  learningsRevert: (projectId: string, learningId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.LEARNINGS_REVERT, projectId, learningId),
+  learningsBadgeCount: (projectId: string): Promise<number> =>
+    ipcRenderer.invoke(IPC_CHANNELS.LEARNINGS_BADGE_COUNT, projectId),
+  learningsRunShadow: (projectId: string, learningId: string): Promise<PendingLearning | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.LEARNINGS_RUN_SHADOW, projectId, learningId),
+
+  // ── Shortcuts ─────────────────────────────────────────────────────────────
+  shortcutsList: (projectId: string): Promise<ShortcutsFile> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHORTCUTS_LIST, projectId),
+  shortcutsRefresh: (projectId: string): Promise<ShortcutsFile> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHORTCUTS_REFRESH, projectId),
+  shortcutsPin: (projectId: string, id: string): Promise<ShortcutsFile> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHORTCUTS_PIN, projectId, id),
+  shortcutsUnpin: (projectId: string, id: string): Promise<ShortcutsFile> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHORTCUTS_UNPIN, projectId, id),
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) =>

@@ -36,7 +36,7 @@ function ensureEventsDir(projectPath: string): void {
     mkdirSync(dir, { recursive: true })
     // Write gitignore on first creation of the events dir
     const gitignorePath = join(sneeblyDir(projectPath), '.gitignore')
-    const addition = 'events/\nreflections/\n'
+    const addition = 'events/\nreflections/\nlearnings/\n'
     if (existsSync(gitignorePath)) {
       const current = readFileSync(gitignorePath, 'utf-8')
       if (!current.includes('events/')) {

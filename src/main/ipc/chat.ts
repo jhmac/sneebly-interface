@@ -146,7 +146,7 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.CHAT_SEND,
-    async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string, projectId: string, skillPrompt?: string) => {
+    async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string, projectId: string, skillPrompt?: string, skillId?: string) => {
       if (isChatTurnInFlight(projectId)) {
         const busyMsg: ChatMessage = {
           id: crypto.randomUUID(),
@@ -177,6 +177,18 @@ export function registerChatHandlers(): void {
             isCorrection: CORRECTION_RE.test(userMessage.text.trimStart()),
           },
         })
+
+        if (skillId) {
+          appendEvent(projectPath, sessionId, {
+            id: crypto.randomUUID(),
+            sessionId,
+            projectId,
+            ts: userMessage.ts,
+            kind: 'skill_selected',
+            source: 'chat',
+            payload: { skillId },
+          })
+        }
       }
 
       const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null

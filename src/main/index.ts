@@ -23,6 +23,7 @@ import { registerGoalsHandlers } from './ipc/goals'
 import { registerSkillsHandlers } from './ipc/skills'
 import { registerReflectionHandlers } from './ipc/reflections'
 import { registerUsageHandlers } from './ipc/usage'
+import { registerLearningsInboxHandlers } from './ipc/learnings-inbox'
 import { listProjects } from './services/project-registry'
 import { runReflection, reflectionNeeded, hasEnoughEventsToday } from './services/reflector'
 import type { AppSettings } from '../shared/types'
@@ -33,6 +34,8 @@ import { generateMcpConfig } from './services/mcp-config'
 import { initAutoUpdater } from './services/auto-updater'
 import { setupTray, teardownTray } from './services/tray'
 import { getDaemonStatus, stopDaemon } from './services/cycle/daemon-runner'
+import { scheduleConventionExtraction } from './services/convention-extractor'
+import { registerShortcutsHandlers, scheduleAllShortcutRefreshes } from './ipc/shortcuts'
 
 // ── User data migration (sneebly-interface → Sneebly) ─────────────────────────
 function migrateUserData(): void {
@@ -106,6 +109,8 @@ function registerIpcHandlers(): void {
   registerSkillsHandlers()
   registerReflectionHandlers()
   registerUsageHandlers()
+  registerLearningsInboxHandlers()
+  registerShortcutsHandlers()
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
     createProjectWindow(projectId)
@@ -171,11 +176,14 @@ function scheduleReflections(): void {
 
   if (queue.length === 0) return
 
+  const generateLearningProposals = (settings.generateLearningProposals as boolean | undefined) !== false
+  const runShadowSessions = (settings.runShadowSessions as boolean | undefined) === true
+
   async function runNext(idx: number): Promise<void> {
     if (idx >= queue.length) return
     const project = queue[idx]!
     try {
-      await runReflection(project.path, project.id, new Date())
+      await runReflection(project.path, project.id, new Date(), { generateLearningProposals, runShadowSessions })
     } catch (err) {
       console.error(`[Sneebly] Reflection failed for ${project.id}:`, err)
     }
@@ -186,6 +194,15 @@ function scheduleReflections(): void {
   setTimeout(() => {
     runNext(0).catch((err: unknown) => console.error('[Sneebly] Reflection queue error:', err))
   }, 5000)
+}
+
+function scheduleAllConventionExtractions(): void {
+  const settings = store.get('appSettings', {}) as Partial<AppSettings>
+  if (settings.recordEventStream === false) return
+  const projects = listProjects()
+  for (const project of projects) {
+    scheduleConventionExtraction(project.path, project.id)
+  }
 }
 
 app.whenReady().then(() => {
@@ -201,6 +218,8 @@ app.whenReady().then(() => {
   createProjectWindow()
   setupTray()
   scheduleReflections()
+  scheduleAllConventionExtractions()
+  scheduleAllShortcutRefreshes()
   app.on('activate', () => {
     const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
     if (wins.length > 0) {

@@ -22,6 +22,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   applyLearnings: true,
   learningsMaxAgeDays: 14,
   learningsMaxWords: 800,
+  generateLearningProposals: true,
+  runShadowSessions: false,
+  showSuggestedShortcuts: true,
 }
 
 export function registerSettingsHandlers(): void {

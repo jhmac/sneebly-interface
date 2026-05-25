@@ -21,7 +21,9 @@ Use `git log --oneline` to figure out the current phase. Each phase is committed
 
 ## Architecture conventions
 
-- Engine: the right-panel agent spawns the local `claude` CLI as a subprocess (`claude -p --output-format stream-json --resume <id>`). Auth is the user's Claude Code login (Max subscription). Do NOT use @anthropic-ai/claude-agent-sdk or set ANTHROPIC_API_KEY in this project.
+- Engine: the right-panel agent spawns the local `claude` CLI as a subprocess (`claude -p --output-format stream-json --resume <id>`). Auth is the user's Claude Code login (Max subscription).
+- **Anthropic client policy (updated 2026-06-15):** As of June 15 2026, Anthropic grants subscription plans (Pro, Max, Team, Enterprise) a monthly Agent SDK credit that covers both the Agent SDK and `claude -p`; that usage no longer counts against the plan's interactive limits. Sneebly already benefits from this via `claude -p` — no code change needed. Do NOT switch to `@anthropic-ai/claude-agent-sdk` at this time: the SDK requires `ANTHROPIC_API_KEY` (a Console-generated key), which breaks the "just use your existing Claude login" UX and violates the guardrails below. If Anthropic later offers a subscription-auth SDK path that does not require an API key, revisit.
+- **Hard guardrails (permanent):** Never set `ANTHROPIC_API_KEY` or route through metered API billing. Never write custom networking to Anthropic's servers. Auth is always the individual user's own Claude login — never multiplex accounts or replay tokens. Sneebly is always a wrapper over Anthropic's official client (currently the CLI), never a re-implementation.
 - Main process owns: filesystem, child processes (dev server, claude CLI), git ops, project registry, GitHub auth
 - Renderer owns: all UI
 - All IPC payloads are Zod-validated on both sides

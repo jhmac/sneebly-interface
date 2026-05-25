@@ -1,6 +1,9 @@
 import { buildLearningsAddendum, type LearningsResult } from './learnings'
+import { readPromotedMd } from './learning-store'
+import { readConventionsMd } from './conventions-md-updater'
 
 const TOTAL_WORD_CAP = 2_500
+const CONVENTIONS_WORD_CAP = 600
 
 export interface ComposerResult {
   text: string | null
@@ -22,8 +25,39 @@ export function composeSystemPromptAddendum(
   const skillText = opts.skillPrompt?.trim() ?? ''
   if (skillText) parts.push(skillText)
 
-  const skillWordCount = wordCount(skillText)
-  const remainingBudget = Math.max(0, Math.min(opts.maxWords, TOTAL_WORD_CAP - skillWordCount))
+  let usedWords = wordCount(skillText)
+
+  // Slot 2: conventions (auto-detected project patterns — capped at 600 words)
+  try {
+    const conventionsText = readConventionsMd(projectPath)
+    if (conventionsText) {
+      const wc = Math.min(wordCount(conventionsText), CONVENTIONS_WORD_CAP)
+      if (usedWords + wc <= TOTAL_WORD_CAP) {
+        const truncated = truncateToWords(conventionsText, CONVENTIONS_WORD_CAP)
+        parts.push(truncated)
+        usedWords += wordCount(truncated)
+      }
+    }
+  } catch (e) {
+    console.error('[composer] failed to read conventions:', e)
+  }
+
+  // Slot 3: promoted learnings (user-approved patterns — always injected if present)
+  try {
+    const promotedText = readPromotedMd(projectPath)
+    if (promotedText) {
+      const wc = wordCount(promotedText)
+      if (usedWords + wc <= TOTAL_WORD_CAP) {
+        parts.push(promotedText)
+        usedWords += wc
+      }
+    }
+  } catch (e) {
+    console.error('[composer] failed to read promoted learnings:', e)
+  }
+
+  // Slot 4: reflection learnings (recent session observations — soft budget)
+  const remainingBudget = Math.max(0, Math.min(opts.maxWords, TOTAL_WORD_CAP - usedWords))
 
   if (opts.applyLearnings && remainingBudget > 0) {
     try {
@@ -34,7 +68,6 @@ export function composeSystemPromptAddendum(
       if (learnings) parts.push(learnings.text)
     } catch (e) {
       console.error('[composer] failed to build learnings addendum:', e)
-      // Continue without learnings — skill prompt alone is still useful
     }
   }
 
@@ -44,4 +77,11 @@ export function composeSystemPromptAddendum(
 
 function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length
+}
+
+function truncateToWords(text: string, maxWords: number): string {
+  if (maxWords <= 0) return '…'
+  const words = text.trim().split(/\s+/)
+  if (words.length <= maxWords) return text
+  return words.slice(0, maxWords).join(' ') + '…'
 }

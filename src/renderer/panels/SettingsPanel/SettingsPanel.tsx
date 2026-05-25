@@ -317,6 +317,24 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
               </Row>
             </>
           )}
+          <Row label="Propose learnings from reflections" description="After a session with 3+ friction events, uses Haiku to propose system-prompt additions you can review and approve.">
+            <Toggle
+              value={settings.generateLearningProposals ?? true}
+              onChange={(v) => handleSave({ generateLearningProposals: v })}
+            />
+          </Row>
+          <Row label="Run shadow sessions" description="When a learning is proposed, automatically runs a quick Haiku shadow session to preview how the learning would change behavior.">
+            <Toggle
+              value={settings.runShadowSessions ?? false}
+              onChange={(v) => handleSave({ runShadowSessions: v })}
+            />
+          </Row>
+          <Row label="Show suggested shortcuts" description="Display up to 2 auto-suggested shortcuts in the workspace top bar, based on recently opened files and used skills.">
+            <Toggle
+              value={settings.showSuggestedShortcuts ?? true}
+              onChange={(v) => handleSave({ showSuggestedShortcuts: v })}
+            />
+          </Row>
           {activeProject && (
             <Row label="Delete all events and reflections" description="Wipes all stored events and reflection files for the current project.">
               <button
