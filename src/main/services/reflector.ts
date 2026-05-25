@@ -50,7 +50,9 @@ function buildEventsPrompt(events: SemanticEvent[]): string {
       case 'tool_call': {
         const args = ev.payload['args'] as Record<string, unknown> | undefined
         const argStr = args
-          ? Object.entries(args).map(([k, v]) => `${k}=${String(v).slice(0, 100)}`).join(', ')
+          ? Object.entries(args)
+              .map(([k, v]) => `${k}=${JSON.stringify(v).slice(0, 100)}`)
+              .join(', ')
           : ''
         lines.push(`${t} CALL ${ev.payload['toolName']}(${argStr})${friction}`)
         break

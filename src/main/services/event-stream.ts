@@ -87,7 +87,7 @@ export function deleteAllEvents(projectPath: string): void {
 
 // ── Friction tagging ───────────────────────────────────────────────────────
 
-const CORRECTION_RE = /^(no|stop|wrong|undo|actually|instead)\b/i
+export const CORRECTION_RE = /^(no|stop|wrong|undo|actually|instead)\b/i
 
 export function tagFriction(events: SemanticEvent[]): SemanticEvent[] {
   const tagged = events.map((e) => ({

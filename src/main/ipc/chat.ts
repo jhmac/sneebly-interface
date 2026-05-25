@@ -1,25 +1,14 @@
 import { ipcMain } from 'electron'
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
-import type { ChatMessage, ModelName, AppSettings } from '../../shared/types'
+import type { ChatMessage, ModelName } from '../../shared/types'
 import * as sessionStore from '../services/session-store'
 import { startTurn } from '../services/agent-session'
 import { pushAgentEvent } from './agent'
 import { sendToProjectWindows } from '../services/window-registry'
-import { appendEvent } from '../services/event-stream'
+import { appendEvent, CORRECTION_RE } from '../services/event-stream'
 
 const store = new Store()
-
-const CORRECTION_RE = /^(no|stop|wrong|undo|actually|instead)\b/i
-
-const DEFAULT_SETTINGS: Partial<AppSettings> = {
-  recordEventStream: true,
-  runNightlyReflections: true,
-}
-
-function getSettings(): AppSettings {
-  return { ...DEFAULT_SETTINGS, ...(store.get('appSettings', {}) as Partial<AppSettings>) } as AppSettings
-}
 
 function pushMessage(sessionId: string, message: ChatMessage, projectId: string): void {
   sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, message)
@@ -77,8 +66,8 @@ export function registerChatHandlers(): void {
     async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string, projectId: string, skillPrompt?: string) => {
       sessionStore.appendMessage(projectPath, sessionId, userMessage)
 
-      const settings = getSettings()
-      const recordEvents = settings.recordEventStream
+      const appSettings = store.get('appSettings', {}) as Record<string, unknown>
+      const recordEvents = (appSettings['recordEventStream'] as boolean | undefined) ?? true
 
       if (recordEvents) {
         appendEvent(projectPath, sessionId, {
@@ -92,7 +81,6 @@ export function registerChatHandlers(): void {
             text: userMessage.text,
             isCorrection: CORRECTION_RE.test(userMessage.text.trimStart()),
           },
-          frictionTags: CORRECTION_RE.test(userMessage.text.trimStart()) ? ['user_correction'] : [],
         })
       }
 

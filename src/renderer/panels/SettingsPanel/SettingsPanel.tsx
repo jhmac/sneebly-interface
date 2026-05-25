@@ -40,10 +40,13 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
       setSettings(s)
       setVersion(v)
     })
+  }, [])
+
+  useEffect(() => {
     if (activeProject) {
       window.api.reflectionList(activeProject.id).then(setReflections).catch(() => {})
     }
-  }, [activeProject])
+  }, [activeProject?.id])
 
   async function handleSave(patch: Partial<AppSettings>) {
     if (!settings) return
@@ -61,10 +64,11 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
 
   async function handleOpenReflection(entry: ReflectionEntry) {
     const content = await window.api.reflectionRead(entry.path)
-    // Strip frontmatter for display
-    const body = content.startsWith('---')
-      ? content.slice(content.indexOf('---', 3) + 3).trimStart()
-      : content
+    let body = content
+    if (content.startsWith('---')) {
+      const closing = content.indexOf('---', 3)
+      if (closing !== -1) body = content.slice(closing + 3).trimStart()
+    }
     setOpenReflection({ content: body, date: entry.date })
   }
 
@@ -300,7 +304,7 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-invert prose-sm max-w-none prose-p:text-zinc-300 prose-headings:text-zinc-200 prose-li:text-zinc-300 prose-strong:text-zinc-200">
+            <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-invert prose-sm max-w-none text-zinc-300 [&_h1]:text-zinc-100 [&_h2]:text-zinc-200 [&_h3]:text-zinc-200 [&_strong]:text-zinc-200 [&_li]:text-zinc-300 [&_code]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_code]:text-zinc-300 [&_pre]:bg-zinc-900 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {openReflection.content}
               </ReactMarkdown>

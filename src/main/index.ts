@@ -159,8 +159,8 @@ function createProjectWindow(initialProjectId?: string): BrowserWindow {
 // ── App lifecycle ──────────────────────────────────────────────────────────
 function scheduleReflections(): void {
   const settings = store.get('appSettings', {}) as Partial<AppSettings>
-  if (!settings.runNightlyReflections && settings.runNightlyReflections !== undefined) return
-  if (!settings.recordEventStream && settings.recordEventStream !== undefined) return
+  if (settings.runNightlyReflections === false) return
+  if (settings.recordEventStream === false) return
 
   const projects = listProjects()
   const queue = projects.filter(
