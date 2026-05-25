@@ -137,19 +137,18 @@ export function registerChatHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.CHAT_SEND,
     async (_e, projectPath: string, sessionId: string, userMessage: ChatMessage, model: string, projectId: string, skillPrompt?: string) => {
-      sessionStore.appendMessage(projectPath, sessionId, userMessage)
-
-      if (isChatTurnInFlight(projectId ?? '')) {
+      if (isChatTurnInFlight(projectId)) {
         const busyMsg: ChatMessage = {
           id: crypto.randomUUID(),
           role: 'assistant',
           text: 'Still finishing the previous turn — give me a moment, then send again.',
           ts: Date.now(),
         }
-        sessionStore.appendMessage(projectPath, sessionId, busyMsg)
         pushMessage(sessionId, busyMsg, projectId)
         return
       }
+
+      sessionStore.appendMessage(projectPath, sessionId, userMessage)
 
       const appSettings = store.get('appSettings', {}) as Record<string, unknown>
       const recordEvents = (appSettings['recordEventStream'] as boolean | undefined) ?? true
@@ -158,7 +157,7 @@ export function registerChatHandlers(): void {
         appendEvent(projectPath, sessionId, {
           id: crypto.randomUUID(),
           sessionId,
-          projectId: projectId ?? '',
+          projectId,
           ts: userMessage.ts,
           kind: 'user_message',
           source: 'chat',
@@ -176,7 +175,7 @@ export function registerChatHandlers(): void {
       startTurn(
         {
           cwd: projectPath,
-          projectId: projectId ?? '',
+          projectId,
           sneeblySessionId: sessionId,
           claudeCodeSessionId,
           prompt: userMessage.text,
@@ -228,8 +227,8 @@ export function registerChatHandlers(): void {
             pushMessage(sessionId, errMsg, projectId)
           }
 
-          // Auto-review if thresholds crossed on a successful non-error turn
-          if (!error) {
+          // Auto-review if thresholds crossed on a successful, non-aborted turn
+          if (!error && !metrics?.wasAborted) {
             maybeRunAutoReview({ projectPath, sessionId, projectId, recordEvents, metrics })
           }
         }

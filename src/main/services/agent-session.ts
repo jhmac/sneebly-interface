@@ -15,6 +15,7 @@ const activeChatProjectIds = new Set<string>()
 export interface TurnMetrics {
   filesTouched: string[]
   linesChanged: number
+  wasAborted: boolean
 }
 
 export interface TurnOpts {
@@ -109,15 +110,17 @@ export function startTurn(
         },
       })
     }
+    const wasAborted = abortedSessions.has(opts.sneeblySessionId)
     abortedSessions.delete(opts.sneeblySessionId)
 
-    const metrics: TurnMetrics = { filesTouched: [...filesTouched], linesChanged }
+    const metrics: TurnMetrics = { filesTouched: [...filesTouched], linesChanged, wasAborted }
     onDone(result.claudeCodeSessionId, result.error, metrics)
   }).catch((err: unknown) => {
     activeProcesses.delete(opts.sneeblySessionId)
     activeChatProjectIds.delete(opts.projectId)
+    const wasAborted = abortedSessions.has(opts.sneeblySessionId)
     abortedSessions.delete(opts.sneeblySessionId)
-    onDone(null, err instanceof Error ? err.message : String(err))
+    onDone(null, err instanceof Error ? err.message : String(err), { filesTouched: [], linesChanged: 0, wasAborted })
   })
 }
 
