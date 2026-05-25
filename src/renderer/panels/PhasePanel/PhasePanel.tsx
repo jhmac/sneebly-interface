@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import {
   X, RefreshCw, Play, Square, ChevronDown, ChevronRight,
   CheckCircle2, Circle, Loader2, AlertTriangle, Zap,
-  ClipboardList, FileCode, ArrowRight
+  ClipboardList, FileCode, ArrowRight, ScanSearch
 } from 'lucide-react'
 import { usePhaseStore } from '../../state/phaseStore'
-import type { OrderedMilestone, PhasePlan, PhaseRunConfig, PhaseRunState } from '../../../shared/types'
+import type { OrderedMilestone, PhasePlan, PhaseRunConfig, PhaseRunState, PhaseAuditProgress } from '../../../shared/types'
 
 interface Props {
   open: boolean
@@ -26,6 +26,8 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
   const [runConfigOpen, setRunConfigOpen] = useState(false)
   const [batchSize, setBatchSize] = useState(3)
   const [activeChecklist, setActiveChecklist] = useState<string[] | null>(null)
+  const [auditing, setAuditing] = useState(false)
+  const [auditProgress, setAuditProgress] = useState<PhaseAuditProgress | null>(null)
 
   useEffect(() => {
     load(projectId)
@@ -42,6 +44,18 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
     return unsub
   }, [])
 
+  // Subscribe to audit progress events pushed from main
+  useEffect(() => {
+    const unsub = window.api.phaseOnAuditProgress((progress) => {
+      setAuditProgress(progress)
+      if (progress.stage === 'done') {
+        setAuditing(false)
+        load(projectId)
+      }
+    })
+    return unsub
+  }, [projectId])
+
   // Auto-expand the active phase on load
   useEffect(() => {
     if (!plan) return
@@ -52,6 +66,16 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
   }, [plan])
 
   const handleGenerate = () => generate(projectId)
+
+  const handleAudit = async () => {
+    setAuditing(true)
+    setAuditProgress(null)
+    try {
+      await window.api.phaseAudit(projectId)
+    } catch (e) {
+      setAuditing(false)
+    }
+  }
 
   const handleBuildMilestone = async (milestoneId: string) => {
     const milestone = plan?.milestones.find((m) => m.id === milestoneId)
@@ -135,10 +159,24 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleAudit}
+              disabled={auditing || runState.status === 'building'}
+              title="Audit codebase to auto-check completed milestones"
+              className="flex items-center gap-1.5 rounded-md bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {auditing ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <ScanSearch className="h-3 w-3" />
+              )}
+              {auditing ? 'Auditing…' : 'Audit'}
+            </button>
             {runState.status === 'idle' || runState.status === 'paused' || runState.status === 'complete' ? (
               <button
                 onClick={() => setRunConfigOpen(true)}
-                className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
+                disabled={auditing}
+                className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Play className="h-3 w-3" />
                 {runState.status === 'paused' ? 'Resume run' : 'Start run'}
@@ -154,8 +192,9 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
             )}
             <button
               onClick={handleGenerate}
+              disabled={auditing}
               title="Re-generate build order"
-              className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+              className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
@@ -165,6 +204,11 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
         {/* Run status bar */}
         {runState.status !== 'idle' && (
           <RunStatusBar runState={runState} activeMilestone={activeMilestone} />
+        )}
+
+        {/* Audit progress bar */}
+        {auditProgress && (
+          <AuditProgressBar progress={auditProgress} onDismiss={() => setAuditProgress(null)} />
         )}
 
         {/* Error */}
@@ -567,6 +611,57 @@ function RunStatusBar({
           {runState.lastError}
         </span>
       )}
+    </div>
+  )
+}
+
+// ── Audit progress bar ─────────────────────────────────────────────────────
+
+function AuditProgressBar({
+  progress,
+  onDismiss,
+}: {
+  progress: PhaseAuditProgress
+  onDismiss: () => void
+}) {
+  if (progress.stage === 'running') {
+    const pct = progress.total > 0 ? Math.round((progress.checked / progress.total) * 100) : 0
+    return (
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-800/20 px-6 py-2">
+        <Loader2 className="h-3 w-3 animate-spin flex-shrink-0 text-indigo-400" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-indigo-400">Auditing codebase</span>
+            <span className="text-[10px] text-zinc-600">{progress.checked}/{progress.total}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <div className="h-1 w-32 overflow-hidden rounded-full bg-zinc-800">
+              <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-[10px] text-zinc-600 truncate max-w-[280px]">{progress.currentMilestone}</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const completeCount = progress.results.filter((r) => r.status === 'complete').length
+  const partialCount = progress.results.filter((r) => r.status === 'partial').length
+
+  return (
+    <div className="flex flex-shrink-0 items-center gap-3 border-b border-zinc-800 bg-emerald-950/20 px-6 py-2">
+      <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500" />
+      <div className="flex-1 text-xs">
+        <span className="font-medium text-emerald-400">Audit complete</span>
+        <span className="ml-2 text-zinc-500">
+          {progress.appliedCount} milestone{progress.appliedCount !== 1 ? 's' : ''} marked complete
+          {partialCount > 0 && ` · ${partialCount} partial`}
+          {completeCount > progress.appliedCount && ` · ${completeCount - progress.appliedCount} complete (low confidence, not auto-checked)`}
+        </span>
+      </div>
+      <button onClick={onDismiss} className="text-zinc-600 hover:text-zinc-400">
+        <X className="h-3 w-3" />
+      </button>
     </div>
   )
 }

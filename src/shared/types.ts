@@ -431,6 +431,17 @@ export interface PhaseRunState {
   lastError: string | null
 }
 
+export interface MilestoneAuditResult {
+  id: string
+  status: 'complete' | 'partial' | 'not-started'
+  confidence: 'high' | 'medium' | 'low'
+  evidence: string
+}
+
+export type PhaseAuditProgress =
+  | { stage: 'running'; checked: number; total: number; currentMilestone: string }
+  | { stage: 'done'; results: MilestoneAuditResult[]; appliedCount: number }
+
 export interface AppSettings {
   theme: 'dark' | 'light'
   defaultModel: ModelName
@@ -625,6 +636,8 @@ export interface ElectronAPI {
   phaseRunState: (projectId: string) => Promise<PhaseRunState>
   phaseOnRunStateChanged: (cb: (projectId: string, state: PhaseRunState) => void) => () => void
   phaseKickoffFill: (projectId: string, milestoneId: string) => Promise<{ text: string; specPath: string | null } | null>
+  phaseAudit: (projectId: string) => Promise<MilestoneAuditResult[]>
+  phaseOnAuditProgress: (cb: (progress: PhaseAuditProgress) => void) => () => void
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>

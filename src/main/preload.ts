@@ -42,6 +42,7 @@ import type {
   PhasePlan,
   PhaseRunConfig,
   PhaseRunState,
+  PhaseAuditProgress,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -315,6 +316,13 @@ const api: ElectronAPI = {
   },
   phaseKickoffFill: (projectId: string, milestoneId: string): Promise<{ text: string; specPath: string | null } | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.PHASE_KICKOFF_FILL, projectId, milestoneId),
+  phaseAudit: (projectId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_AUDIT, projectId),
+  phaseOnAuditProgress: (cb: (progress: PhaseAuditProgress) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, progress: PhaseAuditProgress) => cb(progress)
+    ipcRenderer.on(IPC_CHANNELS.PHASE_AUDIT_PROGRESS, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.PHASE_AUDIT_PROGRESS, h)
+  },
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) =>

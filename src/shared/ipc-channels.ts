@@ -111,4 +111,6 @@ export const IPC_CHANNELS = {
   PHASE_RUN_STATE: 'phase:run-state',
   PHASE_RUN_STATE_CHANGED: 'phase:run-state-changed',
   PHASE_KICKOFF_FILL: 'phase:kickoff-fill',
+  PHASE_AUDIT: 'phase:audit',
+  PHASE_AUDIT_PROGRESS: 'phase:audit-progress',
 } as const
