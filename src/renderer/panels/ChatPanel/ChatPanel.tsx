@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Plus } from 'lucide-react'
+import { ChevronDown, Plus, X } from 'lucide-react'
 import { useChatStore } from '../../state/chatStore'
 import { useSettingsStore } from '../../state/settingsStore'
 import { useActivityStore } from '../../state/activityStore'
@@ -35,6 +35,59 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: () => v
   )
 }
 
+function LearningsChip({
+  status,
+  onDismiss,
+}: {
+  status: { sourceReflections: string[]; wordCount: number }
+  onDismiss: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const n = status.sourceReflections.length
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center rounded-md bg-purple-950/60 border border-purple-800/40 px-2 py-0.5 text-[10px] font-medium text-purple-400">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="hover:text-purple-200 transition-colors"
+        >
+          {n} {n === 1 ? 'learning' : 'learnings'} applied
+        </button>
+        <button
+          onClick={onDismiss}
+          title="Dismiss"
+          className="ml-1.5 text-purple-700 hover:text-purple-400 transition-colors"
+        >
+          <X className="h-2.5 w-2.5" />
+        </button>
+      </div>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl p-3">
+          <p className="text-[10px] text-zinc-500 mb-2">Context from nightly reflections:</p>
+          <ul className="space-y-0.5">
+            {status.sourceReflections.map((r) => (
+              <li key={r} className="text-[10px] font-mono text-zinc-400">{r}</li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-zinc-600 mt-2">{status.wordCount} words injected as system context</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ChatHeader({
   model,
   onModelChange,
@@ -56,7 +109,20 @@ function ChatHeader({
   const sessionsRef = useRef<HTMLDivElement>(null)
   const autoSelfReview = useSettingsStore((s) => s.settings?.autoSelfReview ?? true)
   const activeProjectId = useProjectStore((s) => s.activeProjectId)
-  const isReviewing = useActivityStore((s) => s.chatInFlightProjectIds.has(activeProjectId ?? ''))
+  const isInFlight = useActivityStore((s) => s.chatInFlightProjectIds.has(activeProjectId ?? ''))
+  const isReviewing = isInFlight
+  const learningsStatus = useChatStore((s) => s.learningsStatus)
+  const activeSessionId = useChatStore((s) => s.activeSessionId)
+  const { refreshLearnings, dismissLearnings } = useChatStore()
+
+  // Refresh learnings status when a turn completes
+  const prevInFlight = useRef(false)
+  useEffect(() => {
+    if (prevInFlight.current && !isInFlight) {
+      refreshLearnings()
+    }
+    prevInFlight.current = isInFlight
+  }, [isInFlight, refreshLearnings])
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -102,6 +168,12 @@ function ChatHeader({
 
       {/* Right side */}
       <div className="flex items-center gap-1">
+        {learningsStatus && (
+          <LearningsChip
+            status={learningsStatus}
+            onDismiss={() => { if (activeSessionId) dismissLearnings(activeSessionId) }}
+          />
+        )}
         {autoSelfReview && (
           <button
             onClick={onOpenSettings}

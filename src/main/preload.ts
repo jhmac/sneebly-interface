@@ -257,6 +257,12 @@ const api: ElectronAPI = {
   usageTimeseries: (projectId: string, periodDays = 30): Promise<UsageDailyStat[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.USAGE_TIMESERIES, projectId, periodDays),
 
+  // ── Learnings ─────────────────────────────────────────────────────────────
+  chatLearningsStatus: (projectId: string): Promise<{ sourceReflections: string[]; wordCount: number } | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHAT_LEARNINGS_STATUS, projectId),
+  chatDismissLearnings: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHAT_DISMISS_LEARNINGS, sessionId),
+
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GOALS_GRILL_TURN, messages, userMessage),

@@ -90,4 +90,6 @@ export const IPC_CHANNELS = {
   CHAT_IN_FLIGHT_CHANGED: 'chat:in-flight-changed',
   USAGE_SUMMARY: 'usage:summary',
   USAGE_TIMESERIES: 'usage:timeseries',
+  CHAT_LEARNINGS_STATUS: 'chat:learnings-status',
+  CHAT_DISMISS_LEARNINGS: 'chat:dismiss-learnings',
 } as const

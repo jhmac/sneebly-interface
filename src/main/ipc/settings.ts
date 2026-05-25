@@ -19,6 +19,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoSelfReviewThresholdLines: 100,
   autoSelfReviewModel: 'claude-opus-4-7',
   recordTokenUsage: true,
+  applyLearnings: true,
+  learningsMaxAgeDays: 14,
+  learningsMaxWords: 800,
 }
 
 export function registerSettingsHandlers(): void {

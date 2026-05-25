@@ -12,6 +12,7 @@ interface ChatState {
   pendingSend: boolean
   defaultModel: ModelName
   activeSkillId: string | null
+  learningsStatus: { sourceReflections: string[]; wordCount: number } | null
 
   loadForProject: (projectPath: string, projectId: string) => Promise<void>
   sendMessage: () => void
@@ -25,6 +26,8 @@ interface ChatState {
   addAttachment: (a: PendingAttachment) => void
   removeAttachment: (id: string) => void
   setComposerText: (text: string) => void
+  refreshLearnings: () => void
+  dismissLearnings: (sessionId: string) => Promise<void>
   reset: () => void
 }
 
@@ -42,6 +45,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingSend: false,
   defaultModel: 'claude-sonnet-4-6',
   activeSkillId: null,
+  learningsStatus: null,
 
   loadForProject: async (projectPath: string, projectId: string) => {
     const [sessions, savedId, savedModel] = await Promise.all([
@@ -65,7 +69,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       composerAttachments: [],
       pendingSend: false,
       defaultModel: savedModel as ModelName,
+      learningsStatus: null,
     })
+    window.api.chatLearningsStatus(projectId).then((status) => {
+      set({ learningsStatus: status })
+    }).catch(() => {})
   },
 
   sendMessage: () => {
@@ -103,7 +111,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const sessionId = await window.api.sessionCreate(project.path)
     await window.api.sessionSetActive(project.id, sessionId)
     const sessions = await window.api.sessionList(project.path)
-    set({ activeSessionId: sessionId, messages: [], pastSessions: sessions })
+    set({ activeSessionId: sessionId, messages: [], pastSessions: sessions, learningsStatus: null })
   },
 
   switchSession: async (sessionId: string) => {
@@ -111,7 +119,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!project) return
     await window.api.sessionSetActive(project.id, sessionId)
     const messages = await window.api.sessionLoad(project.path, sessionId)
-    set({ activeSessionId: sessionId, messages })
+    set({ activeSessionId: sessionId, messages, learningsStatus: null })
+    window.api.chatLearningsStatus(project.id).then((status) => {
+      set({ learningsStatus: status })
+    }).catch(() => {})
   },
 
   clearCurrentSession: async () => {
@@ -146,6 +157,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setComposerText: (text: string) => set({ composerText: text }),
 
+  refreshLearnings: () => {
+    const project = activeProject()
+    if (!project) return
+    window.api.chatLearningsStatus(project.id).then((status) => {
+      set({ learningsStatus: status })
+    }).catch(() => {})
+  },
+
+  dismissLearnings: async (sessionId: string) => {
+    await window.api.chatDismissLearnings(sessionId).catch(() => {})
+    set({ learningsStatus: null })
+  },
+
   reset: () =>
     set({
       activeSessionId: null,
@@ -154,5 +178,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       composerText: '',
       composerAttachments: [],
       pendingSend: false,
+      learningsStatus: null,
     }),
 }))

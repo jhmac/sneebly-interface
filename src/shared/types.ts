@@ -8,6 +8,8 @@ export type SemanticEventKind =
   | 'turn_start'
   | 'turn_end'
   | 'permission_denied'
+  // payload: { learningsHash: string; sourceReflections: string[]; addendumWordCount: number }
+  | 'learnings_applied'
 
 export type FrictionTag =
   | 'user_correction'
@@ -329,6 +331,9 @@ export interface AppSettings {
   autoSelfReviewThresholdLines: number
   autoSelfReviewModel: ModelName
   recordTokenUsage: boolean
+  applyLearnings: boolean
+  learningsMaxAgeDays: number
+  learningsMaxWords: number
 }
 
 export interface SessionUsage {
@@ -476,6 +481,10 @@ export interface ElectronAPI {
   // ── Usage telemetry ───────────────────────────────────────────────────────
   usageSummary: (projectId: string, periodDays?: number) => Promise<UsageSummary>
   usageTimeseries: (projectId: string, periodDays?: number) => Promise<UsageDailyStat[]>
+
+  // ── Learnings / reflection context ────────────────────────────────────────
+  chatLearningsStatus: (projectId: string) => Promise<{ sourceReflections: string[]; wordCount: number } | null>
+  chatDismissLearnings: (sessionId: string) => Promise<void>
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>

@@ -8,8 +8,14 @@ import { pushAgentEvent } from './agent'
 import { sendToProjectWindows } from '../services/window-registry'
 import { appendEvent, CORRECTION_RE } from '../services/event-stream'
 import { getSkillPrompt } from '../services/skills-loader'
+import { composeSystemPromptAddendum } from '../services/system-prompt-composer'
 
 const store = new Store()
+
+// Learnings injected on the first turn of each session (sessionId → status)
+const sessionLearningsMap = new Map<string, { sourceReflections: string[]; wordCount: number }>()
+// Sessions where the user dismissed the learnings chip
+const dismissedSessions = new Set<string>()
 
 function pushMessage(sessionId: string, message: ChatMessage, projectId: string): void {
   sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, message)
@@ -173,6 +179,47 @@ export function registerChatHandlers(): void {
 
       const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
 
+      // First turn of this session: compose skill + learnings addendum.
+      // Subsequent turns skip learnings to avoid re-injecting every turn.
+      const isFirstTurn = claudeCodeSessionId === null
+      const applyLearnings = (appSettings['applyLearnings'] as boolean | undefined) ?? true
+      const maxAgeDays = (appSettings['learningsMaxAgeDays'] as number | undefined) ?? 14
+      const maxWords = (appSettings['learningsMaxWords'] as number | undefined) ?? 800
+
+      let appendSystemPrompt: string | undefined = skillPrompt
+      if (isFirstTurn && !dismissedSessions.has(sessionId)) {
+        const composed = composeSystemPromptAddendum(projectPath, {
+          skillPrompt,
+          applyLearnings,
+          maxAgeDays,
+          maxWords,
+        })
+        appendSystemPrompt = composed.text ?? undefined
+
+        if (composed.learnings) {
+          const wc = composed.learnings.text.trim().split(/\s+/).filter(Boolean).length
+          sessionLearningsMap.set(sessionId, {
+            sourceReflections: composed.learnings.sourceReflections,
+            wordCount: wc,
+          })
+          if (recordEvents) {
+            appendEvent(projectPath, sessionId, {
+              id: crypto.randomUUID(),
+              sessionId,
+              projectId,
+              ts: Date.now(),
+              kind: 'learnings_applied',
+              source: 'chat',
+              payload: {
+                learningsHash: composed.learnings.sourceReflections.join('|'),
+                sourceReflections: composed.learnings.sourceReflections,
+                addendumWordCount: wc,
+              },
+            })
+          }
+        }
+      }
+
       let assistantText = ''
 
       startTurn(
@@ -183,7 +230,7 @@ export function registerChatHandlers(): void {
           claudeCodeSessionId,
           prompt: userMessage.text,
           model: model || 'claude-sonnet-4-6',
-          appendSystemPrompt: skillPrompt,
+          appendSystemPrompt,
           recordEvents,
           recordUsage,
         },
@@ -239,4 +286,15 @@ export function registerChatHandlers(): void {
       )
     }
   )
+
+  ipcMain.handle(IPC_CHANNELS.CHAT_LEARNINGS_STATUS, (_e, projectId: string) => {
+    const sessionId = store.get(`chat.activeSession.${projectId}`, null) as string | null
+    if (!sessionId || dismissedSessions.has(sessionId)) return null
+    return sessionLearningsMap.get(sessionId) ?? null
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CHAT_DISMISS_LEARNINGS, (_e, sessionId: string) => {
+    dismissedSessions.add(sessionId)
+    sessionLearningsMap.delete(sessionId)
+  })
 }

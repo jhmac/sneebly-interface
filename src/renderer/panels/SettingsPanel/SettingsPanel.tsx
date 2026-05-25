@@ -224,6 +224,49 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
               onChange={(v) => handleSave({ recordTokenUsage: v })}
             />
           </Row>
+          <Row label="Apply nightly learnings to new sessions" description="Injects a summary of recent reflections as system context on the first turn of each new session.">
+            <Toggle
+              value={settings.applyLearnings ?? true}
+              onChange={(v) => handleSave({ applyLearnings: v })}
+            />
+          </Row>
+          {(settings.applyLearnings ?? true) && (
+            <>
+              <Row label="Learnings lookback" description="How many days back to pull reflections from.">
+                <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={settings.learningsMaxAgeDays ?? 14}
+                    onChange={(e) => {
+                      const v = Number(e.target.value)
+                      if (Number.isInteger(v) && v >= 1) handleSave({ learningsMaxAgeDays: v })
+                    }}
+                    className="w-14 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+                  />
+                  days
+                </label>
+              </Row>
+              <Row label="Learnings word budget" description="Maximum words of reflection content injected per session.">
+                <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                  <input
+                    type="number"
+                    min={100}
+                    max={2000}
+                    step={100}
+                    value={settings.learningsMaxWords ?? 800}
+                    onChange={(e) => {
+                      const v = Number(e.target.value)
+                      if (Number.isInteger(v) && v >= 100) handleSave({ learningsMaxWords: v })
+                    }}
+                    className="w-16 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+                  />
+                  words
+                </label>
+              </Row>
+            </>
+          )}
           {(settings.autoSelfReview ?? true) && (
             <>
               <Row label="Review threshold" description="Trigger review when files touched or lines changed meets either limit.">
