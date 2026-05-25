@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Group,
   Panel,
@@ -7,7 +7,7 @@ import {
   type Layout,
 } from 'react-resizable-panels'
 import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X } from 'lucide-react'
-import type { LayoutSizes } from '../../shared/types'
+import type { LayoutSizes, UsageSummary } from '../../shared/types'
 import { useProjectStore } from '../state/projectStore'
 import { useSecretsStore } from '../state/secretsStore'
 import { useFilesStore } from '../state/filesStore'
@@ -92,7 +92,7 @@ export default function Workspace() {
     <div className="flex h-full w-full flex-col overflow-hidden bg-zinc-900 text-zinc-100">
       {/* Modals */}
       <SecretsPanel />
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeProjectId={activeProjectId} />
       <EditorPanel />
       {commitModalOpen && <CommitPushModal onClose={closeCommitModal} />}
       <SpecGeneratorModal />
@@ -110,6 +110,7 @@ export default function Workspace() {
       {/* Workspace header */}
       <WorkspaceHeader
         projectName={activeProject?.name ?? null}
+        activeProjectId={activeProjectId}
         branch={activeProjectBranch}
         hasGoals={activeProjectGoals !== null}
         goalsExpanded={goalsExpanded}
@@ -218,6 +219,7 @@ function UnsavedChangesModal({
 
 function WorkspaceHeader({
   projectName,
+  activeProjectId,
   branch,
   hasGoals,
   goalsExpanded,
@@ -233,6 +235,7 @@ function WorkspaceHeader({
   onOpenSpecs,
 }: {
   projectName: string | null
+  activeProjectId: string | null
   branch: string | null
   hasGoals: boolean
   goalsExpanded: boolean
@@ -256,6 +259,9 @@ function WorkspaceHeader({
         <span className="text-sm font-medium text-zinc-200">
           {projectName ?? 'Sneebly'}
         </span>
+        {activeProjectId && (
+          <TokenChip projectId={activeProjectId} onOpenSettings={onOpenSettings} />
+        )}
         {branch && (
           <button
             onClick={onOpenCommit}
@@ -329,6 +335,59 @@ function WorkspaceHeader({
         )}
       </div>
     </div>
+  )
+}
+
+// ── Token usage chip ──────────────────────────────────────────────────────
+
+function fmtK(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
+  return String(n)
+}
+
+function fmtDuration(ms: number): string {
+  const m = Math.round(ms / 60_000)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  const rem = m % 60
+  return rem === 0 ? `${h}h` : `${h}h ${rem}m`
+}
+
+function TokenChip({ projectId, onOpenSettings }: { projectId: string; onOpenSettings: () => void }) {
+  const [summary, setSummary] = useState<UsageSummary | null>(null)
+
+  const refresh = useCallback(() => {
+    window.api.usageSummary(projectId, 7).then((s) => {
+      if (s.sessionCount > 0) setSummary(s)
+    }).catch(() => {})
+  }, [projectId])
+
+  useEffect(() => {
+    refresh()
+    const timer = setInterval(refresh, 60_000)
+    window.addEventListener('focus', refresh)
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [refresh])
+
+  if (!summary) return null
+
+  const total = summary.totalInput + summary.totalOutput
+  const tooltip = [
+    `In: ${fmtK(summary.totalInput)}  Out: ${fmtK(summary.totalOutput)}`,
+    `Cache read: ${fmtK(0)}`,
+    `${summary.sessionCount} sessions · ${summary.turnCount} turns`,
+    summary.stoppedSessionCount > 0 ? `${summary.stoppedSessionCount} stopped` : '',
+  ].filter(Boolean).join('\n')
+
+  return (
+    <button
+      onClick={onOpenSettings}
+      title={tooltip}
+      className="flex items-center gap-1 rounded-md bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors font-mono"
+    >
+      {fmtK(total)} tokens · {summary.sessionCount} {summary.sessionCount === 1 ? 'session' : 'sessions'} · {fmtDuration(summary.totalDurationMs)}
+    </button>
   )
 }
 

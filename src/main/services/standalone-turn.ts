@@ -30,6 +30,8 @@ export interface StandaloneTurnResult {
   durationMs: number
   tokensIn: number
   tokensOut: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
   costUsd: number
   error?: string
 }
@@ -80,6 +82,8 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
   let claudeCodeSessionId: string | null = null
   let tokensIn = 0
   let tokensOut = 0
+  let cacheReadTokens = 0
+  let cacheCreationTokens = 0
   let costUsd = 0
 
   const args: string[] = [
@@ -129,6 +133,8 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
         assistantText = (event as AgentEvent & { result?: string }).result ?? ''
         tokensIn = event.usage?.input_tokens ?? 0
         tokensOut = event.usage?.output_tokens ?? 0
+        cacheReadTokens = event.usage?.cache_read_input_tokens ?? 0
+        cacheCreationTokens = event.usage?.cache_creation_input_tokens ?? 0
         costUsd = event.total_cost_usd ?? 0
       }
 
@@ -140,7 +146,7 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
       const stderr = stderrChunks.join('').trim()
       resolve({
         events, assistantText, claudeCodeSessionId,
-        durationMs, tokensIn, tokensOut, costUsd,
+        durationMs, tokensIn, tokensOut, cacheReadTokens, cacheCreationTokens, costUsd,
         error: (code !== 0 && !assistantText) ? (stderr || `Process exited with code ${code}`) : undefined,
       })
     })
@@ -149,7 +155,7 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
       resolve({
         events, assistantText, claudeCodeSessionId,
         durationMs: Date.now() - start,
-        tokensIn, tokensOut, costUsd,
+        tokensIn, tokensOut, cacheReadTokens, cacheCreationTokens, costUsd,
         error: err.message,
       })
     })

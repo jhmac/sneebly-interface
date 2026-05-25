@@ -213,6 +213,12 @@ export function agentEventToSemanticEvents(
           endReason: agentEvent.subtype === 'success' ? 'completed' : 'error',
           durationMs: agentEvent.duration_ms ?? null,
           costUsd: agentEvent.total_cost_usd ?? null,
+          usage: agentEvent.usage ? {
+            inputTokens: agentEvent.usage.input_tokens,
+            outputTokens: agentEvent.usage.output_tokens,
+            cacheReadTokens: agentEvent.usage.cache_read_input_tokens ?? 0,
+            cacheCreationTokens: agentEvent.usage.cache_creation_input_tokens ?? 0,
+          } : null,
         },
       }]
 

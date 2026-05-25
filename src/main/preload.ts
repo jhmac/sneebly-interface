@@ -34,6 +34,8 @@ import type {
   GrillMessage,
   ReflectionEntry,
   ChatInFlightPayload,
+  UsageSummary,
+  UsageDailyStat,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -248,6 +250,12 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, h)
   },
+
+  // ── Usage telemetry ───────────────────────────────────────────────────────
+  usageSummary: (projectId: string, periodDays = 7): Promise<UsageSummary> =>
+    ipcRenderer.invoke(IPC_CHANNELS.USAGE_SUMMARY, projectId, periodDays),
+  usageTimeseries: (projectId: string, periodDays = 30): Promise<UsageDailyStat[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.USAGE_TIMESERIES, projectId, periodDays),
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) =>

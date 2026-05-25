@@ -22,6 +22,7 @@ import { registerSpecHandlers } from './ipc/spec'
 import { registerGoalsHandlers } from './ipc/goals'
 import { registerSkillsHandlers } from './ipc/skills'
 import { registerReflectionHandlers } from './ipc/reflections'
+import { registerUsageHandlers } from './ipc/usage'
 import { listProjects } from './services/project-registry'
 import { runReflection, reflectionNeeded, hasEnoughEventsToday } from './services/reflector'
 import type { AppSettings } from '../shared/types'
@@ -104,6 +105,7 @@ function registerIpcHandlers(): void {
   registerGoalsHandlers()
   registerSkillsHandlers()
   registerReflectionHandlers()
+  registerUsageHandlers()
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
     createProjectWindow(projectId)

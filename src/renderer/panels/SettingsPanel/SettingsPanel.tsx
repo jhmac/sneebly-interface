@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X, FolderOpen, ChevronDown, GitBranch, LogOut, AlertTriangle } from 'lucide-react'
-import type { AppSettings, ModelName, ReflectionEntry } from '../../../shared/types'
+import type { AppSettings, ModelName, ReflectionEntry, UsageDailyStat } from '../../../shared/types'
 import { useGitHubStore } from '../../state/githubStore'
 import GitHubConnectModal from '../GitHubPanel/GitHubConnectModal'
 import type { GitHubUser } from '../../../shared/types'
@@ -12,6 +12,7 @@ import { useSettingsStore } from '../../state/settingsStore'
 interface Props {
   open: boolean
   onClose: () => void
+  activeProjectId?: string | null
 }
 
 const MODEL_OPTIONS: Array<{ value: ModelName; label: string }> = [
@@ -26,12 +27,12 @@ const REVIEW_MODEL_OPTIONS: Array<{ value: ModelName; label: string }> = [
   { value: 'claude-haiku-4-5',  label: 'Haiku 4.5 (faster, cheaper)' },
 ]
 
-export default function SettingsPanel({ open, onClose }: Props) {
+export default function SettingsPanel({ open, onClose, activeProjectId }: Props) {
   if (!open) return null
-  return <SettingsPanelInner onClose={onClose} />
+  return <SettingsPanelInner onClose={onClose} activeProjectId={activeProjectId} />
 }
 
-function SettingsPanelInner({ onClose }: { onClose: () => void }) {
+function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void; activeProjectId?: string | null }) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [version, setVersion] = useState('')
   const [saving, setSaving] = useState(false)
@@ -216,6 +217,12 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
               onChange={(v) => handleSave({ autoSelfReview: v })}
             />
           </Row>
+          <Row label="Record token usage" description="Tracks input and output token counts per session in tokens.json. Counts and timestamps only — no prompt or response text.">
+            <Toggle
+              value={settings.recordTokenUsage ?? true}
+              onChange={(v) => handleSave({ recordTokenUsage: v })}
+            />
+          </Row>
           {(settings.autoSelfReview ?? true) && (
             <>
               <Row label="Review threshold" description="Trigger review when files touched or lines changed meets either limit.">
@@ -307,6 +314,11 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
               </div>
             )}
           </Section>
+        )}
+
+        {/* Usage */}
+        {activeProjectId && (
+          <UsageSection projectId={activeProjectId} />
         )}
 
         {/* GitHub */}
@@ -456,6 +468,146 @@ function Row({
       </div>
       <div className="flex-shrink-0">{children}</div>
     </div>
+  )
+}
+
+// ── Usage section ──────────────────────────────────────────────────────────
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
+  return String(n)
+}
+
+function fmtMinutes(ms: number): string {
+  const total = Math.round(ms / 60_000)
+  if (total < 60) return `${total}m`
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
+function dateKey(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function UsageSection({ projectId }: { projectId: string }) {
+  const [data, setData] = useState<UsageDailyStat[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    window.api.usageTimeseries(projectId, 30).then((d) => { setData(d); setLoading(false) }).catch(() => setLoading(false))
+  }, [projectId])
+
+  if (loading) return (
+    <Section title="Usage">
+      <p className="text-[10px] text-zinc-600">Loading…</p>
+    </Section>
+  )
+  if (data.length === 0) return (
+    <Section title="Usage">
+      <p className="text-[10px] text-zinc-600">No usage data yet. Send a message to start recording.</p>
+    </Section>
+  )
+
+  // Fill in all days in the last 30 days
+  const today = Date.now()
+  const days: UsageDailyStat[] = []
+  const byDate = new Map(data.map((d) => [d.date, d]))
+  for (let i = 29; i >= 0; i--) {
+    const key = dateKey(today - i * 86_400_000)
+    days.push(byDate.get(key) ?? { date: key, totalInput: 0, totalOutput: 0, durationMs: 0, sessionCount: 0 })
+  }
+
+  const maxTokens = Math.max(...days.map((d) => d.totalInput + d.totalOutput), 1)
+
+  // Compute this week vs last week from the raw data
+  const thisWeekStart = today - 7 * 86_400_000
+  const lastWeekStart = thisWeekStart - 7 * 86_400_000
+  const thisWeek = data.filter((d) => new Date(d.date).getTime() >= thisWeekStart)
+  const lastWeek = data.filter((d) => { const t = new Date(d.date).getTime(); return t >= lastWeekStart && t < thisWeekStart })
+  const thisMs = thisWeek.reduce((n, d) => n + d.durationMs, 0)
+  const lastMs = lastWeek.reduce((n, d) => n + d.durationMs, 0)
+  const thisTokens = thisWeek.reduce((n, d) => n + d.totalInput + d.totalOutput, 0)
+  const lastTokens = lastWeek.reduce((n, d) => n + d.totalInput + d.totalOutput, 0)
+  const timeDelta = lastMs > 0 ? Math.round(((thisMs - lastMs) / lastMs) * 100) : null
+  const tokenDelta = lastTokens > 0 ? Math.round(((thisTokens - lastTokens) / lastTokens) * 100) : null
+
+  // Build 4-week table (newest first)
+  const weeks: Array<{ label: string; tokens: number; durationMs: number; sessions: number }> = []
+  for (let w = 0; w < 4; w++) {
+    const wEnd = today - w * 7 * 86_400_000
+    const wStart = wEnd - 7 * 86_400_000
+    const wData = data.filter((d) => { const t = new Date(d.date).getTime(); return t >= wStart && t < wEnd })
+    const label = w === 0 ? 'This week' : w === 1 ? 'Last week' : `${w + 1} weeks ago`
+    weeks.push({
+      label,
+      tokens: wData.reduce((n, d) => n + d.totalInput + d.totalOutput, 0),
+      durationMs: wData.reduce((n, d) => n + d.durationMs, 0),
+      sessions: wData.reduce((n, d) => n + d.sessionCount, 0),
+    })
+  }
+
+  return (
+    <Section title="Usage">
+      {/* Headline */}
+      <div className="rounded-md bg-zinc-950 border border-zinc-800 px-3 py-2 mb-3">
+        <p className="text-xs text-zinc-300">
+          This week: <span className="font-medium">{fmtMinutes(thisMs)}</span> · <span className="font-medium">{fmtTokens(thisTokens)} tokens</span>
+          {timeDelta !== null && (
+            <span className={['ml-2 text-[10px]', timeDelta < 0 ? 'text-green-400' : 'text-zinc-500'].join(' ')}>
+              {timeDelta > 0 ? '+' : ''}{timeDelta}% time vs last week
+            </span>
+          )}
+          {tokenDelta !== null && (
+            <span className="ml-1.5 text-[10px] text-zinc-600">
+              {tokenDelta > 0 ? '+' : ''}{tokenDelta}% tokens
+            </span>
+          )}
+        </p>
+      </div>
+
+      {/* SVG bar chart — last 30 days */}
+      <div className="mb-3">
+        <p className="text-[10px] text-zinc-600 mb-1.5">Last 30 days (tokens/day)</p>
+        <svg viewBox={`0 0 ${days.length * 10 - 2} 48`} className="w-full h-12" preserveAspectRatio="none">
+          {days.map((d, i) => {
+            const total = d.totalInput + d.totalOutput
+            const h = Math.max(total > 0 ? 2 : 0, Math.round((total / maxTokens) * 44))
+            return (
+              <rect
+                key={d.date}
+                x={i * 10}
+                y={48 - h}
+                width={8}
+                height={h}
+                rx={1}
+                className={total > 0 ? 'fill-indigo-500' : 'fill-zinc-800'}
+              />
+            )
+          })}
+        </svg>
+      </div>
+
+      {/* Weekly table */}
+      <div className="rounded-md border border-zinc-800 overflow-hidden text-[10px]">
+        <div className="grid grid-cols-4 bg-zinc-900/60 px-2 py-1.5 font-medium text-zinc-500 uppercase tracking-wide">
+          <span>Week</span>
+          <span className="text-right">Tokens</span>
+          <span className="text-right">Time</span>
+          <span className="text-right">Sessions</span>
+        </div>
+        {weeks.map((w) => (
+          <div key={w.label} className="grid grid-cols-4 px-2 py-1.5 border-t border-zinc-800 text-zinc-400">
+            <span className="text-zinc-300">{w.label}</span>
+            <span className="text-right font-mono">{w.tokens > 0 ? fmtTokens(w.tokens) : '—'}</span>
+            <span className="text-right font-mono">{w.durationMs > 0 ? fmtMinutes(w.durationMs) : '—'}</span>
+            <span className="text-right font-mono">{w.sessions > 0 ? String(w.sessions) : '—'}</span>
+          </div>
+        ))}
+      </div>
+    </Section>
   )
 }
 

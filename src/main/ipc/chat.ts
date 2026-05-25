@@ -36,6 +36,7 @@ function maybeRunAutoReview(opts: {
   if (!reviewPrompt) return
 
   const reviewModel = (appSettings['autoSelfReviewModel'] as ModelName | undefined) ?? 'claude-opus-4-7'
+  const recordUsage = (appSettings['recordTokenUsage'] as boolean | undefined) ?? true
   const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
   let reviewText = ''
 
@@ -51,6 +52,7 @@ function maybeRunAutoReview(opts: {
       model: reviewModel,
       appendSystemPrompt: reviewPrompt,
       recordEvents,
+      recordUsage,
       isAutoReview: true,
     },
     (event) => {
@@ -152,6 +154,7 @@ export function registerChatHandlers(): void {
 
       const appSettings = store.get('appSettings', {}) as Record<string, unknown>
       const recordEvents = (appSettings['recordEventStream'] as boolean | undefined) ?? true
+      const recordUsage = (appSettings['recordTokenUsage'] as boolean | undefined) ?? true
 
       if (recordEvents) {
         appendEvent(projectPath, sessionId, {
@@ -182,6 +185,7 @@ export function registerChatHandlers(): void {
           model: model || 'claude-sonnet-4-6',
           appendSystemPrompt: skillPrompt,
           recordEvents,
+          recordUsage,
         },
         (event) => {
           if (event.type === 'system' && event.subtype === 'init' && event.session_id) {

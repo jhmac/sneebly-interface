@@ -197,7 +197,7 @@ export interface AgentResultEvent {
   result?: string
   session_id?: string
   total_cost_usd?: number
-  usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number }
+  usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }
   duration_ms?: number
   error?: string
 }
@@ -328,6 +328,42 @@ export interface AppSettings {
   autoSelfReviewThresholdFiles: number
   autoSelfReviewThresholdLines: number
   autoSelfReviewModel: ModelName
+  recordTokenUsage: boolean
+}
+
+export interface SessionUsage {
+  sessionId: string
+  startedAt: number
+  endedAt: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  durationMs: number
+  turnCount: number
+  wasStopped: boolean
+}
+
+export interface ProjectTokensFile {
+  sessions: SessionUsage[]
+  updatedAt: number
+}
+
+export interface UsageSummary {
+  totalInput: number
+  totalOutput: number
+  totalDurationMs: number
+  sessionCount: number
+  turnCount: number
+  stoppedSessionCount: number
+}
+
+export interface UsageDailyStat {
+  date: string
+  totalInput: number
+  totalOutput: number
+  durationMs: number
+  sessionCount: number
 }
 
 export interface ChatInFlightPayload {
@@ -434,6 +470,10 @@ export interface ElectronAPI {
   reflectionRead: (path: string) => Promise<string>
   eventsDeleteAll: (projectId: string) => Promise<void>
   chatOnInFlightChanged: (callback: (payload: ChatInFlightPayload) => void) => () => void
+
+  // ── Usage telemetry ───────────────────────────────────────────────────────
+  usageSummary: (projectId: string, periodDays?: number) => Promise<UsageSummary>
+  usageTimeseries: (projectId: string, periodDays?: number) => Promise<UsageDailyStat[]>
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>

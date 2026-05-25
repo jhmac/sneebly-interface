@@ -1,7 +1,8 @@
 import { type ChildProcess } from 'node:child_process'
-import type { AgentEvent } from '../../shared/types'
+import type { AgentEvent, SessionUsage } from '../../shared/types'
 import { runStandaloneTurn } from './standalone-turn'
 import { appendEvent, agentEventToSemanticEvents } from './event-stream'
+import { appendSessionUsage } from './usage-store'
 
 // Keyed by sneeblySessionId for abort support
 const activeProcesses = new Map<string, ChildProcess>()
@@ -27,6 +28,7 @@ export interface TurnOpts {
   model: string
   appendSystemPrompt?: string
   recordEvents?: boolean
+  recordUsage?: boolean
   isAutoReview?: boolean
 }
 
@@ -36,6 +38,7 @@ export function startTurn(
   onDone: (claudeSessionId: string | null, error?: string | undefined, metrics?: TurnMetrics) => void
 ): void {
   activeChatProjectIds.add(opts.projectId)
+  const turnStartedAt = Date.now()
   let sawTurnEnd = false
   const filesTouched = new Set<string>()
   let linesChanged = 0
@@ -95,8 +98,10 @@ export function startTurn(
     activeProcesses.delete(opts.sneeblySessionId)
     activeChatProjectIds.delete(opts.projectId)
 
+    const wasAborted = abortedSessions.has(opts.sneeblySessionId)
+    abortedSessions.delete(opts.sneeblySessionId)
+
     if (opts.recordEvents && !sawTurnEnd) {
-      const wasAborted = abortedSessions.has(opts.sneeblySessionId)
       appendEvent(opts.cwd, opts.sneeblySessionId, {
         id: crypto.randomUUID(),
         sessionId: opts.sneeblySessionId,
@@ -107,11 +112,33 @@ export function startTurn(
         payload: {
           endReason: wasAborted ? 'stopped' : (result.error ? 'error' : 'completed'),
           error: result.error ?? null,
+          usage: {
+            inputTokens: result.tokensIn,
+            outputTokens: result.tokensOut,
+            cacheReadTokens: result.cacheReadTokens,
+            cacheCreationTokens: result.cacheCreationTokens,
+          },
         },
       })
     }
-    const wasAborted = abortedSessions.has(opts.sneeblySessionId)
-    abortedSessions.delete(opts.sneeblySessionId)
+
+    if (opts.recordUsage !== false) {
+      const usage: SessionUsage = {
+        sessionId: opts.sneeblySessionId,
+        startedAt: turnStartedAt,
+        endedAt: Date.now(),
+        inputTokens: result.tokensIn,
+        outputTokens: result.tokensOut,
+        cacheReadTokens: result.cacheReadTokens,
+        cacheCreationTokens: result.cacheCreationTokens,
+        durationMs: result.durationMs,
+        turnCount: 1,
+        wasStopped: wasAborted,
+      }
+      try { appendSessionUsage(opts.cwd, usage) } catch (e) {
+        console.error('[Sneebly] Failed to write token usage:', e)
+      }
+    }
 
     const metrics: TurnMetrics = { filesTouched: [...filesTouched], linesChanged, wasAborted }
     onDone(result.claudeCodeSessionId, result.error, metrics)
@@ -120,6 +147,19 @@ export function startTurn(
     activeChatProjectIds.delete(opts.projectId)
     const wasAborted = abortedSessions.has(opts.sneeblySessionId)
     abortedSessions.delete(opts.sneeblySessionId)
+    if (opts.recordUsage !== false) {
+      try {
+        appendSessionUsage(opts.cwd, {
+          sessionId: opts.sneeblySessionId,
+          startedAt: turnStartedAt,
+          endedAt: Date.now(),
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+          durationMs: Date.now() - turnStartedAt,
+          turnCount: 1,
+          wasStopped: wasAborted,
+        })
+      } catch { /* ignore — don't crash on usage write failure */ }
+    }
     onDone(null, err instanceof Error ? err.message : String(err), { filesTouched: [], linesChanged: 0, wasAborted })
   })
 }
