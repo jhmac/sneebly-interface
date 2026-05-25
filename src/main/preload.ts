@@ -39,6 +39,9 @@ import type {
   PendingLearning,
   PromotedLearning,
   ShortcutsFile,
+  PhasePlan,
+  PhaseRunConfig,
+  PhaseRunState,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -291,6 +294,27 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SHORTCUTS_PIN, projectId, id),
   shortcutsUnpin: (projectId: string, id: string): Promise<ShortcutsFile> =>
     ipcRenderer.invoke(IPC_CHANNELS.SHORTCUTS_UNPIN, projectId, id),
+
+  // ── Phase Tracker ─────────────────────────────────────────────────────────
+  phasePlanGet: (projectId: string): Promise<PhasePlan | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_PLAN_GET, projectId),
+  phasePlanGenerate: (projectId: string): Promise<PhasePlan> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_PLAN_GENERATE, projectId),
+  phaseMilestoneComplete: (projectId: string, milestoneId: string): Promise<PhasePlan> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_MILESTONE_COMPLETE, projectId, milestoneId),
+  phaseRunStart: (projectId: string, config: PhaseRunConfig): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_RUN_START, projectId, config),
+  phaseRunStop: (projectId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_RUN_STOP, projectId),
+  phaseRunState: (projectId: string): Promise<PhaseRunState> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_RUN_STATE, projectId),
+  phaseOnRunStateChanged: (cb: (projectId: string, state: PhaseRunState) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, projectId: string, state: PhaseRunState) => cb(projectId, state)
+    ipcRenderer.on(IPC_CHANNELS.PHASE_RUN_STATE_CHANGED, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.PHASE_RUN_STATE_CHANGED, h)
+  },
+  phaseKickoffFill: (projectId: string, milestoneId: string): Promise<{ text: string; specPath: string | null } | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_KICKOFF_FILL, projectId, milestoneId),
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) =>

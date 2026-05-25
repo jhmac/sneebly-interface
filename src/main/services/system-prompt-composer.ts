@@ -1,9 +1,11 @@
 import { buildLearningsAddendum, type LearningsResult } from './learnings'
 import { readPromotedMd } from './learning-store'
 import { readConventionsMd } from './conventions-md-updater'
+import { loadPhasePlan, syncCheckedState, getNextMilestone, getPhaseSummaries } from './phase-tracker'
 
 const TOTAL_WORD_CAP = 2_500
 const CONVENTIONS_WORD_CAP = 600
+const PHASE_CONTEXT_WORD_CAP = 200
 
 export interface ComposerResult {
   text: string | null
@@ -22,10 +24,41 @@ export function composeSystemPromptAddendum(
   const parts: string[] = []
   let learnings: LearningsResult | null = null
 
+  // Slot 0: current phase + next milestones (orientation for every session)
+  try {
+    const rawPlan = loadPhasePlan(projectPath)
+    if (rawPlan) {
+      const plan = syncCheckedState(projectPath, rawPlan)
+      const next = getNextMilestone(plan)
+      const summaries = getPhaseSummaries(plan)
+      const activeSummary = summaries.find((s) => s.active)
+      if (next && activeSummary) {
+        const upcomingInPhase = plan.milestones
+          .filter((m) => m.phaseNumber === activeSummary.phaseNumber && !m.checked)
+          .slice(0, 5)
+        const lines = [
+          `## Current build context`,
+          `Phase ${activeSummary.phaseNumber}: ${activeSummary.phaseName} — ${activeSummary.completed}/${activeSummary.total} complete`,
+          ``,
+          `Next milestones:`,
+          ...upcomingInPhase.map((m, i) =>
+            `${i === 0 ? '→' : ' '} ${m.text}${m.specPath ? ` (spec: ${m.specPath})` : ''}`
+          ),
+        ]
+        const phaseContext = lines.join('\n')
+        if (wordCount(phaseContext) <= PHASE_CONTEXT_WORD_CAP) {
+          parts.push(phaseContext)
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[composer] failed to build phase context:', e)
+  }
+
   const skillText = opts.skillPrompt?.trim() ?? ''
   if (skillText) parts.push(skillText)
 
-  let usedWords = wordCount(skillText)
+  let usedWords = wordCount(parts.join(' '))
 
   // Slot 2: conventions (auto-detected project patterns — capped at 600 words)
   try {

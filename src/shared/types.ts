@@ -386,6 +386,51 @@ export interface FileChangedEvent {
   kind: 'add' | 'change' | 'unlink'
 }
 
+// ── Phase Tracker types ────────────────────────────────────────────────────
+
+export type MilestoneComplexity = 'low' | 'medium' | 'high'
+export type PhaseRunStatus = 'idle' | 'building' | 'paused' | 'complete'
+
+export interface OrderedMilestone {
+  id: string                   // stable: "p<phaseNum>-m<idx>"
+  text: string
+  phase: string                // "Phase 6: Social & Spread"
+  phaseNumber: number
+  specPath: string | null
+  checked: boolean
+  buildOrder: number
+  complexity: MilestoneComplexity
+  suggestedCheckpoint: boolean
+  checkpointReason: string | null
+  rationale: string | null     // agent's build-order rationale
+  dependencies: string[]       // milestone IDs this depends on
+  kickoffPrompt: string        // pre-written chat opener
+  testChecklist: string[]      // manual verification items for user
+}
+
+export interface PhasePlan {
+  projectPath: string
+  generatedAt: number
+  modelUsed: string
+  buildSummary: string
+  milestones: OrderedMilestone[]
+}
+
+export interface PhaseRunConfig {
+  batchSize: number            // 0 = unlimited
+  startFromMilestoneId: string
+  autoReview: boolean
+}
+
+export interface PhaseRunState {
+  status: PhaseRunStatus
+  currentMilestoneId: string | null
+  completedInBatch: number
+  batchSize: number
+  activeChecklist: string[]
+  lastError: string | null
+}
+
 export interface AppSettings {
   theme: 'dark' | 'light'
   defaultModel: ModelName
@@ -570,6 +615,16 @@ export interface ElectronAPI {
   shortcutsRefresh: (projectId: string) => Promise<ShortcutsFile>
   shortcutsPin: (projectId: string, id: string) => Promise<ShortcutsFile>
   shortcutsUnpin: (projectId: string, id: string) => Promise<ShortcutsFile>
+
+  // ── Phase Tracker ─────────────────────────────────────────────────────────
+  phasePlanGet: (projectId: string) => Promise<PhasePlan | null>
+  phasePlanGenerate: (projectId: string) => Promise<PhasePlan>
+  phaseMilestoneComplete: (projectId: string, milestoneId: string) => Promise<PhasePlan>
+  phaseRunStart: (projectId: string, config: PhaseRunConfig) => Promise<void>
+  phaseRunStop: (projectId: string) => Promise<void>
+  phaseRunState: (projectId: string) => Promise<PhaseRunState>
+  phaseOnRunStateChanged: (cb: (projectId: string, state: PhaseRunState) => void) => () => void
+  phaseKickoffFill: (projectId: string, milestoneId: string) => Promise<{ text: string; specPath: string | null } | null>
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>

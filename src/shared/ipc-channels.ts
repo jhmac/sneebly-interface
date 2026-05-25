@@ -103,4 +103,12 @@ export const IPC_CHANNELS = {
   SHORTCUTS_REFRESH: 'shortcuts:refresh',
   SHORTCUTS_PIN: 'shortcuts:pin',
   SHORTCUTS_UNPIN: 'shortcuts:unpin',
+  PHASE_PLAN_GET: 'phase:plan-get',
+  PHASE_PLAN_GENERATE: 'phase:plan-generate',
+  PHASE_MILESTONE_COMPLETE: 'phase:milestone-complete',
+  PHASE_RUN_START: 'phase:run-start',
+  PHASE_RUN_STOP: 'phase:run-stop',
+  PHASE_RUN_STATE: 'phase:run-state',
+  PHASE_RUN_STATE_CHANGED: 'phase:run-state-changed',
+  PHASE_KICKOFF_FILL: 'phase:kickoff-fill',
 } as const

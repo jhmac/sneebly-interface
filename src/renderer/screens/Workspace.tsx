@@ -6,7 +6,7 @@ import {
   useGroupRef,
   type Layout,
 } from 'react-resizable-panels'
-import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X, Sparkles } from 'lucide-react'
+import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X, Sparkles, ListChecks } from 'lucide-react'
 import type { LayoutSizes, UsageSummary, ShortcutAction } from '../../shared/types'
 import { fmtTokens, fmtDuration } from '../../shared/utils'
 import { useProjectStore } from '../state/projectStore'
@@ -30,6 +30,7 @@ import SettingsPanel from '../panels/SettingsPanel/SettingsPanel'
 import EditorPanel from '../panels/FilesPanel/EditorPanel'
 import LearningsPanel from '../panels/LearningsPanel/LearningsPanel'
 import ShortcutsBar from '../panels/ShortcutsBar/ShortcutsBar'
+import PhasePanel from '../panels/PhasePanel/PhasePanel'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -59,6 +60,7 @@ export default function Workspace() {
   const { status: gitStatus, openCommitModal, commitModalOpen, closeCommitModal } = useGitStatusStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [learningsOpen, setLearningsOpen] = useState(false)
+  const [phasesOpen, setPhasesOpen] = useState(false)
   const { openModal: openSpecModal } = useSpecStore()
   const learningsBadge = useLearningsStore((s) => s.badgeCount)
   const refreshLearningsBadge = useLearningsStore((s) => s.refreshBadge)
@@ -139,6 +141,7 @@ export default function Workspace() {
       <SecretsPanel />
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeProjectId={activeProjectId} />
       <LearningsPanel open={learningsOpen} onClose={() => setLearningsOpen(false)} projectId={activeProjectId} />
+      <PhasePanel open={phasesOpen} onClose={() => setPhasesOpen(false)} projectId={activeProjectId} />
       <EditorPanel />
       {commitModalOpen && <CommitPushModal onClose={closeCommitModal} />}
       <SpecGeneratorModal />
@@ -172,6 +175,7 @@ export default function Workspace() {
         onOpenSpecs={openSpecModal}
         learningsBadge={learningsBadge}
         onOpenLearnings={() => setLearningsOpen(true)}
+        onOpenPhases={() => setPhasesOpen(true)}
       />
 
       {activeProjectId && (
@@ -291,6 +295,7 @@ function WorkspaceHeader({
   onOpenSpecs,
   learningsBadge,
   onOpenLearnings,
+  onOpenPhases,
 }: {
   projectName: string | null
   activeProjectId: string | null
@@ -309,6 +314,7 @@ function WorkspaceHeader({
   onOpenSpecs: () => void
   learningsBadge: number
   onOpenLearnings: () => void
+  onOpenPhases: () => void
 }) {
   const hasChanges = gitChangedFiles > 0
   const hasSyncInfo = gitAhead > 0 || gitBehind > 0
@@ -373,6 +379,15 @@ function WorkspaceHeader({
         >
           <KeyRound className="h-3 w-3" />
           Secrets
+        </button>
+
+        <button
+          onClick={onOpenPhases}
+          title="Phase tracker"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+        >
+          <ListChecks className="h-3 w-3" />
+          Phases
         </button>
 
         <button

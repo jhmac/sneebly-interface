@@ -1,4 +1,5 @@
 import { type ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'events'
 import type { AgentEvent, SessionUsage } from '../../shared/types'
 import { runStandaloneTurn } from './standalone-turn'
 import { appendEvent, agentEventToSemanticEvents } from './event-stream'
@@ -12,6 +13,9 @@ const abortedSessions = new Set<string>()
 
 // Which projectIds have an active chat turn — read by the daemon's soft lock
 const activeChatProjectIds = new Set<string>()
+
+// Emits 'turn-end' with { projectId, error } when any turn finishes — consumed by phase runner
+export const turnEmitter = new EventEmitter()
 
 export interface TurnMetrics {
   filesTouched: string[]
@@ -141,6 +145,7 @@ export function startTurn(
     }
 
     const metrics: TurnMetrics = { filesTouched: [...filesTouched], linesChanged, wasAborted }
+    turnEmitter.emit('turn-end', { projectId: opts.projectId, error: result.error ?? null })
     onDone(result.claudeCodeSessionId, result.error, metrics)
   }).catch((err: unknown) => {
     activeProcesses.delete(opts.sneeblySessionId)
@@ -160,7 +165,9 @@ export function startTurn(
         })
       } catch { /* ignore — don't crash on usage write failure */ }
     }
-    onDone(null, err instanceof Error ? err.message : String(err), { filesTouched: [], linesChanged: 0, wasAborted })
+    const errMsg = err instanceof Error ? err.message : String(err)
+    turnEmitter.emit('turn-end', { projectId: opts.projectId, error: errMsg })
+    onDone(null, errMsg, { filesTouched: [], linesChanged: 0, wasAborted })
   })
 }
 

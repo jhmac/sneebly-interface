@@ -46,6 +46,20 @@ export default function Composer() {
     el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
   }, [composerText])
 
+  // Phase tracker prefill — fires when user clicks "Build" on a milestone
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { text } = (e as CustomEvent<{ text: string; specPath: string | null }>).detail
+      setComposerText(text)
+      setTimeout(() => {
+        const el = textareaRef.current
+        if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length }
+      }, 50)
+    }
+    window.addEventListener('sneebly:prefill-chat', handler)
+    return () => window.removeEventListener('sneebly:prefill-chat', handler)
+  }, [])
+
   // Load project files once for @-picker
   useEffect(() => {
     if (!activeProject) return
