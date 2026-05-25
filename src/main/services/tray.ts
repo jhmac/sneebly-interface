@@ -21,7 +21,7 @@ function rebuildMenu(): void {
     : 'Daemon: Idle'
 
   const menu = Menu.buildFromTemplate([
-    { label: 'Sneebly Interface', enabled: false },
+    { label: 'Sneebly', enabled: false },
     { label, enabled: false },
     { type: 'separator' },
     {
@@ -38,7 +38,7 @@ function rebuildMenu(): void {
     { label: 'Quit Sneebly', click: () => app.quit() },
   ])
   tray.setContextMenu(menu)
-  tray.setToolTip(`Sneebly Interface — ${label}`)
+  tray.setToolTip(`Sneebly — ${label}`)
 }
 
 export function setupTray(): void {

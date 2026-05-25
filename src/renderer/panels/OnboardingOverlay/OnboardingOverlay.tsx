@@ -57,7 +57,7 @@ export default function OnboardingOverlay({ onDismiss }: Props) {
           <div className="mb-2 flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-emerald-400" />
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-              Welcome to Sneebly Interface
+              Welcome to Sneebly
             </span>
           </div>
           <p className="text-[11px] text-zinc-600">Step {step + 1} of {STEPS.length}</p>

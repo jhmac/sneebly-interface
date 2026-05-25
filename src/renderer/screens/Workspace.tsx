@@ -254,7 +254,7 @@ function WorkspaceHeader({
     <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4">
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-zinc-200">
-          {projectName ?? 'Sneebly Interface'}
+          {projectName ?? 'Sneebly'}
         </span>
         {branch && (
           <button

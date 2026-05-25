@@ -191,7 +191,7 @@ export async function runCycle(
     }
 
     // 11. Auto-commit
-    const commitMsg = `sneebly: ${plan.constraint}\n\n${plan.reason}\n\nSneebly Interface cycle ${cycleId}`
+    const commitMsg = `sneebly: ${plan.constraint}\n\n${plan.reason}\n\nSneebly cycle ${cycleId}`
     logUI('Committing…')
     await git.add(['-A'])
     await git.commit(commitMsg)

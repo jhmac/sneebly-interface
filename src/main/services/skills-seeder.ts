@@ -31,7 +31,7 @@ Read \`GOALS.md\` for the project roadmap and \`CONTEXT.md\` for the domain glos
 
 ## Available skills
 
-This project ships with Matt Pocock's engineering skill set under \`.claude/skills/\`. All skills are project-scoped and available via the \`/skills\` command in Claude Code, or selectable from the Skills dropdown in Sneebly Interface.
+This project ships with Matt Pocock's engineering skill set under \`.claude/skills/\`. All skills are project-scoped and available via the \`/skills\` command in Claude Code, or selectable from the Skills dropdown in Sneebly.
 
 **Plan / strategy:** grill-with-docs, to-prd, to-issues, triage, setup-matt-pocock-skills
 **Build / change:** tdd, prototype
@@ -62,7 +62,7 @@ Fix minor issues silently. For significant issues, fix and briefly explain.
 
 export async function seedSkillsIntoProject(projectPath: string): Promise<SkillSeedResult> {
   if (resolve(projectPath) === resolve(app.getAppPath())) {
-    console.warn('[skills-seeder] refusing to seed Sneebly Interface checkout into itself')
+    console.warn('[skills-seeder] refusing to seed Sneebly checkout into itself')
     return { copied: [], skipped: [] }
   }
 
