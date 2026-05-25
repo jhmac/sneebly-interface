@@ -3,15 +3,85 @@ import Store from 'electron-store'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { ChatMessage, ModelName } from '../../shared/types'
 import * as sessionStore from '../services/session-store'
-import { startTurn } from '../services/agent-session'
+import { startTurn, type TurnMetrics } from '../services/agent-session'
 import { pushAgentEvent } from './agent'
 import { sendToProjectWindows } from '../services/window-registry'
 import { appendEvent, CORRECTION_RE } from '../services/event-stream'
+import { getSkillPrompt } from '../services/skills-loader'
 
 const store = new Store()
 
 function pushMessage(sessionId: string, message: ChatMessage, projectId: string): void {
   sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, message)
+}
+
+function maybeRunAutoReview(opts: {
+  projectPath: string
+  sessionId: string
+  projectId: string
+  model: string
+  recordEvents: boolean
+  metrics: TurnMetrics | undefined
+}): void {
+  const { projectPath, sessionId, projectId, model, recordEvents, metrics } = opts
+  const appSettings = store.get('appSettings', {}) as Record<string, unknown>
+  if ((appSettings['autoSelfReview'] as boolean | undefined) === false) return
+
+  const threshFiles = (appSettings['autoSelfReviewThresholdFiles'] as number | undefined) ?? 3
+  const threshLines = (appSettings['autoSelfReviewThresholdLines'] as number | undefined) ?? 100
+  const filesCount = metrics?.filesTouched.length ?? 0
+  const lines = metrics?.linesChanged ?? 0
+  if (filesCount < threshFiles && lines < threshLines) return
+
+  const reviewPrompt = getSkillPrompt('self-review')
+  if (!reviewPrompt) return
+
+  const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
+  let reviewText = ''
+
+  startTurn(
+    {
+      cwd: projectPath,
+      projectId,
+      sneeblySessionId: sessionId,
+      claudeCodeSessionId,
+      prompt: 'Please perform a self-review of the changes you just made.',
+      model: model || 'claude-sonnet-4-6',
+      appendSystemPrompt: reviewPrompt,
+      recordEvents,
+      isAutoReview: true,
+    },
+    (event) => {
+      if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
+        store.set(`claudeSessionIds.${sessionId}`, event.session_id)
+      }
+      if (event.type === 'assistant') {
+        for (const block of event.message.content) {
+          if (block.type === 'text') reviewText += block.text
+        }
+      }
+      pushAgentEvent(event, projectId)
+    },
+    (reviewClaudeSessionId, reviewError) => {
+      if (reviewClaudeSessionId) {
+        store.set(`claudeSessionIds.${sessionId}`, reviewClaudeSessionId)
+      }
+      if (reviewError) {
+        pushAgentEvent({ type: 'error', message: reviewError }, projectId)
+        return
+      }
+      if (reviewText.trim()) {
+        const reviewMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: reviewText.trim(),
+          ts: Date.now(),
+        }
+        sessionStore.appendMessage(projectPath, sessionId, reviewMsg)
+        pushMessage(sessionId, reviewMsg, projectId)
+      }
+    }
+  )
 }
 
 export function registerChatHandlers(): void {
@@ -115,7 +185,7 @@ export function registerChatHandlers(): void {
 
           pushAgentEvent(event, projectId)
         },
-        (claudeSessionId, error) => {
+        (claudeSessionId, error, metrics) => {
           // Persist the discovered Claude session ID in case it wasn't in system_init
           if (claudeSessionId) {
             store.set(`claudeSessionIds.${sessionId}`, claudeSessionId)
@@ -144,6 +214,11 @@ export function registerChatHandlers(): void {
             }
             sessionStore.appendMessage(projectPath, sessionId, errMsg)
             pushMessage(sessionId, errMsg, projectId)
+          }
+
+          // Auto-review if thresholds crossed on a successful non-error turn
+          if (!error) {
+            maybeRunAutoReview({ projectPath, sessionId, projectId, model, recordEvents, metrics })
           }
         }
       )

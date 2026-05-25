@@ -12,6 +12,11 @@ const abortedSessions = new Set<string>()
 // Which projectIds have an active chat turn — read by the daemon's soft lock
 const activeChatProjectIds = new Set<string>()
 
+export interface TurnMetrics {
+  filesTouched: string[]
+  linesChanged: number
+}
+
 export interface TurnOpts {
   cwd: string
   projectId: string
@@ -21,15 +26,18 @@ export interface TurnOpts {
   model: string
   appendSystemPrompt?: string
   recordEvents?: boolean
+  isAutoReview?: boolean
 }
 
 export function startTurn(
   opts: TurnOpts,
   onEvent: (event: AgentEvent) => void,
-  onDone: (claudeSessionId: string | null, error?: string) => void
+  onDone: (claudeSessionId: string | null, error?: string | undefined, metrics?: TurnMetrics) => void
 ): void {
   activeChatProjectIds.add(opts.projectId)
   let sawTurnEnd = false
+  const filesTouched = new Set<string>()
+  let linesChanged = 0
 
   runStandaloneTurn({
     cwd: opts.cwd,
@@ -45,6 +53,32 @@ export function startTurn(
     onEvent: (event) => {
       const richEvent = { ...event, source: 'chat' } as AgentEvent
       onEvent(richEvent)
+
+      // Track file edits for auto-review threshold
+      if (!opts.isAutoReview && richEvent.type === 'assistant') {
+        for (const block of richEvent.message.content) {
+          if (block.type !== 'tool_use') continue
+          const input = block.input
+          if (block.name === 'Edit' || block.name === 'Write') {
+            const fp = (input['file_path'] ?? input['path']) as string | undefined
+            if (fp) filesTouched.add(fp)
+            if (block.name === 'Edit') {
+              linesChanged += ((input['old_string'] as string) ?? '').split('\n').length
+              linesChanged += ((input['new_string'] as string) ?? '').split('\n').length
+            } else {
+              linesChanged += ((input['content'] as string) ?? '').split('\n').length
+            }
+          } else if (block.name === 'MultiEdit') {
+            const fp = (input['file_path'] ?? input['path']) as string | undefined
+            if (fp) filesTouched.add(fp)
+            const edits = (input['edits'] as Array<{ old_string: string; new_string: string }>) ?? []
+            for (const edit of edits) {
+              linesChanged += (edit.old_string ?? '').split('\n').length
+              linesChanged += (edit.new_string ?? '').split('\n').length
+            }
+          }
+        }
+      }
 
       if (opts.recordEvents) {
         const semantic = agentEventToSemanticEvents(
@@ -80,7 +114,8 @@ export function startTurn(
     }
     abortedSessions.delete(opts.sneeblySessionId)
 
-    onDone(result.claudeCodeSessionId, result.error)
+    const metrics: TurnMetrics = { filesTouched: [...filesTouched], linesChanged }
+    onDone(result.claudeCodeSessionId, result.error, metrics)
   }).catch((err: unknown) => {
     activeProcesses.delete(opts.sneeblySessionId)
     activeChatProjectIds.delete(opts.projectId)

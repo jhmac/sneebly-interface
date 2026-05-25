@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Plus } from 'lucide-react'
 import { useChatStore } from '../../state/chatStore'
+import { useSettingsStore } from '../../state/settingsStore'
 import type { ModelName, SessionSummary } from '../../../shared/types'
 import { timeAgo } from '../../../shared/utils'
 import MessageList from './MessageList'
@@ -13,7 +14,7 @@ const MODELS: { id: ModelName; label: string }[] = [
   { id: 'claude-haiku-4-5',  label: 'Haiku 4.5'  },
 ]
 
-export default function ChatPanel() {
+export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const { messages, pastSessions, defaultModel, pendingSend, switchModel, createNewSession, switchSession } = useChatStore()
 
   return (
@@ -24,6 +25,7 @@ export default function ChatPanel() {
         pastSessions={pastSessions}
         onNewSession={createNewSession}
         onSwitchSession={switchSession}
+        onOpenSettings={onOpenSettings}
       />
       <MessageList messages={messages} pendingSend={pendingSend} />
       <Composer />
@@ -37,17 +39,20 @@ function ChatHeader({
   pastSessions,
   onNewSession,
   onSwitchSession,
+  onOpenSettings,
 }: {
   model: ModelName
   onModelChange: (m: ModelName) => void
   pastSessions: SessionSummary[]
   onNewSession: () => void
   onSwitchSession: (id: string) => void
+  onOpenSettings?: () => void
 }) {
   const [modelOpen, setModelOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const modelRef = useRef<HTMLDivElement>(null)
   const sessionsRef = useRef<HTMLDivElement>(null)
+  const autoSelfReview = useSettingsStore((s) => s.settings?.autoSelfReview ?? true)
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -93,6 +98,15 @@ function ChatHeader({
 
       {/* Right side */}
       <div className="flex items-center gap-1">
+        {autoSelfReview && (
+          <button
+            onClick={onOpenSettings}
+            title="Auto-review is on — click to configure"
+            className="rounded-md px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-indigo-950/60 hover:bg-indigo-900/60 transition-colors"
+          >
+            Review
+          </button>
+        )}
         <SkillSelector />
         <button
           onClick={onNewSession}

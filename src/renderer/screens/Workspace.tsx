@@ -154,7 +154,7 @@ export default function Workspace() {
               className="h-full"
             >
               <Panel id="chat" defaultSize={50} minSize={20}>
-                <ChatPanel />
+                <ChatPanel onOpenSettings={() => setSettingsOpen(true)} />
               </Panel>
               <ResizeHandle orientation="vertical" />
               <Panel id="activity" defaultSize={50} minSize={20}>

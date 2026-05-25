@@ -324,6 +324,9 @@ export interface AppSettings {
   mcpServers: Array<{ name: string; command: string; args: string[] }>
   recordEventStream: boolean
   runNightlyReflections: boolean
+  autoSelfReview: boolean
+  autoSelfReviewThresholdFiles: number
+  autoSelfReviewThresholdLines: number
 }
 
 export interface ElectronAPI {

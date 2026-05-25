@@ -16,6 +16,7 @@ import { useGitHubStore } from './state/githubStore'
 import { useGitStatusStore } from './state/gitStatusStore'
 import GoalsWizardModal from './panels/GoalsWizard/GoalsWizardModal'
 import { loadSkills } from './skills'
+import { useSettingsStore } from './state/settingsStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -33,6 +34,7 @@ export default function App() {
       if (!done) setShowOnboarding(true)
     })
     loadSkills().catch(console.error)
+    useSettingsStore.getState().load().catch(console.error)
   }, [])
 
   // ── GitHub auth status check ───────────────────────────────────────────

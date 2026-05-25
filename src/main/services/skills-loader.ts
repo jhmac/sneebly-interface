@@ -15,6 +15,7 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'triage':                       'Triage Issues',
   'grill-with-docs':              'Grill + Build Docs',
   'setup-matt-pocock-skills':     'Setup Skills',
+  'self-review':                  'Self-Review',
 }
 
 // Category is a Sneebly UX concern — not stored in the skill files themselves
@@ -24,6 +25,7 @@ const SKILL_CATEGORIES: Record<string, Skill['category']> = {
   'prototype':                     'build',
   'zoom-out':                      'review',
   'improve-codebase-architecture': 'review',
+  'self-review':                   'review',
   'to-prd':                        'plan',
   'to-issues':                     'plan',
   'triage':                        'plan',
@@ -58,6 +60,15 @@ function parseFrontmatter(content: string): { description: string; body: string 
   }
 
   return { description, body }
+}
+
+export function getSkillPrompt(id: string): string | null {
+  const skillsRoot = join(app.getAppPath(), '.claude', 'skills')
+  const skillFile = join(skillsRoot, id, 'SKILL.md')
+  if (!existsSync(skillFile)) return null
+  const content = readFileSync(skillFile, 'utf-8')
+  const { body } = parseFrontmatter(content)
+  return body || null
 }
 
 export function listInstalledSkills(): Skill[] {

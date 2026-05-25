@@ -7,6 +7,7 @@ import type { GitHubUser } from '../../../shared/types'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectStore } from '../../state/projectStore'
+import { useSettingsStore } from '../../state/settingsStore'
 
 interface Props {
   open: boolean
@@ -52,6 +53,7 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
     if (!settings) return
     const next = { ...settings, ...patch }
     setSettings(next)
+    useSettingsStore.getState().patch(patch)
     setSaving(true)
     await window.api.settingsSet(patch)
     setSaving(false)
@@ -202,6 +204,40 @@ function SettingsPanelInner({ onClose }: { onClose: () => void }) {
               onChange={(v) => handleSave({ runNightlyReflections: v })}
             />
           </Row>
+          <Row label="Auto-review big changes before declaring done" description="Automatically runs the Self-Review skill after turns that touch many files or lines.">
+            <Toggle
+              value={settings.autoSelfReview ?? true}
+              onChange={(v) => handleSave({ autoSelfReview: v })}
+            />
+          </Row>
+          {(settings.autoSelfReview ?? true) && (
+            <Row label="Review threshold" description="Trigger review when files touched or lines changed meets either limit.">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={settings.autoSelfReviewThresholdFiles ?? 3}
+                    onChange={(e) => handleSave({ autoSelfReviewThresholdFiles: Math.max(1, Number(e.target.value)) })}
+                    className="w-14 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+                  />
+                  files
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                  <input
+                    type="number"
+                    min={1}
+                    max={2000}
+                    value={settings.autoSelfReviewThresholdLines ?? 100}
+                    onChange={(e) => handleSave({ autoSelfReviewThresholdLines: Math.max(1, Number(e.target.value)) })}
+                    className="w-16 rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+                  />
+                  lines
+                </label>
+              </div>
+            </Row>
+          )}
           {activeProject && (
             <Row label="Delete all events and reflections" description="Wipes all stored events and reflection files for the current project.">
               <button

@@ -14,6 +14,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   mcpServers: [],
   recordEventStream: true,
   runNightlyReflections: true,
+  autoSelfReview: true,
+  autoSelfReviewThresholdFiles: 3,
+  autoSelfReviewThresholdLines: 100,
 }
 
 export function registerSettingsHandlers(): void {

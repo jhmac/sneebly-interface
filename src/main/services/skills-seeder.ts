@@ -39,6 +39,19 @@ This project ships with Matt Pocock's engineering skill set under \`.claude/skil
 
 See each skill's \`SKILL.md\` for full discipline. Reach for \`diagnose\` on hard bugs; \`improve-codebase-architecture\` between phases; \`grill-with-docs\` before non-trivial changes to stress-test against the project's language.
 
+## Self-review discipline
+
+After any non-trivial change, apply the **self-review** skill before declaring the task done. The six lenses to run through:
+
+1. **Stale references** — any calls to functions, types, or variables that no longer exist or were renamed?
+2. **Dead code** — unreachable branches, unused imports, commented-out code, orphaned helpers?
+3. **Edge cases** — inputs, states, or race conditions the new code doesn't handle?
+4. **Error paths** — new async calls with error handling? New IPC handlers defensively coded?
+5. **Type / lint hygiene** — obvious \`any\` casts, missing return types, implicit conversions?
+6. **Consistency** — does the new code match naming, indentation, comment style, and abstraction level of the surrounding file?
+
+Fix minor issues silently. For significant issues, fix and briefly explain.
+
 ## Conventions
 
 - Don't add new top-level dependencies without naming them first.
