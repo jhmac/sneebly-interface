@@ -10,6 +10,7 @@ import {
   computeChecksums,
   verifyChecksums,
   saveChecksums,
+  normalizeRoadmapBullet,
 } from '../../src/main/services/cycle/identity'
 
 const FLOW_COMMERCE_GOALS = '/Users/mister/Sneebly-V3/projects/Flow-Commerce/artifacts/GOALS.md'
@@ -152,5 +153,122 @@ describe('identity — checksums', () => {
     expect(c1).toEqual(c2)
     expect(Object.keys(c1)).toHaveLength(5)
     expect(c1['SOUL.md']).toMatch(/^[a-f0-9]{64}$/)
+  })
+})
+
+describe('identity — normalizeRoadmapBullet', () => {
+  const none = new Set<string>()
+
+  it('passes canonical bullets through unchanged', () => {
+    expect(normalizeRoadmapBullet('- [x] Feature foo', none)).toBe('- [x] Feature foo')
+    expect(normalizeRoadmapBullet('- [ ] Feature bar', none)).toBe('- [ ] Feature bar')
+  })
+
+  it('normalizes "*", bare "-", "+", and "1." bullets, defaulting to done', () => {
+    expect(normalizeRoadmapBullet('* Authentication', none)).toBe('- [x] Authentication')
+    expect(normalizeRoadmapBullet('- Authentication', none)).toBe('- [x] Authentication')
+    expect(normalizeRoadmapBullet('+ Authentication', none)).toBe('- [x] Authentication')
+    expect(normalizeRoadmapBullet('1. Authentication', none)).toBe('- [x] Authentication')
+  })
+
+  it('marks "(partial:)" and "(not started)" bullets unchecked', () => {
+    expect(normalizeRoadmapBullet('* Profiles (partial: no avatar)', none)).toBe('- [ ] Profiles (partial: no avatar)')
+    expect(normalizeRoadmapBullet('* RAG search (not started)', none)).toBe('- [ ] RAG search (not started)')
+  })
+
+  it('marks features with a Key Features entry unchecked (primary signal)', () => {
+    const kf = new Set(['rag semantic search'])
+    expect(normalizeRoadmapBullet('* RAG semantic search — pgvector search', kf)).toBe('- [ ] RAG semantic search — pgvector search')
+    expect(normalizeRoadmapBullet('* User auth — Clerk', kf)).toBe('- [x] User auth — Clerk')
+  })
+
+  it('leaves non-bullet lines untouched', () => {
+    expect(normalizeRoadmapBullet('Some prose paragraph', none)).toBe('Some prose paragraph')
+    expect(normalizeRoadmapBullet('### Phase 1: Core', none)).toBe('### Phase 1: Core')
+    expect(normalizeRoadmapBullet('', none)).toBe('')
+  })
+})
+
+describe('identity — parseGoals tolerates non-canonical bullets', () => {
+  it('parses a Replit-style GOALS.md with "*" bullets into milestones', () => {
+    const content = `# Taime
+
+## Mission
+
+Taime is a retail ops platform.
+
+## Roadmap
+
+Phases ship in order.
+
+### Phase 1: Core Operations
+
+* Authentication and RBAC — Clerk OAuth, role-based access
+* Employee profiles — HR metadata, documents
+* Payroll export — presets UI done (partial: CSV byte stream not produced)
+
+### Phase 2: AI Intelligence Layer
+
+* AI auto-scheduling — Claude-powered schedule generation
+* SOP Evolution System — AI revision proposals (not started)
+`
+    const goals = parseGoals(content)
+    expect(goals.mission).toContain('retail ops platform')
+    expect(goals.phases.length).toBe(2)
+    const all = goals.phases.flatMap((p) => p.milestones)
+    expect(all.length).toBe(5)
+    const byText = (t: string) => all.find((m) => m.text.startsWith(t))!
+    expect(byText('Authentication and RBAC').checked).toBe(true)
+    expect(byText('AI auto-scheduling').checked).toBe(true)
+    expect(byText('Payroll export').checked).toBe(false)       // (partial:)
+    expect(byText('SOP Evolution System').checked).toBe(false) // (not started)
+  })
+
+  it('uses Key Features entries to mark checkbox-less bullets unchecked', () => {
+    const content = `# App
+
+## Mission
+
+An app.
+
+## Key Features
+
+### RAG semantic search
+
+Search SOPs with embeddings. Not started — no code yet.
+
+## Roadmap
+
+### Phase 1: Core
+
+* User authentication — Clerk
+* RAG semantic search — pgvector embeddings
+`
+    const goals = parseGoals(content)
+    const all = goals.phases.flatMap((p) => p.milestones)
+    expect(all.find((m) => m.text.startsWith('User authentication'))!.checked).toBe(true)
+    expect(all.find((m) => m.text.startsWith('RAG semantic search'))!.checked).toBe(false)
+  })
+
+  it('still parses canonical "- [x]"/"- [ ]" bullets unchanged (no regression)', () => {
+    const content = `# NYOUS
+
+## Mission
+
+A news app.
+
+## Roadmap
+
+### Phase 1: Core Loop
+
+- [x] Clerk auth
+- [x] Phone verification
+- [ ] Full-screen feed card
+`
+    const goals = parseGoals(content)
+    const all = goals.phases.flatMap((p) => p.milestones)
+    expect(all.length).toBe(3)
+    expect(all.filter((m) => m.checked).length).toBe(2)
+    expect(all.find((m) => m.text === 'Full-screen feed card')!.checked).toBe(false)
   })
 })

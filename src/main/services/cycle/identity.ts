@@ -130,12 +130,16 @@ export function parseGoals(content: string): GoalsMd {
   const phases: GoalsPhase[] = []
   const openQuestions: string[] = []
 
-  type Section = 'none' | 'mission' | 'techStack' | 'roadmap' | 'openQuestions' | 'other'
+  type Section = 'none' | 'mission' | 'techStack' | 'roadmap' | 'openQuestions' | 'keyFeatures' | 'other'
   type PhaseSection = 'none' | 'behaviors' | 'milestones'
   let section: Section = 'none'
   let phaseSection: PhaseSection = 'none'
   let currentPhase: GoalsPhase | null = null
   const missionLines: string[] = []
+  // "### " entries under "## Key Features" — the import meta-prompt requires a detail
+  // entry there ONLY for unfinished features, so this is the reliable done/not-done signal
+  // when a bullet lacks a checkbox. Lowercased feature names.
+  const keyFeatureNames = new Set<string>()
 
   function pushCurrentPhase() {
     if (currentPhase) phases.push(currentPhase)
@@ -158,8 +162,18 @@ export function parseGoals(content: string): GoalsMd {
       if (heading === 'mission') section = 'mission'
       else if (heading === 'tech stack') section = 'techStack'
       else if (heading === 'roadmap') section = 'roadmap'
+      else if (heading === 'key features') section = 'keyFeatures'
       else if (heading === 'open questions') section = 'openQuestions'
       else section = 'other'
+      continue
+    }
+
+    // Collect "### Feature" names under "## Key Features" (used to mark unfinished
+    // features when a Roadmap bullet has no checkbox). Key Features precedes Roadmap
+    // in the canonical format, so these are populated before the Roadmap is parsed.
+    if (section === 'keyFeatures' && trimmed.startsWith('### ')) {
+      const name = trimmed.slice(4).trim().toLowerCase()
+      if (name) keyFeatureNames.add(name)
       continue
     }
 
@@ -179,13 +193,16 @@ export function parseGoals(content: string): GoalsMd {
     if (section === 'roadmap' && currentPhase) {
       if (trimmed.match(/^\*\*Behaviors introduced\*\*:?/i)) { phaseSection = 'behaviors'; continue }
       if (trimmed.match(/^\*\*Milestones\*\*:?/i)) { phaseSection = 'milestones'; continue }
-      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        const bullet = trimmed.slice(2)
-        if (phaseSection === 'behaviors') currentPhase.behaviors.push(bullet.trim())
-        else {
-          const m = parseMilestone(bullet)
+      // Any bullet style: "-", "*", "+", or "1."
+      if (/^(?:[-*+]|\d+\.)\s+/.test(trimmed)) {
+        if (phaseSection === 'behaviors') {
+          currentPhase.behaviors.push(trimmed.replace(/^(?:[-*+]|\d+\.)\s+/, '').trim())
+        } else {
+          // Normalize non-canonical bullets ("* Foo", bare "- Foo", "1. Foo") to
+          // "- [x]/[ ] Foo" so parseMilestone can read them; canonical lines pass through.
+          const norm = normalizeRoadmapBullet(trimmed, keyFeatureNames)
+          const m = parseMilestone(norm.replace(/^- /, ''))
           if (m) currentPhase.milestones.push(m)
-          else if (phaseSection === 'none') { /* non-milestone bullet outside section — ignore */ }
         }
         continue
       }
@@ -248,4 +265,30 @@ function parseMilestone(bullet: string): GoalsMilestone | null {
   const unchecked = bullet.match(/^\[ \]\s+(.+)$/)
   if (unchecked) return { text: unchecked[1]!.trim(), checked: false }
   return null
+}
+
+/**
+ * Tolerate non-canonical Roadmap bullet styles from external AI tools (Replit Agent,
+ * Cursor, Lovable). Sneebly's canonical form is "- [x] Feature" / "- [ ] Feature", but
+ * tools frequently emit "* Feature", bare "- Feature", "+ Feature", or "1. Feature" even
+ * when the prompt forbids it. This rewrites those to canonical so parseMilestone reads
+ * them; already-canonical lines and non-bullet lines pass through unchanged. The on-disk
+ * GOALS.md is never modified — this is in-parse normalization only.
+ *
+ * done vs not-done, in priority order:
+ *   1. line says "(partial:" or "(not started)" -> unchecked
+ *   2. feature name has a "### " entry under "## Key Features" -> unchecked
+ *      (the import meta-prompt requires a detail entry ONLY for unfinished features)
+ *   3. otherwise -> checked (done) — a feature with no incompleteness signal is treated
+ *      as shipped, matching the meta-prompt where done features are terse one-liners.
+ */
+export function normalizeRoadmapBullet(line: string, keyFeatureNames: Set<string>): string {
+  if (/^- \[[ xX]\]\s+/.test(line)) return line // already canonical
+  const m = line.match(/^(?:[-*+]|\d+\.)\s+(.+)$/)
+  if (!m) return line // not a bullet — leave alone
+  const content = m[1]!
+  const featureName = content.split(/\s[—–-]\s/)[0]!.trim().toLowerCase()
+  const unfinished =
+    /\(partial:|\(not started\)/i.test(content) || keyFeatureNames.has(featureName)
+  return `- ${unfinished ? '[ ]' : '[x]'} ${content}`
 }
