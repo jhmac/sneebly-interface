@@ -272,3 +272,74 @@ A news app.
     expect(all.find((m) => m.text === 'Full-screen feed card')!.checked).toBe(false)
   })
 })
+
+// Locks the contract the new-project Goals Wizard generation prompt must satisfy:
+// a freshly generated GOALS.md (every feature "- [ ]") parses into phases with all
+// milestones unchecked, mission populated, Key Features prose ignored by the parser.
+describe('identity — new-project canonical GOALS.md (Goals Wizard output shape)', () => {
+  const content = `# Receipt Vault
+
+## Mission
+
+Receipt Vault helps small-business owners and bookkeepers capture, organize, and
+tax-classify receipts. Owners scan or email receipts; AI extracts the details and
+suggests QuickBooks-compatible categories.
+
+## Tech Stack
+
+To be filled after Replit build — paste the Stack Report here.
+
+## Key Features
+
+### Authentication and multi-user accounts
+
+Email/password auth with owner, bookkeeper, and employee roles. Owners invite
+teammates; role gates what each can see and edit.
+
+### Camera-based receipt scanner
+
+Capture or upload a photo of a receipt; the image is stored securely and queued
+for AI extraction.
+
+### AI receipt extraction
+
+Pulls vendor, date, total, tax, and line items from the receipt image.
+
+## Roadmap
+
+Phases ship MVP first, then advanced features.
+
+### Phase 1: Foundation & Receipt Capture
+
+- [ ] Authentication and multi-user accounts — email/password auth with owner/bookkeeper/employee roles
+- [ ] Camera-based receipt scanner — capture or upload photo, secure storage
+- [ ] AI receipt extraction — vendor, date, total, tax, line items
+
+### Phase 2: Email Auto-Import (IMAP)
+
+- [ ] IMAP account connection — single account per user, secure credentials
+- [ ] Scheduled pull — on demand or scheduled, attachment + inline content
+`
+
+  it('populates mission and parses both phases', () => {
+    const goals = parseGoals(content)
+    expect(goals.mission).toContain('Receipt Vault helps small-business owners')
+    expect(goals.phases.length).toBe(2)
+    expect(goals.phases[0]!.name).toBe('Foundation & Receipt Capture')
+    expect(goals.phases[1]!.name).toBe('Email Auto-Import (IMAP)')
+  })
+
+  it('parses every feature as an unchecked milestone (nothing built yet)', () => {
+    const goals = parseGoals(content)
+    const all = goals.phases.flatMap((p) => p.milestones)
+    expect(all.length).toBe(5)
+    expect(all.every((m) => m.checked === false)).toBe(true)
+    expect(all[0]!.text).toBe('Authentication and multi-user accounts — email/password auth with owner/bookkeeper/employee roles')
+  })
+
+  it('does not leak Key Features "### " entries into the roadmap as phases', () => {
+    const goals = parseGoals(content)
+    // Three "### " feature entries under Key Features must NOT become phases.
+    expect(goals.phases.length).toBe(2)
+  })
+})

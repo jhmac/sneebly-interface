@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { X, Copy, Check, Sparkles, ArrowRight, RotateCcw, FilePlus2, FolderInput, RefreshCw } from 'lucide-react'
 import { useGoalsWizardStore } from '../../state/goalsWizardStore'
 import { useProjectStore } from '../../state/projectStore'
-import type { SkillSeedResult } from '../../../shared/types'
 
 // Pasted by the user into their existing AI coding tool (Replit Agent, Cursor,
 // Lovable, Claude Code). Emits GOALS.md in Sneebly's canonical format — the same
@@ -569,42 +568,10 @@ function GeneratingStage() {
 
 function OutputStage() {
   const { goalsMd, buildPrompt, contextMd, setStage } = useGoalsWizardStore()
-  const { activeProjectId, projects } = useProjectStore()
-  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
 
   const [goalsCopied, copyGoals] = useCopy(goalsMd)
   const [promptCopied, copyPrompt] = useCopy(buildPrompt)
   const [contextCopied, copyContext] = useCopy(contextMd)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [seedResult, setSeedResult] = useState<SkillSeedResult | null>(null)
-  const [seedError, setSeedError] = useState<string | null>(null)
-
-  async function handleSave() {
-    if (!activeProjectId || saving) return
-    setSaving(true)
-    setSaveError(null)
-    setSeedResult(null)
-    setSeedError(null)
-    try {
-      await window.api.goalsWrite(activeProjectId, goalsMd)
-      if (contextMd) await window.api.goalsWriteContext(activeProjectId, contextMd)
-      setSaved(true)
-      // Seeding is a bonus — failure does NOT roll back the save
-      try {
-        const result = await window.api.skillsSeedIntoProject(activeProjectId)
-        setSeedResult(result)
-      } catch (e) {
-        console.error('[GoalsWizard] skill seeding failed:', e)
-        setSeedError(e instanceof Error ? e.message : String(e))
-      }
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <div className="flex h-full flex-col">
@@ -646,39 +613,10 @@ function OutputStage() {
             Update with Stack Report
           </button>
         </div>
-        <div className="flex items-center gap-3">
-          {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-          {!activeProject ? (
-            <p className="text-xs text-zinc-600">
-              Open a project to save docs there
-            </p>
-          ) : saved ? (
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="flex items-center gap-1.5 text-xs text-green-400">
-                <Check className="h-3.5 w-3.5" />
-                Saved to {activeProject.name}
-              </span>
-              {seedResult && seedResult.copied.length + seedResult.skipped.length > 0 && (
-                <span className="text-[11px] text-zinc-500">
-                  {seedResult.copied.length === 0
-                    ? 'Skills already present'
-                    : `Seeded ${seedResult.copied.length} skill${seedResult.copied.length !== 1 ? 's' : ''}${seedResult.skipped.length > 0 ? ` (${seedResult.skipped.length} already present)` : ''}`}
-                </span>
-              )}
-              {seedError && (
-                <span className="text-[11px] text-amber-600">Could not seed skills</span>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-md bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-500 disabled:opacity-50 transition-colors"
-            >
-              {saving ? 'Saving…' : `Save to ${activeProject.name}`}
-            </button>
-          )}
-        </div>
+        <p className="max-w-md text-right text-xs text-zinc-500">
+          Copy these into Replit (or your AI tool), build, push to GitHub — then use{' '}
+          <span className="text-zinc-300">Import existing project</span> to bring it into Sneebly.
+        </p>
       </div>
     </div>
   )

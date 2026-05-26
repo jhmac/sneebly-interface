@@ -70,28 +70,51 @@ ${ideaSeed}
 INTERVIEW TRANSCRIPT:
 ${history}
 
+## CRITICAL FORMAT RULE (read this first, twice)
+
+In the GOALS.md "## Roadmap" section, every feature bullet MUST start with "- [ ] " — a dash, a space, an open bracket, a SPACE, a close bracket, a space. Sneebly's parser silently drops any line that doesn't match this exact pattern, and an empty roadmap means the whole build is wasted. This is a brand-new project: nothing is built yet, so EVERY feature is "- [ ] " (not started) — never "- [x] ".
+
+Do NOT use "* Feature", "- Feature" (no checkbox), "1. Feature" (numbered), "### Phase 1 — Foundation" (em-dash), or prose paragraphs with "·" separators. Only "### Phase N: Title" headings and "- [ ] " bullets.
+
 OUTPUT THREE DOCUMENTS in this exact format — no preamble, nothing else:
 
 <GOALS_MD>
-# Mission
+# [App name]
 
-[One paragraph describing the core problem and solution in plain language]
+## Mission
+
+[3-5 sentences: lead with the core user value, then the user roles, then the problem it solves. Plain language for a coding assistant — no marketing fluff.]
 
 ## Tech Stack
 
-[Leave this section with just: "To be filled after Replit build — paste the Stack Report here."]
+To be filled after Replit build — paste the Stack Report here.
 
-## Build Phases
+## Key Features
 
-### Phase 1 — [Name]
+### [Feature name]
 
-[3-8 milestone sentences separated by ·]
+[A full paragraph giving a downstream coding assistant enough to build this feature without re-deriving the product vision: purpose (what it accomplishes, for which user role), primary flow (the main steps the user takes and what the system does), key data/entities (the main records, fields, relationships), and rules/edge cases (validation, permissions, important states, failure handling). One "###" entry per discrete feature.]
 
-### Phase 2 — [Name]
+### [Next feature]
 
-[3-8 milestone sentences separated by ·]
+[...]
 
-[Continue for all phases...]
+[... one "### <Feature name>" entry per discrete feature across all phases ...]
+
+## Roadmap
+
+Phases ship MVP first, then advanced features.
+
+### Phase 1: [Title]
+
+- [ ] [Feature name] — [one-line description]
+- [ ] [Feature name] — [one-line description]
+
+### Phase 2: [Title]
+
+- [ ] [Feature name] — [one-line description]
+
+[... one "### Phase N: Title" per phase, one "- [ ] " bullet per feature ...]
 </GOALS_MD>
 
 <BUILD_PROMPT>
@@ -144,6 +167,20 @@ _Avoid_: [synonyms to not use]
 [Include 5-10 terms that are central to this domain: the main entities, key actions, and any non-obvious vocabulary used in the interview.]
 </CONTEXT_MD>
 
+## Format rules for GOALS.md (critical)
+
+- The first line is "# [App name]" — the app's actual name, NOT the word "Mission". The product description lives under a "## Mission" heading; Sneebly parses the mission from there.
+- EVERY feature in the Roadmap MUST have a matching "### [Feature name]" entry under "## Key Features", using the same feature name in both places. The Key Features paragraph is what Sneebly builds real specs from — make it a full description, never a one-liner.
+- The Roadmap MUST live under a "## Roadmap" heading, with each phase as "### Phase N: [Title]" (a COLON after the number — never an em-dash) and "- [ ] Feature — description" bullets directly under it.
+- Every Roadmap feature is "- [ ] " (not started) — this is a new build, nothing exists yet.
+  - GOOD: "- [ ] User authentication — email/password with owner and staff roles"
+  - BAD:  "* User authentication — ..."        (asterisk bullet; parser ignores it)
+  - BAD:  "- User authentication — ..."        (no [ ] checkbox; parser ignores it)
+  - BAD:  "### Phase 1 — Foundation"           (em-dash; use "### Phase 1: Foundation")
+  - BAD:  a prose paragraph with "·" separators instead of "- [ ] " bullets
+- Feature names short (3-6 words); roadmap descriptions one line. No emoji.
+- Before you close the </GOALS_MD> tag, re-read the Roadmap: every feature line must begin with "- [ ] ", and the number of "- [ ] " bullets must equal the number of "### " entries under "## Key Features". If they don't match, fix it before output.
+
 Generate all three documents now.`
 }
 
@@ -163,7 +200,7 @@ export async function generateGoalsAndPrompt(
     permissionMode: 'bypassPermissions',
     maxTurns: 1,
     allowedTools: [],
-    appendSystemPrompt: `You are the Sneebly App Strategist. Output only the three XML-tagged documents. No preamble.`,
+    appendSystemPrompt: `You are the Sneebly App Strategist. Output only the three XML-tagged documents, no preamble. In GOALS.md, every Roadmap feature MUST be a "- [ ] " checkbox bullet under a "### Phase N: Title" heading inside the "## Roadmap" section — never "*", a bare "-", a numbered list, an em-dash phase heading, or prose. All features are unchecked "- [ ] " (new build).`,
   })
 
   const text = result.assistantText
