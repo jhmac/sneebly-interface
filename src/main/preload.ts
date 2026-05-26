@@ -46,6 +46,7 @@ import type {
   AskSneeblyStartInput,
   ReviewInput,
   ReviewOutput,
+  ReviewFixState,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -405,7 +406,7 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.REVIEW_AGENT_START, opts),
   reviewAgentCancel: (turnId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.REVIEW_AGENT_CANCEL, turnId),
-  reviewAgentRecordAction: (opts: { projectId: string; milestoneId: string; action: string }): Promise<void> =>
+  reviewAgentRecordAction: (opts: { projectId: string; milestoneId: string; action: string; reviewId?: string }): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.REVIEW_AGENT_ACTION, opts),
   reviewAgentOnThinking: (cb: (turnId: string, milestoneId: string, status: string) => void): (() => void) => {
     const h = (_: IpcRendererEvent, turnId: string, milestoneId: string, status: string) => cb(turnId, milestoneId, status)
@@ -416,6 +417,11 @@ const api: ElectronAPI = {
     const h = (_: IpcRendererEvent, turnId: string, milestoneId: string, result?: ReviewOutput, error?: string) => cb(turnId, milestoneId, result, error)
     ipcRenderer.on(IPC_CHANNELS.REVIEW_AGENT_DONE, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.REVIEW_AGENT_DONE, h)
+  },
+  reviewAgentOnFixStateChanged: (cb: (milestoneId: string, state: ReviewFixState) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, milestoneId: string, state: ReviewFixState) => cb(milestoneId, state)
+    ipcRenderer.on(IPC_CHANNELS.REVIEW_AGENT_FIX_STATE_CHANGED, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.REVIEW_AGENT_FIX_STATE_CHANGED, h)
   },
 }
 

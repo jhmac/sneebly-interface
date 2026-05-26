@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ReviewOutput } from '../../../shared/types'
+import type { ReviewOutput, ReviewFixState } from '../../../shared/types'
 
 interface CurrentReview {
   projectId: string
@@ -22,6 +22,8 @@ interface ReviewAgentStore {
   modalOpen: boolean
   reviewsByMilestoneId: Record<string, CachedReview>
   inFlightByMilestoneId: Record<string, boolean>
+  // Fix-tracking chip state. 'cleared' is never stored — it just removes the entry.
+  fixStateByMilestoneId: Record<string, 'fixing' | 'verifying' | 'fixed'>
 
   startReview: (projectId: string, milestoneId: string, milestoneText: string) => Promise<void>
   viewCached: (projectId: string, milestoneId: string, milestoneText: string) => void
@@ -32,6 +34,7 @@ interface ReviewAgentStore {
 
   _onThinking: (turnId: string, milestoneId: string, status: string) => void
   _onDone: (turnId: string, milestoneId: string, result?: ReviewOutput, error?: string) => void
+  _onFixStateChanged: (milestoneId: string, state: ReviewFixState) => void
 }
 
 export const useReviewAgentStore = create<ReviewAgentStore>((set, get) => ({
@@ -39,6 +42,7 @@ export const useReviewAgentStore = create<ReviewAgentStore>((set, get) => ({
   modalOpen: false,
   reviewsByMilestoneId: {},
   inFlightByMilestoneId: {},
+  fixStateByMilestoneId: {},
 
   startReview: async (projectId, milestoneId, milestoneText) => {
     set({
@@ -77,7 +81,7 @@ export const useReviewAgentStore = create<ReviewAgentStore>((set, get) => ({
 
   closeModal: () => set({ modalOpen: false }),
 
-  clearForProject: () => set({ reviewsByMilestoneId: {}, inFlightByMilestoneId: {}, current: null, modalOpen: false }),
+  clearForProject: () => set({ reviewsByMilestoneId: {}, inFlightByMilestoneId: {}, fixStateByMilestoneId: {}, current: null, modalOpen: false }),
 
   _onThinking: (turnId, milestoneId, status) => {
     set((s) => {
@@ -110,6 +114,15 @@ export const useReviewAgentStore = create<ReviewAgentStore>((set, get) => ({
         else current = { ...current, status: 'done', result }
       }
       return { inFlightByMilestoneId: inFlight, reviewsByMilestoneId: reviews, current }
+    })
+  },
+
+  _onFixStateChanged: (milestoneId, state) => {
+    set((s) => {
+      const next = { ...s.fixStateByMilestoneId }
+      if (state === 'cleared') delete next[milestoneId]
+      else next[milestoneId] = state
+      return { fixStateByMilestoneId: next }
     })
   },
 }))

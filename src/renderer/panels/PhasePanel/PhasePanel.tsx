@@ -450,6 +450,7 @@ function MilestoneRow({
   const isRunning = runState.currentMilestoneId === milestone.id && runState.status === 'building'
   const cachedReview = useReviewAgentStore((s) => s.reviewsByMilestoneId[milestone.id])
   const reviewing = useReviewAgentStore((s) => !!s.inFlightByMilestoneId[milestone.id])
+  const fixState = useReviewAgentStore((s) => s.fixStateByMilestoneId[milestone.id])
 
   return (
     <div
@@ -480,19 +481,36 @@ function MilestoneRow({
               <Zap className="h-2.5 w-2.5" /> checkpoint
             </span>
           )}
-          {onReview && reviewing && (
-            <span className="flex items-center gap-1 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-400">
-              <Loader2 className="h-2.5 w-2.5 animate-spin" /> Reviewing…
-            </span>
-          )}
-          {onReview && !reviewing && cachedReview && (
-            <button
-              onClick={() => useReviewAgentStore.getState().viewCached(projectId, milestone.id, milestone.text)}
-              title={`Reviewed ${timeAgo(cachedReview.completedAt)} — click to view`}
-              className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${VERDICT_CHIP[cachedReview.result.verdict]}`}
-            >
-              {VERDICT_LABEL[cachedReview.result.verdict]}
-            </button>
+          {onReview && (
+            fixState === 'verifying' ? (
+              <span className="flex items-center gap-1 rounded-full bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-medium text-indigo-400">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Verifying…
+              </span>
+            ) : fixState === 'fixing' ? (
+              <span className="rounded-full bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-medium text-indigo-400">
+                Fixing…
+              </span>
+            ) : fixState === 'fixed' ? (
+              <button
+                onClick={() => useReviewAgentStore.getState().viewCached(projectId, milestone.id, milestone.text)}
+                title="Fix verified — click to view the review"
+                className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400 hover:bg-emerald-500/25"
+              >
+                <CheckCircle2 className="h-2.5 w-2.5" /> Fixed
+              </button>
+            ) : reviewing ? (
+              <span className="flex items-center gap-1 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-400">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Reviewing…
+              </span>
+            ) : cachedReview ? (
+              <button
+                onClick={() => useReviewAgentStore.getState().viewCached(projectId, milestone.id, milestone.text)}
+                title={`Reviewed ${timeAgo(cachedReview.completedAt)} — click to view`}
+                className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${VERDICT_CHIP[cachedReview.result.verdict]}`}
+              >
+                {VERDICT_LABEL[cachedReview.result.verdict]}
+              </button>
+            ) : null
           )}
         </div>
 

@@ -124,4 +124,5 @@ export const IPC_CHANNELS = {
   REVIEW_AGENT_THINKING: 'reviewAgent:thinking',
   REVIEW_AGENT_DONE: 'reviewAgent:done',
   REVIEW_AGENT_ACTION: 'reviewAgent:action',
+  REVIEW_AGENT_FIX_STATE_CHANGED: 'reviewAgent:fix-state-changed',
 } as const

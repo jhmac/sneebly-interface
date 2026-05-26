@@ -10,6 +10,7 @@ import { listProjects } from './project-registry'
 import { loadPhasePlan, getMilestoneById } from './phase-tracker'
 import { readEventsForDateRange, appendEvent } from './event-stream'
 import { sendToProjectWindows } from './window-registry'
+import { turnEmitter } from './agent-session'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type {
   AgentEvent,
@@ -18,6 +19,7 @@ import type {
   ModelName,
   ReviewOutput,
   ReviewAction,
+  ReviewFixState,
   SemanticEventKind,
 } from '../../shared/types'
 
@@ -259,16 +261,25 @@ export function startReview(
 // Self-gates on settings, resolves the model, and pushes THINKING/DONE events
 // (with milestoneId so the renderer can key its per-milestone chip). Returns the
 // turnId, or null if the review was skipped (disabled / auto-fire off).
-export function fireReview(projectId: string, milestoneId: string, autoFired: boolean): string | null {
+export function fireReview(
+  projectId: string,
+  milestoneId: string,
+  autoFired: boolean,
+  opts?: { bypassAutoFireGate?: boolean },
+): string | null {
   const settings = settingsStore.get('appSettings', {}) as Partial<AppSettings>
   if (settings.reviewAgentEnabled === false) return null
-  if (autoFired && settings.reviewAgentAutoFire !== true) return null
+  // The auto-fire gate only governs reviews fired automatically after markMilestoneComplete.
+  // Fix-cycle re-reviews are user-initiated (the user pasted the kickoff) and pass the bypass.
+  if (autoFired && !opts?.bypassAutoFireGate && settings.reviewAgentAutoFire !== true) return null
   const model = (settings.reviewAgentModel as ModelName | undefined) ?? 'claude-opus-4-7'
   return startReview(projectId, milestoneId, model, autoFired, {
     onThinking: (turnId, status) =>
       sendToProjectWindows(projectId, IPC_CHANNELS.REVIEW_AGENT_THINKING, turnId, milestoneId, status),
-    onDone: (turnId, result, error) =>
-      sendToProjectWindows(projectId, IPC_CHANNELS.REVIEW_AGENT_DONE, turnId, milestoneId, result, error),
+    onDone: (turnId, result, error) => {
+      sendToProjectWindows(projectId, IPC_CHANNELS.REVIEW_AGENT_DONE, turnId, milestoneId, result, error)
+      void handleReviewDoneForFix(projectId, milestoneId, turnId, result, error)
+    },
   })
 }
 
@@ -338,3 +349,185 @@ export function cancelReview(turnId: string): void {
     setTimeout(() => { try { proc.kill('SIGKILL') } catch { /* gone */ } }, 2000)
   }
 }
+
+// ── Fix-tracking: close the Paste-into-chat → fix → verify loop ───────────────
+//
+// When the user pastes a review's kickoff prompt into chat, we record the project's
+// HEAD and watch for the next chat/phase-runner turn to land commits. New commits
+// trigger an automatic re-review; if it returns 'complete', the loop closed (Fixed),
+// otherwise the chip reverts to the updated verdict. State lives here in main, not the
+// renderer, because the signals (turnEmitter, git log) are main-process.
+
+export interface PendingFix {
+  startedAt: number
+  fromReviewId: string
+  sinceCommit: string
+  // True once a re-review has been fired for this cycle — prevents a second turn-end
+  // from stacking duplicate re-reviews before the first resolves.
+  verifying: boolean
+}
+
+const FIX_TIMEOUT_MS = 30 * 60 * 1000
+const pendingFixByMilestone = new Map<string, PendingFix>()
+
+function fixKey(projectId: string, milestoneId: string): string {
+  return `${projectId}:${milestoneId}`
+}
+
+// ── Pure helpers (unit-tested directly) ──
+
+export function parseCommitHashes(gitLogStdout: string): string[] {
+  const t = gitLogStdout.trim()
+  return t ? t.split('\n').filter(Boolean) : []
+}
+
+export function isFixExpired(startedAt: number, now: number): boolean {
+  return startedAt < now - FIX_TIMEOUT_MS
+}
+
+// The loop closed only when the re-review came back clean. Any other outcome (still
+// partial/broken, or an error) reverts the chip to the cached verdict.
+export function resolveFixOutcome(
+  result: ReviewOutput | undefined,
+  error: string | undefined,
+): 'fixed' | 'cleared' {
+  return !error && result?.verdict === 'complete' ? 'fixed' : 'cleared'
+}
+
+// IO seam so the orchestration is testable without git / electron / a live review.
+export interface FixTrackingDeps {
+  listProjects: typeof listProjects
+  emitFixState: (projectId: string, milestoneId: string, state: ReviewFixState) => void
+  gitRevParseHead: (cwd: string) => Promise<string>
+  gitLogSince: (cwd: string, sinceCommit: string) => Promise<string[]>
+  fireFixReview: (projectId: string, milestoneId: string) => string | null
+  now: () => number
+}
+
+const defaultFixDeps: FixTrackingDeps = {
+  listProjects,
+  emitFixState: (projectId, milestoneId, state) =>
+    sendToProjectWindows(projectId, IPC_CHANNELS.REVIEW_AGENT_FIX_STATE_CHANGED, milestoneId, state),
+  gitRevParseHead: async (cwd) =>
+    (await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd, timeout: 5000 })).stdout.trim(),
+  gitLogSince: async (cwd, sinceCommit) =>
+    parseCommitHashes(
+      (await execFileAsync('git', ['log', `${sinceCommit}..HEAD`, '--format=%H'], { cwd, timeout: 5000 })).stdout,
+    ),
+  fireFixReview: (projectId, milestoneId) => fireReview(projectId, milestoneId, true, { bypassAutoFireGate: true }),
+  now: () => Date.now(),
+}
+
+// Called when the user pastes a kickoff prompt. Records HEAD and shows the "Fixing…" chip.
+export async function beginFixTracking(
+  projectId: string,
+  milestoneId: string,
+  reviewId: string,
+  deps: FixTrackingDeps = defaultFixDeps,
+): Promise<void> {
+  const project = deps.listProjects().find((p) => p.id === projectId)
+  if (!project) return
+  let sinceCommit: string
+  try {
+    sinceCommit = await deps.gitRevParseHead(project.path)
+  } catch {
+    return // not a git repo / git unavailable — can't detect the fix commit
+  }
+  pendingFixByMilestone.set(fixKey(projectId, milestoneId), {
+    startedAt: deps.now(),
+    fromReviewId: reviewId,
+    sinceCommit,
+    verifying: false,
+  })
+  deps.emitFixState(projectId, milestoneId, 'fixing')
+}
+
+// Called on every chat/phase-runner turn-end. For each tracked fix in this project:
+// expire stale entries, and on new commits fire one re-review (showing "Verifying…").
+export async function handleTurnEndForFix(
+  projectId: string,
+  deps: FixTrackingDeps = defaultFixDeps,
+): Promise<void> {
+  const now = deps.now()
+  for (const [key, pendingFix] of [...pendingFixByMilestone.entries()]) {
+    if (!key.startsWith(`${projectId}:`)) continue
+    const milestoneId = key.slice(projectId.length + 1)
+
+    if (isFixExpired(pendingFix.startedAt, now)) {
+      pendingFixByMilestone.delete(key)
+      deps.emitFixState(projectId, milestoneId, 'cleared')
+      continue
+    }
+    if (pendingFix.verifying) continue // a re-review is already running for this cycle
+
+    const project = deps.listProjects().find((p) => p.id === projectId)
+    if (!project) continue
+
+    let commits: string[]
+    try {
+      commits = await deps.gitLogSince(project.path, pendingFix.sinceCommit)
+    } catch {
+      continue // git failed — leave the entry, try again on the next turn
+    }
+    if (commits.length === 0) continue // no fix commit yet
+
+    pendingFix.verifying = true
+    const turnId = deps.fireFixReview(projectId, milestoneId)
+    if (turnId) {
+      deps.emitFixState(projectId, milestoneId, 'verifying')
+    } else {
+      // Review Agent disabled mid-cycle — can't verify; stop tracking.
+      pendingFixByMilestone.delete(key)
+      deps.emitFixState(projectId, milestoneId, 'cleared')
+    }
+  }
+}
+
+// Called from every review's onDone. No-op unless a fix cycle is tracked for this
+// milestone; otherwise transitions to Fixed (and logs the event) or reverts the chip.
+export async function handleReviewDoneForFix(
+  projectId: string,
+  milestoneId: string,
+  turnId: string,
+  result: ReviewOutput | undefined,
+  error: string | undefined,
+  deps: FixTrackingDeps = defaultFixDeps,
+): Promise<void> {
+  const key = fixKey(projectId, milestoneId)
+  const pendingFix = pendingFixByMilestone.get(key)
+  if (!pendingFix) return // not a fix cycle — a normal first-time / auto-fire review
+  pendingFixByMilestone.delete(key)
+
+  const outcome = resolveFixOutcome(result, error)
+  deps.emitFixState(projectId, milestoneId, outcome)
+  if (outcome !== 'fixed') return
+
+  const project = deps.listProjects().find((p) => p.id === projectId)
+  if (!project) return
+  let fixCommitsCount = 0
+  try {
+    fixCommitsCount = (await deps.gitLogSince(project.path, pendingFix.sinceCommit)).length
+  } catch {
+    // best-effort count
+  }
+  emitEvent(project.path, projectId, 'review_agent_fix_addressed', {
+    milestoneId,
+    previousReviewId: pendingFix.fromReviewId,
+    newReviewId: turnId,
+    fixCommitsCount,
+  })
+}
+
+// Test-only: inspect / reset in-memory fix state between cases.
+export function __getPendingFix(projectId: string, milestoneId: string): PendingFix | undefined {
+  return pendingFixByMilestone.get(fixKey(projectId, milestoneId))
+}
+export function __resetFixTracking(): void {
+  pendingFixByMilestone.clear()
+}
+
+// Watch chat / phase-runner turns. A re-review uses runStandaloneTurn (not startTurn),
+// so it never emits 'turn-end' — no risk of a verify triggering another verify.
+turnEmitter.on('turn-end', (data: { projectId: string }) => {
+  void handleTurnEndForFix(data.projectId)
+})

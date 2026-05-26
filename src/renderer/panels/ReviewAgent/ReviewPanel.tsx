@@ -174,7 +174,8 @@ function RecommendedAction({ result, projectId, milestoneId }: { result: ReviewO
   const [copied, setCopied] = useState(false)
 
   function record(a: string) {
-    window.api.reviewAgentRecordAction({ projectId, milestoneId, action: a }).catch(() => {})
+    const reviewId = useReviewAgentStore.getState().current?.turnId ?? ''
+    window.api.reviewAgentRecordAction({ projectId, milestoneId, action: a, reviewId }).catch(() => {})
   }
 
   return (

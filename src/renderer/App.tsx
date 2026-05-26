@@ -163,7 +163,10 @@ export default function App() {
     const offDone = window.api.reviewAgentOnDone((turnId, milestoneId, result, error) =>
       useReviewAgentStore.getState()._onDone(turnId, milestoneId, result, error)
     )
-    return () => { offThinking(); offDone() }
+    const offFix = window.api.reviewAgentOnFixStateChanged((milestoneId, state) =>
+      useReviewAgentStore.getState()._onFixStateChanged(milestoneId, state)
+    )
+    return () => { offThinking(); offDone(); offFix() }
   }, [])
 
   // ── File watcher push channel ──────────────────────────────────────────

@@ -28,6 +28,8 @@ export type SemanticEventKind =
   | 'review_agent_started'
   | 'review_agent_completed'
   | 'review_agent_action_taken'
+  // payload: { milestoneId, previousReviewId, newReviewId, fixCommitsCount }
+  | 'review_agent_fix_addressed'
 
 export type FrictionTag =
   | 'user_correction'
@@ -704,9 +706,10 @@ export interface ElectronAPI {
   // ── Review Agent ──────────────────────────────────────────────────────────
   reviewAgentStart: (opts: ReviewInput) => Promise<{ turnId: string }>
   reviewAgentCancel: (turnId: string) => Promise<void>
-  reviewAgentRecordAction: (opts: { projectId: string; milestoneId: string; action: string }) => Promise<void>
+  reviewAgentRecordAction: (opts: { projectId: string; milestoneId: string; action: string; reviewId?: string }) => Promise<void>
   reviewAgentOnThinking: (cb: (turnId: string, milestoneId: string, status: string) => void) => () => void
   reviewAgentOnDone: (cb: (turnId: string, milestoneId: string, result?: ReviewOutput, error?: string) => void) => () => void
+  reviewAgentOnFixStateChanged: (cb: (milestoneId: string, state: ReviewFixState) => void) => () => void
 }
 
 export interface AskSneeblyStartInput {
@@ -759,6 +762,11 @@ export type ReviewAction =
   | { type: 'refine'; reason: string; kickoffPrompt: string }
   | { type: 'rollback'; reason: string; rollbackTarget: string }
   | { type: 'escalate'; reason: string; questionsForUser: string[] }
+
+// Fix-tracking chip lifecycle: paste recorded (fixing) → commit detected, re-review
+// running (verifying) → re-review closed the gap (fixed). 'cleared' is a transient
+// signal telling the renderer to drop the entry and fall back to the cached verdict.
+export type ReviewFixState = 'fixing' | 'verifying' | 'fixed' | 'cleared'
 
 export interface ReviewOutput {
   verdict: 'complete' | 'partial' | 'broken'
