@@ -1,36 +1,42 @@
-import { join, relative } from 'path'
+import { join } from 'path'
 import { execSync } from 'child_process'
 import { readFileSync, existsSync } from 'fs'
 import type { ChildProcess } from 'child_process'
-import { runStandaloneTurn, extractJson } from './standalone-turn'
+import { runStandaloneTurn } from './standalone-turn'
 import { loadPhasePlan, syncCheckedState, markMilestoneComplete } from './phase-tracker'
 import { sendToProjectWindows } from './window-registry'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { MilestoneAuditResult, OrderedMilestone } from '../../shared/types'
 
-// Max bytes of source content to inject (keeps prompt inside context window)
 const MAX_SOURCE_BYTES = 180_000
+
+// Wrapped object format so extractJson (which hunts for '{') reliably finds
+// a top-level object rather than the first array element.
+interface AuditResponse {
+  milestones: MilestoneAuditResult[]
+}
 
 const AUDITOR_SYSTEM_PROMPT = `You are a codebase auditor. You will receive source code files and a list of milestones. For each milestone, determine its implementation status based solely on the provided source code.
 
 Status definitions:
-- "complete": Feature is fully implemented end-to-end (real logic, not just a UI shell, stub, or placeholder)
-- "partial": Some real implementation exists but key parts are missing (UI exists but no API wiring, stub functions, mock data only)
+- "complete": Feature is fully implemented end-to-end with real logic (not just a UI shell, stub, or mock data)
+- "partial": Some real implementation exists but key parts are missing (e.g. UI exists but no API wiring, stub functions only)
 - "not-started": No meaningful implementation found
 
 Confidence:
-- "high": You found clear, direct code that implements the feature
+- "high": You found clear, direct code implementing the feature
 - "medium": You found related code but could not trace the full feature path
 - "low": You are inferring from file names or indirect evidence only
 
-Output ONLY a JSON array — no prose, no markdown fences, nothing else:
-[
-  { "id": "...", "status": "complete|partial|not-started", "confidence": "high|medium|low", "evidence": "one sentence" },
-  ...
-]
+Output ONLY a JSON object — no prose, no markdown fences, nothing else:
+{
+  "milestones": [
+    { "id": "...", "status": "complete|partial|not-started", "confidence": "high|medium|low", "evidence": "one sentence" },
+    ...
+  ]
+}
 One entry per milestone, in the same order as the input list.`
 
-// Active process per project for abort support
 const activeProcs = new Map<string, ChildProcess>()
 const abortFlags = new Map<string, boolean>()
 
@@ -43,54 +49,50 @@ export function stopAudit(projectId: string): void {
   }
 }
 
-function collectSourceContent(projectPath: string): string {
-  // Priority order: API routes > feature pages > feature components > libs
-  const priorityGlobs = [
-    'artifacts/api-server/src/routes',
-    'artifacts/api-server/src/lib',
-    'artifacts/api-server/src/middlewares',
-    'artifacts/nyous/src/pages',
-    'artifacts/nyous/src/hooks',
-    'artifacts/nyous/src/lib',
-    'artifacts/nyous/src/components',
-    'src/routes',
-    'src/pages',
-    'src/lib',
-    'src/components',
-    'src/hooks',
-  ]
+// Score a file path by how informative it is for auditing.
+// Lower score = higher priority.
+function fileScore(relPath: string): number {
+  const p = relPath.toLowerCase()
+  if (p.includes('/routes/')) return 0
+  if (p.includes('/pages/')) return 1
+  if (p.includes('/hooks/')) return 2
+  if (p.includes('/lib/')) return 3
+  if (p.includes('/middleware') || p.includes('/middlewares/')) return 4
+  if (p.includes('/components/')) return 5
+  if (p.includes('/services/')) return 6
+  if (p.includes('/utils/')) return 7
+  return 10
+}
 
-  // Collect all candidate files in priority order
-  let candidates: string[] = []
+function collectSourceContent(projectPath: string): { content: string; fileCount: number } {
+  let allFiles: string[] = []
   try {
     const raw = execSync(
-      `find . -type f \\( -name "*.ts" -o -name "*.tsx" \\) | grep -v "node_modules\\|\\.next\\|dist\\|\\.vite\\|\\.git\\|/ui/\\|__pycache__\\|\\.migration" | sort`,
+      // Exclude: node_modules, build output, shadcn ui barrel, git, migration backups
+      `find . -type f \\( -name "*.ts" -o -name "*.tsx" \\) ` +
+      `| grep -v "node_modules\\|\\.next\\|/dist/\\|\\.vite\\|\\.git\\|/components/ui/\\|__pycache__\\|\\.migration\\|migration-backup"` +
+      `| sort`,
       { cwd: projectPath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
     )
-    const allFiles = raw.trim().split('\n').filter(Boolean)
-
-    // Sort by priority
-    const scored = allFiles.map((f) => {
-      const score = priorityGlobs.findIndex((g) => f.includes(g.replace(/\//g, '/')))
-      return { f, score: score === -1 ? 99 : score }
-    })
-    scored.sort((a, b) => a.score - b.score)
-    candidates = scored.map((x) => x.f)
+    allFiles = raw.trim().split('\n').filter(Boolean)
   } catch {
-    return ''
+    return { content: '', fileCount: 0 }
   }
+
+  // Sort by informativeness
+  allFiles.sort((a, b) => fileScore(a) - fileScore(b))
 
   const parts: string[] = []
   let totalBytes = 0
 
-  for (const relPath of candidates) {
+  for (const relPath of allFiles) {
     const absPath = join(projectPath, relPath)
     if (!existsSync(absPath)) continue
     try {
       const content = readFileSync(absPath, 'utf-8')
       const entry = `\n\n=== ${relPath} ===\n${content}`
       if (totalBytes + entry.length > MAX_SOURCE_BYTES) {
-        parts.push(`\n\n(remaining files omitted — ${candidates.length - parts.length} more)`)
+        parts.push(`\n\n(${allFiles.length - parts.length} more files omitted due to size limit)`)
         break
       }
       parts.push(entry)
@@ -98,11 +100,10 @@ function collectSourceContent(projectPath: string): string {
     } catch { /* skip unreadable */ }
   }
 
-  return parts.join('')
+  return { content: parts.join(''), fileCount: parts.length }
 }
 
 function buildAuditPrompt(
-  projectPath: string,
   milestones: OrderedMilestone[],
   sourceContent: string
 ): string {
@@ -110,9 +111,7 @@ function buildAuditPrompt(
     .map((m, i) => `${i + 1}. id="${m.id}" — ${m.text}`)
     .join('\n')
 
-  return `Project path: ${projectPath}
-
-SOURCE CODE:
+  return `SOURCE CODE:
 ${sourceContent}
 
 ---
@@ -120,8 +119,7 @@ ${sourceContent}
 MILESTONES TO AUDIT (${milestones.length} total):
 ${milestoneList}
 
-Based on the source code above, determine the implementation status of each milestone.
-Output ONLY the JSON array.`
+Based on the source code above, output ONLY the JSON object with a "milestones" array.`
 }
 
 export async function auditPhasePlan(
@@ -132,27 +130,36 @@ export async function auditPhasePlan(
   if (!rawPlan) throw new Error('No phase plan found — generate one first')
 
   const plan = syncCheckedState(projectPath, rawPlan)
-  const milestones = plan.milestones
-  const total = milestones.length
+  // Only audit milestones that aren't already checked
+  const unchecked = plan.milestones.filter((m) => !m.checked)
+  const total = plan.milestones.length
 
   abortFlags.set(projectId, false)
 
+  if (unchecked.length === 0) {
+    sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
+      stage: 'done', results: [], appliedCount: 0,
+    })
+    return []
+  }
+
   sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
-    stage: 'running',
-    checked: 0,
-    total,
-    currentMilestone: 'Reading source files…',
+    stage: 'running', checked: 0, total, currentMilestone: 'Reading source files…',
   })
 
-  // Collect all source content in main process — no Claude tool calls needed
-  const sourceContent = collectSourceContent(projectPath)
+  const { content: sourceContent, fileCount } = collectSourceContent(projectPath)
+
+  if (!sourceContent) {
+    sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
+      stage: 'done', results: [], appliedCount: 0,
+    })
+    throw new Error('Could not collect source files from project')
+  }
 
   if (abortFlags.get(projectId)) {
     abortFlags.delete(projectId)
     sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
-      stage: 'done',
-      results: [],
-      appliedCount: 0,
+      stage: 'done', results: [], appliedCount: 0,
     })
     return []
   }
@@ -161,10 +168,10 @@ export async function auditPhasePlan(
     stage: 'running',
     checked: 0,
     total,
-    currentMilestone: `Analyzing ${total} milestones…`,
+    currentMilestone: `Analyzing ${unchecked.length} milestones across ${fileCount} files…`,
   })
 
-  const prompt = buildAuditPrompt(projectPath, milestones, sourceContent)
+  const prompt = buildAuditPrompt(unchecked, sourceContent)
 
   const result = await runStandaloneTurn({
     cwd: projectPath,
@@ -172,7 +179,9 @@ export async function auditPhasePlan(
     prompt,
     model: 'claude-sonnet-4-6',
     permissionMode: 'bypassPermissions',
-    allowedTools: [],   // no tools — source is already in the prompt
+    // Explicitly disable all tools — source is injected; tool calls would
+    // waste the single turn budget before Claude can output the JSON.
+    extraArgs: ['--tools', ''],
     appendSystemPrompt: AUDITOR_SYSTEM_PROMPT,
     maxTurns: 1,
     onProcess: (proc) => { activeProcs.set(projectId, proc) },
@@ -181,11 +190,42 @@ export async function auditPhasePlan(
   activeProcs.delete(projectId)
   abortFlags.delete(projectId)
 
-  const raw = extractJson<MilestoneAuditResult[]>(result.assistantText) ?? []
+  if (result.error && !result.assistantText) {
+    sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
+      stage: 'done', results: [], appliedCount: 0,
+    })
+    throw new Error(`Auditor subprocess failed: ${result.error}`)
+  }
 
-  const validIds = new Set(milestones.map((m) => m.id))
-  const validated = raw.filter(
+  // Parse the wrapped object: { "milestones": [...] }
+  let rawResults: MilestoneAuditResult[] = []
+  try {
+    const text = result.assistantText
+    // Try object wrapper first (our preferred format)
+    const objMatch = text.match(/\{[\s\S]*\}/)
+    if (objMatch) {
+      const parsed = JSON.parse(objMatch[0]) as AuditResponse
+      if (Array.isArray(parsed.milestones)) {
+        rawResults = parsed.milestones
+      }
+    }
+    // Fallback: bare array (in case Claude ignored the wrapper instruction)
+    if (rawResults.length === 0) {
+      const arrMatch = text.match(/\[[\s\S]*\]/)
+      if (arrMatch) {
+        const parsed = JSON.parse(arrMatch[0])
+        if (Array.isArray(parsed)) rawResults = parsed as MilestoneAuditResult[]
+      }
+    }
+  } catch {
+    // JSON parse failed — fall through with empty results
+  }
+
+  const validIds = new Set(unchecked.map((m) => m.id))
+  const validated = rawResults.filter(
     (r) =>
+      r &&
+      typeof r === 'object' &&
       validIds.has(r.id) &&
       ['complete', 'partial', 'not-started'].includes(r.status) &&
       ['high', 'medium', 'low'].includes(r.confidence)
@@ -193,13 +233,15 @@ export async function auditPhasePlan(
 
   // Fill any milestones Claude didn't return
   const returnedIds = new Set(validated.map((r) => r.id))
-  for (const m of milestones) {
+  for (const m of unchecked) {
     if (!returnedIds.has(m.id)) {
       validated.push({
         id: m.id,
         status: 'not-started',
         confidence: 'low',
-        evidence: result.error ? `Auditor error: ${result.error}` : 'Not returned by auditor',
+        evidence: rawResults.length === 0
+          ? 'Auditor returned no parseable JSON'
+          : 'Not included in auditor response',
       })
     }
   }

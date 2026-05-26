@@ -73,6 +73,8 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
     try {
       await window.api.phaseAudit(projectId)
     } catch {
+      // error already surfaced via progress event if main process threw
+    } finally {
       setAuditing(false)
     }
   }
