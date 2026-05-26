@@ -34,6 +34,9 @@ export interface TurnOpts {
   recordEvents?: boolean
   recordUsage?: boolean
   isAutoReview?: boolean
+  // When true, request token-level streaming so callers can surface partial_text
+  // events. Only the chat handler sets this; the phase runner leaves it off.
+  streamPartialText?: boolean
 }
 
 export function startTurn(
@@ -55,6 +58,7 @@ export function startTurn(
     permissionMode: 'bypassPermissions',
     resumeSessionId: opts.claudeCodeSessionId,
     appendSystemPrompt: opts.appendSystemPrompt,
+    includePartialMessages: opts.streamPartialText,
     onProcess: (proc) => {
       activeProcesses.set(opts.sneeblySessionId, proc)
     },

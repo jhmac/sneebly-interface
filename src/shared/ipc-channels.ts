@@ -22,6 +22,7 @@ export const IPC_CHANNELS = {
   SESSION_SET_ACTIVE: 'session:set-active',
   CHAT_SEND: 'chat:send',
   CHAT_MESSAGE_APPENDED: 'chat:message-appended',
+  CHAT_PARTIAL_TEXT: 'chat:partial-text',
   MODEL_GET: 'model:get',
   MODEL_SET: 'model:set',
   FS_LIST_PROJECT_FILES: 'fs:list-project-files',

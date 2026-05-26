@@ -555,6 +555,7 @@ export interface ElectronAPI {
   sessionSetActive: (projectId: string, sessionId: string | null) => Promise<void>
   chatSend: (projectPath: string, sessionId: string, message: ChatMessage, model: string, projectId: string, skillPrompt?: string, skillId?: string) => Promise<void>
   chatOnMessageAppended: (callback: (sessionId: string, message: ChatMessage) => void) => () => void
+  chatOnPartialText: (callback: (sessionId: string, messageId: string, delta: string) => void) => () => void
   modelGet: () => Promise<string>
   modelSet: (model: ModelName) => Promise<void>
   fsListProjectFiles: (projectPath: string) => Promise<string[]>

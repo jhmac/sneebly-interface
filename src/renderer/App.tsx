@@ -81,6 +81,13 @@ export default function App() {
     })
   }, [])
 
+  // ── Chat partial-text streaming push channel ──────────────────────────
+  useEffect(() => {
+    return window.api.chatOnPartialText((sessionId, messageId, delta) => {
+      useChatStore.getState().appendStreamingText(sessionId, messageId, delta)
+    })
+  }, [])
+
   // ── Chat push channel ──────────────────────────────────────────────────
   useEffect(() => {
     return window.api.chatOnMessageAppended((sessionId, message) => {

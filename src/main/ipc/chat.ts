@@ -234,6 +234,10 @@ export function registerChatHandlers(): void {
       }
 
       let assistantText = ''
+      let sawPartial = false
+      // Pre-allocate so streamed deltas and the final persisted message share an id;
+      // the renderer upserts on the final CHAT_MESSAGE_APPENDED.
+      const assistantMsgId = crypto.randomUUID()
 
       startTurn(
         {
@@ -246,14 +250,24 @@ export function registerChatHandlers(): void {
           appendSystemPrompt,
           recordEvents,
           recordUsage,
+          streamPartialText: true,
         },
         (event) => {
           if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
             store.set(`claudeSessionIds.${sessionId}`, event.session_id)
           }
 
-          // Accumulate assistant text for session persistence
-          if (event.type === 'assistant') {
+          // Token-level streaming: forward each text delta to the chat panel. Tool
+          // calls/results keep flowing to the Activity panel via pushAgentEvent below.
+          if (event.type === 'partial_text') {
+            sawPartial = true
+            assistantText += event.textDelta
+            sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_PARTIAL_TEXT, sessionId, assistantMsgId, event.textDelta)
+            return
+          }
+
+          // Fallback accumulation when no partials arrived (keeps old behavior).
+          if (event.type === 'assistant' && !sawPartial) {
             for (const block of event.message.content) {
               if (block.type === 'text') assistantText += block.text
             }
@@ -273,7 +287,7 @@ export function registerChatHandlers(): void {
           // Always use the Sneebly session ID for JSONL writes
           if (assistantText.trim()) {
             const assistantMsg: ChatMessage = {
-              id: crypto.randomUUID(),
+              id: assistantMsgId,
               role: 'assistant',
               text: assistantText.trim(),
               ts: Date.now(),

@@ -117,6 +117,13 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.CHAT_MESSAGE_APPENDED, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.CHAT_MESSAGE_APPENDED, h)
   },
+  chatOnPartialText: (
+    callback: (sessionId: string, messageId: string, delta: string) => void
+  ): (() => void) => {
+    const h = (_: IpcRendererEvent, sid: string, mid: string, delta: string) => callback(sid, mid, delta)
+    ipcRenderer.on(IPC_CHANNELS.CHAT_PARTIAL_TEXT, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHAT_PARTIAL_TEXT, h)
+  },
 
   // ── Model ─────────────────────────────────────────────────────────────
   modelGet: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.MODEL_GET),

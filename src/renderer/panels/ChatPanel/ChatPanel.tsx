@@ -9,6 +9,7 @@ import { timeAgo } from '../../../shared/utils'
 import MessageList from './MessageList'
 import Composer from './Composer'
 import SkillSelector from './SkillSelector'
+import ContextChip from './ContextChip'
 
 const MODELS: { id: ModelName; label: string }[] = [
   { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
@@ -170,6 +171,7 @@ function ChatHeader({
 
       {/* Right side */}
       <div className="flex items-center gap-1">
+        <ContextChip />
         {learningsStatus && (
           <LearningsChip
             status={learningsStatus}

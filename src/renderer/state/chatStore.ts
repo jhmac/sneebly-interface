@@ -22,6 +22,7 @@ interface ChatState {
   switchModel: (model: ModelName) => void
   setActiveSkill: (id: string | null) => void
   appendIncomingMessage: (sessionId: string, message: ChatMessage) => void
+  appendStreamingText: (sessionId: string, messageId: string, delta: string) => void
   setPendingSend: (v: boolean) => void
   addAttachment: (a: PendingAttachment) => void
   removeAttachment: (id: string) => void
@@ -144,7 +145,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
   appendIncomingMessage: (sessionId: string, message: ChatMessage) => {
     set((s) => {
       if (s.activeSessionId !== sessionId) return s
+      // Upsert by id: a streamed message may already exist with this id — finalize
+      // it in place rather than appending a duplicate.
+      const idx = s.messages.findIndex((m) => m.id === message.id)
+      if (idx !== -1) {
+        const messages = s.messages.slice()
+        messages[idx] = message
+        return { messages, pendingSend: false }
+      }
       return { messages: [...s.messages, message], pendingSend: false }
+    })
+  },
+
+  appendStreamingText: (sessionId: string, messageId: string, delta: string) => {
+    set((s) => {
+      if (s.activeSessionId !== sessionId) return s
+      const idx = s.messages.findIndex((m) => m.id === messageId)
+      if (idx === -1) {
+        const msg: ChatMessage = { id: messageId, role: 'assistant', text: delta, ts: Date.now() }
+        return { messages: [...s.messages, msg] }
+      }
+      const messages = s.messages.slice()
+      messages[idx] = { ...messages[idx], text: messages[idx].text + delta }
+      return { messages }
     })
   },
 
