@@ -51,26 +51,39 @@ function readDoc(projectPath: string, name: string): string | null {
 async function getMilestoneDiff(projectPath: string, milestoneId: string): Promise<string> {
   if (!existsSync(join(projectPath, '.git'))) return '(not a git repo)'
   const opts = { cwd: projectPath, encoding: 'utf-8' as const, timeout: 20_000, maxBuffer: 32 * 1024 * 1024 }
+  const run = (args: string[]) => execFileAsync('git', args, opts).then((r) => r.stdout)
   // Prefer the per-milestone auto-commit (subject "[<id>] ...").
   try {
-    const { stdout: hash } = await execFileAsync('git', ['log', '--grep', `\\[${milestoneId}\\]`, '-n', '1', '--format=%H'], opts)
-    if (hash.trim()) {
-      const { stdout } = await execFileAsync('git', ['show', hash.trim()], opts)
-      return truncateDiff(stdout)
+    const hash = (await run(['log', '--grep', `\\[${milestoneId}\\]`, '-n', '1', '--format=%H'])).trim()
+    if (hash) {
+      const [stat, patch] = await Promise.all([
+        run(['show', '--stat', '--format=', hash]),
+        run(['show', '--format=', hash]),
+      ])
+      return combineDiff(stat, patch)
     }
   } catch { /* fall through */ }
-  // Fallback: current uncommitted working diff.
+  // Fallback: current uncommitted working diff (no per-milestone commit). The stat
+  // summary lets the reviewer see every changed file even when the patch is truncated,
+  // then read the real files to verify.
   try {
-    const { stdout } = await execFileAsync('git', ['diff', 'HEAD'], opts)
-    return stdout.trim() ? truncateDiff(stdout) : '(no diff found for this milestone)'
+    const [stat, patch] = await Promise.all([run(['diff', '--stat', 'HEAD']), run(['diff', 'HEAD'])])
+    if (!patch.trim()) return '(no diff found for this milestone)'
+    return combineDiff(stat, patch)
   } catch {
     return '(could not read diff)'
   }
 }
 
+function combineDiff(stat: string, patch: string): string {
+  const s = stat.trim()
+  const header = s ? `Files changed:\n${s}\n\n` : ''
+  return header + truncateDiff(patch)
+}
+
 function truncateDiff(diff: string): string {
   if (diff.length <= DIFF_TRUNCATE) return diff
-  return diff.slice(0, DIFF_TRUNCATE) + `\n…(diff truncated at ${DIFF_TRUNCATE} chars)`
+  return diff.slice(0, DIFF_TRUNCATE) + `\n…(patch truncated at ${DIFF_TRUNCATE} chars — read the listed files to verify)`
 }
 
 function recentEvents(projectPath: string): string {

@@ -26,8 +26,10 @@ export default function ReviewPanel() {
 
   if (!modalOpen || !current) return null
 
+  // z-[55]: above the PhasePanel (z-50) it's launched from, below the editor (z-60)
+  // so "view in editor" opens on top of the review rather than behind it.
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-6">
+    <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60 p-6">
       <div className="flex max-h-[85vh] w-[640px] flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
         <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-3">
           <span className="text-sm font-medium text-zinc-200">
