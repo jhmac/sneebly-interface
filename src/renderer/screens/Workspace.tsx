@@ -33,6 +33,7 @@ import ShortcutsBar from '../panels/ShortcutsBar/ShortcutsBar'
 import PhasePanel from '../panels/PhasePanel/PhasePanel'
 import AskSneeblyPanel from '../panels/AskSneebly/AskSneeblyPanel'
 import { useAskSneeblyStore } from '../panels/AskSneebly/useAskSneeblyStore'
+import ReviewPanel from '../panels/ReviewAgent/ReviewPanel'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -164,6 +165,7 @@ export default function Workspace() {
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeProjectId={activeProjectId} />
       <LearningsPanel open={learningsOpen} onClose={() => setLearningsOpen(false)} projectId={activeProjectId} />
       <PhasePanel open={phasesOpen} onClose={() => setPhasesOpen(false)} projectId={activeProjectId} />
+      <ReviewPanel />
       <EditorPanel />
       {commitModalOpen && <CommitPushModal onClose={closeCommitModal} />}
       <SpecGeneratorModal />

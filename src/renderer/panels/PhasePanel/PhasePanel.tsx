@@ -5,6 +5,8 @@ import {
   ClipboardList, FileCode, ArrowRight, ScanSearch
 } from 'lucide-react'
 import { usePhaseStore } from '../../state/phaseStore'
+import { useReviewAgentStore } from '../ReviewAgent/useReviewAgentStore'
+import { useSettingsStore } from '../../state/settingsStore'
 import type { OrderedMilestone, PhasePlan, PhaseRunConfig, PhaseRunState, PhaseAuditProgress } from '../../../shared/types'
 
 interface Props {
@@ -114,6 +116,12 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
 
   const handleMarkComplete = async (milestoneId: string) => {
     await completeMilestone(projectId, milestoneId)
+  }
+
+  const reviewEnabled = useSettingsStore((s) => s.settings?.reviewAgentEnabled ?? true)
+  const handleReview = (milestoneId: string) => {
+    const m = plan?.milestones.find((x) => x.id === milestoneId)
+    useReviewAgentStore.getState().startReview(projectId, milestoneId, m?.text ?? milestoneId)
   }
 
   if (!plan && !generating) {
@@ -266,6 +274,7 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
               }
               onBuild={handleBuildMilestone}
               onMarkComplete={handleMarkComplete}
+              onReview={reviewEnabled ? handleReview : undefined}
             />
           ))}
         </div>
@@ -328,6 +337,7 @@ function PhaseGroup({
   onToggle,
   onBuild,
   onMarkComplete,
+  onReview,
 }: {
   phase: PhaseGroupData
   runState: PhaseRunState
@@ -335,6 +345,7 @@ function PhaseGroup({
   onToggle: () => void
   onBuild: (id: string) => void
   onMarkComplete: (id: string) => void
+  onReview?: (id: string) => void
 }) {
   const pct = phase.milestones.length > 0
     ? Math.round((phase.completedCount / phase.milestones.length) * 100)
@@ -386,6 +397,7 @@ function PhaseGroup({
               runState={runState}
               onBuild={onBuild}
               onMarkComplete={onMarkComplete}
+              onReview={onReview}
             />
           ))}
         </div>
@@ -407,11 +419,13 @@ function MilestoneRow({
   runState,
   onBuild,
   onMarkComplete,
+  onReview,
 }: {
   milestone: OrderedMilestone
   runState: PhaseRunState
   onBuild: (id: string) => void
   onMarkComplete: (id: string) => void
+  onReview?: (id: string) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const isRunning = runState.currentMilestoneId === milestone.id && runState.status === 'building'
@@ -460,22 +474,35 @@ function MilestoneRow({
       </div>
 
       {/* Actions */}
-      {!milestone.checked && (hovered || isRunning) && (
+      {(hovered || isRunning) && (
         <div className="flex flex-shrink-0 items-center gap-1">
-          <button
-            onClick={() => onBuild(milestone.id)}
-            title="Pre-fill chat with kickoff prompt"
-            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-indigo-400 hover:bg-indigo-500/10"
-          >
-            <ArrowRight className="h-3 w-3" /> Build
-          </button>
-          <button
-            onClick={() => onMarkComplete(milestone.id)}
-            title="Mark as complete"
-            className="rounded px-2 py-1 text-[10px] text-zinc-600 hover:bg-zinc-700 hover:text-zinc-400"
-          >
-            Done
-          </button>
+          {onReview && (
+            <button
+              onClick={() => onReview(milestone.id)}
+              title="Audit this milestone against its spec"
+              className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-amber-400 hover:bg-amber-500/10"
+            >
+              <ScanSearch className="h-3 w-3" /> Review
+            </button>
+          )}
+          {!milestone.checked && (
+            <>
+              <button
+                onClick={() => onBuild(milestone.id)}
+                title="Pre-fill chat with kickoff prompt"
+                className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-indigo-400 hover:bg-indigo-500/10"
+              >
+                <ArrowRight className="h-3 w-3" /> Build
+              </button>
+              <button
+                onClick={() => onMarkComplete(milestone.id)}
+                title="Mark as complete"
+                className="rounded px-2 py-1 text-[10px] text-zinc-600 hover:bg-zinc-700 hover:text-zinc-400"
+              >
+                Done
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

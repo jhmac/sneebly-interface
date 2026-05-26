@@ -38,6 +38,7 @@ import { scheduleConventionExtraction } from './services/convention-extractor'
 import { registerShortcutsHandlers, scheduleAllShortcutRefreshes } from './ipc/shortcuts'
 import { registerPhaseHandlers } from './ipc/phases'
 import { registerAskSneeblyHandlers } from './ipc/ask-sneebly-handlers'
+import { registerReviewAgentHandlers } from './ipc/review-agent-handlers'
 
 // ── User data migration (sneebly-interface → Sneebly) ─────────────────────────
 function migrateUserData(): void {
@@ -115,6 +116,7 @@ function registerIpcHandlers(): void {
   registerShortcutsHandlers()
   registerPhaseHandlers()
   registerAskSneeblyHandlers()
+  registerReviewAgentHandlers()
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
     createProjectWindow(projectId)

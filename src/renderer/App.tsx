@@ -18,6 +18,7 @@ import GoalsWizardModal from './panels/GoalsWizard/GoalsWizardModal'
 import { loadSkills } from './skills'
 import { useSettingsStore } from './state/settingsStore'
 import { useAskSneeblyStore } from './panels/AskSneebly/useAskSneeblyStore'
+import { useReviewAgentStore } from './panels/ReviewAgent/useReviewAgentStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -147,6 +148,17 @@ export default function App() {
       useAskSneeblyStore.getState()._onDone(turnId, error)
     )
     return () => { offChunk(); offThinking(); offDone() }
+  }, [])
+
+  // ── Review Agent push channels ─────────────────────────────────────────
+  useEffect(() => {
+    const offThinking = window.api.reviewAgentOnThinking((turnId, status) =>
+      useReviewAgentStore.getState()._onThinking(turnId, status)
+    )
+    const offDone = window.api.reviewAgentOnDone((turnId, result, error) =>
+      useReviewAgentStore.getState()._onDone(turnId, result, error)
+    )
+    return () => { offThinking(); offDone() }
   }, [])
 
   // ── File watcher push channel ──────────────────────────────────────────

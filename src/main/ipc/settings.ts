@@ -33,6 +33,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   askSneeblyEnabled: true,
   askSneeblyModel: 'claude-sonnet-4-6',
   askSneeblySidebarVisible: false,
+  reviewAgentEnabled: true,
+  reviewAgentModel: 'claude-opus-4-7',
+  reviewAgentAutoFire: false,
+  reviewAgentBlocking: false,
 }
 
 export function registerSettingsHandlers(): void {

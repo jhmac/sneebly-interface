@@ -233,6 +233,32 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
           </Row>
         </Section>
 
+        <Section title="Review Agent">
+          <Row label="Review Agent enabled" description="Shows a 'Review' button on milestone cards that audits the milestone against its spec — producing a verdict and, if needed, a paste-ready kickoff prompt to fix gaps.">
+            <Toggle
+              value={settings.reviewAgentEnabled ?? true}
+              onChange={(v) => handleSave({ reviewAgentEnabled: v })}
+            />
+          </Row>
+          <Row label="Review Agent model" description="Verdicts deserve careful reasoning. Opus is recommended; Sonnet for faster but less thorough audits.">
+            <div className="relative">
+              <select
+                value={settings.reviewAgentModel ?? 'claude-opus-4-7'}
+                onChange={(e) => handleSave({ reviewAgentModel: e.target.value as ModelName })}
+                className="appearance-none rounded-md bg-zinc-800 py-1.5 pl-3 pr-8 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+              >
+                {REVIEW_MODEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-500" />
+            </div>
+          </Row>
+          <Row label="Auto-fire after build" description="Available in v1.1 after verdict reliability is validated. For now, fire reviews manually from milestone cards.">
+            <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">v1.1</span>
+          </Row>
+        </Section>
+
         {/* Projects */}
         <Section title="Projects">
           <Row label="Default projects folder" description="Where cloned repos are placed by default">

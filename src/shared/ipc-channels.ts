@@ -120,4 +120,9 @@ export const IPC_CHANNELS = {
   ASK_SNEEBLY_CHUNK: 'askSneebly:chunk',
   ASK_SNEEBLY_DONE: 'askSneebly:done',
   ASK_SNEEBLY_THINKING: 'askSneebly:thinking',
+  REVIEW_AGENT_START: 'reviewAgent:start',
+  REVIEW_AGENT_CANCEL: 'reviewAgent:cancel',
+  REVIEW_AGENT_THINKING: 'reviewAgent:thinking',
+  REVIEW_AGENT_DONE: 'reviewAgent:done',
+  REVIEW_AGENT_ACTION: 'reviewAgent:action',
 } as const

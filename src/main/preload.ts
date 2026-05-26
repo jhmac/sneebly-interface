@@ -44,6 +44,8 @@ import type {
   PhaseRunState,
   PhaseAuditProgress,
   AskSneeblyStartInput,
+  ReviewInput,
+  ReviewOutput,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -400,6 +402,24 @@ const api: ElectronAPI = {
     const h = (_: IpcRendererEvent, turnId: string, status: string) => cb(turnId, status)
     ipcRenderer.on(IPC_CHANNELS.ASK_SNEEBLY_THINKING, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.ASK_SNEEBLY_THINKING, h)
+  },
+
+  // ── Review Agent ──────────────────────────────────────────────────────────
+  reviewAgentStart: (opts: ReviewInput): Promise<{ turnId: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.REVIEW_AGENT_START, opts),
+  reviewAgentCancel: (turnId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.REVIEW_AGENT_CANCEL, turnId),
+  reviewAgentRecordAction: (opts: { projectId: string; milestoneId: string; action: string }): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.REVIEW_AGENT_ACTION, opts),
+  reviewAgentOnThinking: (cb: (turnId: string, status: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, turnId: string, status: string) => cb(turnId, status)
+    ipcRenderer.on(IPC_CHANNELS.REVIEW_AGENT_THINKING, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.REVIEW_AGENT_THINKING, h)
+  },
+  reviewAgentOnDone: (cb: (turnId: string, result?: ReviewOutput, error?: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, turnId: string, result?: ReviewOutput, error?: string) => cb(turnId, result, error)
+    ipcRenderer.on(IPC_CHANNELS.REVIEW_AGENT_DONE, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.REVIEW_AGENT_DONE, h)
   },
 }
 

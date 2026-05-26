@@ -25,6 +25,9 @@ export type SemanticEventKind =
   | 'ask_sneebly_question_asked'
   | 'ask_sneebly_question_answered'
   | 'ask_sneebly_question_cancelled'
+  | 'review_agent_started'
+  | 'review_agent_completed'
+  | 'review_agent_action_taken'
 
 export type FrictionTag =
   | 'user_correction'
@@ -484,6 +487,10 @@ export interface AppSettings {
   askSneeblyEnabled: boolean
   askSneeblyModel: ModelName
   askSneeblySidebarVisible: boolean
+  reviewAgentEnabled: boolean
+  reviewAgentModel: ModelName
+  reviewAgentAutoFire: boolean
+  reviewAgentBlocking: boolean
 }
 
 export interface SessionUsage {
@@ -694,6 +701,13 @@ export interface ElectronAPI {
   askSneeblyOnChunk: (cb: (turnId: string, chunk: string) => void) => () => void
   askSneeblyOnDone: (cb: (turnId: string, error?: string) => void) => () => void
   askSneeblyOnThinking: (cb: (turnId: string, status: string) => void) => () => void
+
+  // ── Review Agent ──────────────────────────────────────────────────────────
+  reviewAgentStart: (opts: ReviewInput) => Promise<{ turnId: string }>
+  reviewAgentCancel: (turnId: string) => Promise<void>
+  reviewAgentRecordAction: (opts: { projectId: string; milestoneId: string; action: string }) => Promise<void>
+  reviewAgentOnThinking: (cb: (turnId: string, status: string) => void) => () => void
+  reviewAgentOnDone: (cb: (turnId: string, result?: ReviewOutput, error?: string) => void) => () => void
 }
 
 export interface AskSneeblyStartInput {
@@ -720,6 +734,42 @@ export interface AskSneeblyConversation {
   projectId: string
   startedAt: number
   messages: AskSneeblyMessage[]
+}
+
+export interface ReviewInput {
+  projectId: string
+  milestoneId: string
+}
+
+export interface ReviewLensFinding {
+  lens: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+  severity: 'critical' | 'significant' | 'minor'
+  fileLine: string
+  description: string
+  verificationRequired: boolean
+}
+
+export interface ReviewSpecMatch {
+  criterion: string
+  satisfied: boolean
+  evidence?: string
+}
+
+export type ReviewAction =
+  | { type: 'accept'; reason: string }
+  | { type: 'refine'; reason: string; kickoffPrompt: string }
+  | { type: 'rollback'; reason: string; rollbackTarget: string }
+  | { type: 'escalate'; reason: string; questionsForUser: string[] }
+
+export interface ReviewOutput {
+  verdict: 'complete' | 'partial' | 'broken'
+  confidence: 'high' | 'medium' | 'low'
+  eightLensFindings: ReviewLensFinding[]
+  specMatch: ReviewSpecMatch[]
+  recommendedAction: ReviewAction
+  nonBlockingObservations: string[]
+  uncertaintyFlags: string[]
+  rawText?: string // set when JSON parsing failed, for debugging
 }
 
 export type ResearchDepth = 'light' | 'standard' | 'deep'
