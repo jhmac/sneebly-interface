@@ -2,6 +2,7 @@ import { writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { app } from 'electron'
 import { runStandaloneTurn, extractJson } from './standalone-turn'
 import type { ModelName } from '../../shared/types'
 
@@ -83,37 +84,27 @@ export default defineConfig({
   const configPath = join(testsDir, 'playwright.config.ts')
   writeFileSync(configPath, configContent, 'utf-8')
 
-  // Ensure @playwright/test is available in the user's project
-  const playwrightTestBin = join(projectPath, 'node_modules', '.bin', 'playwright')
-  const playwrightTestPkg = join(projectPath, 'node_modules', '@playwright', 'test')
-  if (!existsSync(playwrightTestPkg)) {
-    try {
-      await execFileAsync('npm', ['install', '--save-dev', '@playwright/test'], {
-        cwd: projectPath,
-        timeout: 90_000,
-      })
-    } catch (installErr) {
-      const msg = installErr instanceof Error ? installErr.message : String(installErr)
-      return {
-        passed: false,
-        generatedSpec: parsed.spec,
-        output: `Failed to install @playwright/test in project: ${msg}`,
-      }
-    }
-  }
-
-  // Use project-local playwright binary if available, otherwise fall back to npx
-  const bin = existsSync(playwrightTestBin) ? playwrightTestBin : 'npx'
-  const args = bin === 'npx'
-    ? ['playwright', 'test', '--config', configPath, specPath]
-    : ['test', '--config', configPath, specPath]
+  // Use Sneebly's own @playwright/test binary and node_modules
+  const sneeblyRoot = app.getAppPath()
+  const playwrightBin = join(sneeblyRoot, 'node_modules', '.bin', 'playwright')
+  const sneeblyNodeModules = join(sneeblyRoot, 'node_modules')
 
   try {
-    const { stdout, stderr } = await execFileAsync(bin, args, {
-      cwd: projectPath,
-      timeout: 90_000,
-      shell: false,
-    })
+    const { stdout, stderr } = await execFileAsync(
+      playwrightBin,
+      ['test', '--config', configPath, specPath],
+      {
+        cwd: projectPath,
+        timeout: 90_000,
+        shell: false,
+        env: {
+          ...process.env,
+          // Allow spec's `import { test, expect } from '@playwright/test'` to resolve
+          // from Sneebly's node_modules without requiring the package in the user's project.
+          NODE_PATH: sneeblyNodeModules,
+        },
+      }
+    )
     return { passed: true, generatedSpec: parsed.spec, output: stdout + stderr }
   } catch (e) {
     const error = e as { stdout?: string; stderr?: string; message: string }
