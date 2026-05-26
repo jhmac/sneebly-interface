@@ -440,7 +440,7 @@ export interface MilestoneAuditResult {
 
 export type PhaseAuditProgress =
   | { stage: 'running'; checked: number; total: number; currentMilestone: string }
-  | { stage: 'done'; results: MilestoneAuditResult[]; appliedCount: number }
+  | { stage: 'done'; results: MilestoneAuditResult[]; appliedCount: number; parseError?: boolean }
 
 export interface AppSettings {
   theme: 'dark' | 'light'
@@ -453,6 +453,8 @@ export interface AppSettings {
   autoSelfReviewThresholdFiles: number
   autoSelfReviewThresholdLines: number
   autoSelfReviewModel: ModelName
+  phaseRunnerPrimaryModel: ModelName
+  phaseRunnerEscalationModel: ModelName
   recordTokenUsage: boolean
   applyLearnings: boolean
   learningsMaxAgeDays: number

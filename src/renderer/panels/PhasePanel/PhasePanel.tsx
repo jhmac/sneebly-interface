@@ -40,9 +40,11 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
       if (state.activeChecklist.length > 0) {
         setActiveChecklist(state.activeChecklist)
       }
+      // Reload plan to reflect any milestones the runner just marked complete
+      load(projectId)
     })
     return unsub
-  }, [])
+  }, [projectId])
 
   // Subscribe to audit progress events pushed from main
   useEffect(() => {
@@ -222,7 +224,12 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
 
         {/* Audit progress bar */}
         {auditProgress && (
-          <AuditProgressBar progress={auditProgress} onDismiss={() => setAuditProgress(null)} />
+          <AuditProgressBar
+            progress={auditProgress}
+            plan={plan}
+            onDismiss={() => setAuditProgress(null)}
+            onMarkComplete={handleMarkComplete}
+          />
         )}
 
         {/* Error */}
@@ -633,11 +640,17 @@ function RunStatusBar({
 
 function AuditProgressBar({
   progress,
+  plan,
   onDismiss,
+  onMarkComplete,
 }: {
   progress: PhaseAuditProgress
+  plan: PhasePlan | null
   onDismiss: () => void
+  onMarkComplete: (id: string) => void
 }) {
+  const [expanded, setExpanded] = useState(false)
+
   if (progress.stage === 'running') {
     const pct = progress.total > 0 ? Math.round((progress.checked / progress.total) * 100) : 0
     return (
@@ -659,24 +672,113 @@ function AuditProgressBar({
     )
   }
 
+  const milestoneText = new Map(plan?.milestones.map((m) => [m.id, m.text]) ?? [])
   const completeCount = progress.results.filter((r) => r.status === 'complete').length
   const partialCount = progress.results.filter((r) => r.status === 'partial').length
+  const notAutoChecked = completeCount - progress.appliedCount
+
+  // Sort: complete first, then partial, then not-started
+  const statusOrder = { complete: 0, partial: 1, 'not-started': 2 }
+  const sorted = [...progress.results].sort(
+    (a, b) => statusOrder[a.status] - statusOrder[b.status]
+  )
 
   return (
-    <div className="flex flex-shrink-0 items-center gap-3 border-b border-zinc-800 bg-emerald-950/20 px-6 py-2">
-      <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500" />
-      <div className="flex-1 text-xs">
-        <span className="font-medium text-emerald-400">Audit complete</span>
-        <span className="ml-2 text-zinc-500">
-          {progress.appliedCount} milestone{progress.appliedCount !== 1 ? 's' : ''} marked complete
-          {partialCount > 0 && ` · ${partialCount} partial`}
-          {completeCount > progress.appliedCount && ` · ${completeCount - progress.appliedCount} complete (low confidence, not auto-checked)`}
-        </span>
-      </div>
-      <button onClick={onDismiss} className="text-zinc-600 hover:text-zinc-400">
-        <X className="h-3 w-3" />
+    <div className="flex-shrink-0 border-b border-zinc-800">
+      {/* Summary row */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-3 bg-emerald-950/20 px-6 py-2 text-left hover:bg-emerald-950/30"
+      >
+        {progress.parseError ? (
+          <AlertTriangle className="h-3 w-3 flex-shrink-0 text-amber-500" />
+        ) : (
+          <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500" />
+        )}
+        <div className="flex-1 text-xs">
+          {progress.parseError ? (
+            <span className="font-medium text-amber-400">Audit returned no parseable JSON — results defaulted to not-started</span>
+          ) : (
+            <>
+              <span className="font-medium text-emerald-400">Audit complete</span>
+              <span className="ml-2 text-zinc-500">
+                {progress.appliedCount} auto-checked
+                {partialCount > 0 && ` · ${partialCount} partial`}
+                {notAutoChecked > 0 && ` · ${notAutoChecked} complete but low-confidence`}
+              </span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {progress.results.length > 0 && (
+            <span className="text-[10px] text-zinc-600">
+              {expanded ? 'hide' : 'show results'}
+            </span>
+          )}
+          {expanded ? (
+            <ChevronDown className="h-3 w-3 text-zinc-600" />
+          ) : (
+            <ChevronRight className="h-3 w-3 text-zinc-600" />
+          )}
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDismiss() }}
+          className="text-zinc-600 hover:text-zinc-400"
+        >
+          <X className="h-3 w-3" />
+        </button>
       </button>
+
+      {/* Expandable results list */}
+      {expanded && sorted.length > 0 && (
+        <div className="max-h-[35vh] overflow-y-auto bg-zinc-900/60">
+          {sorted.map((r) => {
+            const text = milestoneText.get(r.id) ?? r.id
+            const canManuallyCheck = !['complete'].includes(r.status) || r.confidence === 'low'
+            return (
+              <div key={r.id} className="border-b border-zinc-800/40 px-6 py-2 last:border-0">
+                <div className="flex items-start gap-2">
+                  <AuditStatusIcon status={r.status} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xs ${r.status === 'complete' ? 'text-emerald-300' : r.status === 'partial' ? 'text-amber-300' : 'text-zinc-500'}`}>
+                        {text}
+                      </span>
+                      <AuditConfidenceBadge confidence={r.confidence} />
+                    </div>
+                    <p className="mt-0.5 text-[10px] italic text-zinc-600">{r.evidence}</p>
+                  </div>
+                  {canManuallyCheck && (
+                    <button
+                      onClick={() => onMarkComplete(r.id)}
+                      title="Mark as complete"
+                      className="flex-shrink-0 rounded px-2 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-700 hover:text-zinc-400"
+                    >
+                      Done
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
+  )
+}
+
+function AuditStatusIcon({ status }: { status: 'complete' | 'partial' | 'not-started' }) {
+  if (status === 'complete') return <CheckCircle2 className="mt-0.5 h-3 w-3 flex-shrink-0 text-emerald-500" />
+  if (status === 'partial') return <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-sm border-2 border-amber-500 bg-amber-500/30" />
+  return <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-sm border border-zinc-700" />
+}
+
+function AuditConfidenceBadge({ confidence }: { confidence: 'high' | 'medium' | 'low' }) {
+  const colors = { high: 'text-emerald-600', medium: 'text-zinc-500', low: 'text-zinc-700' }
+  return (
+    <span className={`text-[9px] font-semibold uppercase tracking-wide ${colors[confidence]}`}>
+      {confidence}
+    </span>
   )
 }
 

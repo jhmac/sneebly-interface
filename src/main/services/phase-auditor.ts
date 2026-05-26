@@ -2,7 +2,7 @@ import { join } from 'path'
 import { execSync } from 'child_process'
 import { readFileSync, existsSync } from 'fs'
 import type { ChildProcess } from 'child_process'
-import { runStandaloneTurn } from './standalone-turn'
+import { runStandaloneTurn, extractJson } from './standalone-turn'
 import { loadPhasePlan, syncCheckedState, markMilestoneComplete } from './phase-tracker'
 import { sendToProjectWindows } from './window-registry'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
@@ -198,27 +198,22 @@ export async function auditPhasePlan(
   }
 
   // Parse the wrapped object: { "milestones": [...] }
+  // extractJson uses brace-counting so it reliably finds the top-level object
+  // even when surrounded by prose or other text.
   let rawResults: MilestoneAuditResult[] = []
-  try {
-    const text = result.assistantText
-    // Try object wrapper first (our preferred format)
-    const objMatch = text.match(/\{[\s\S]*\}/)
-    if (objMatch) {
-      const parsed = JSON.parse(objMatch[0]) as AuditResponse
-      if (Array.isArray(parsed.milestones)) {
-        rawResults = parsed.milestones
-      }
-    }
+  const text = result.assistantText
+  const wrapper = extractJson<AuditResponse>(text)
+  if (wrapper && !Array.isArray(wrapper) && Array.isArray(wrapper.milestones)) {
+    rawResults = wrapper.milestones
+  } else {
     // Fallback: bare array (in case Claude ignored the wrapper instruction)
-    if (rawResults.length === 0) {
-      const arrMatch = text.match(/\[[\s\S]*\]/)
-      if (arrMatch) {
+    const arrMatch = text.match(/\[[\s\S]*\]/)
+    if (arrMatch) {
+      try {
         const parsed = JSON.parse(arrMatch[0])
         if (Array.isArray(parsed)) rawResults = parsed as MilestoneAuditResult[]
-      }
+      } catch { /* ignore */ }
     }
-  } catch {
-    // JSON parse failed — fall through with empty results
   }
 
   const validIds = new Set(unchecked.map((m) => m.id))
@@ -258,6 +253,7 @@ export async function auditPhasePlan(
     stage: 'done',
     results: validated,
     appliedCount,
+    parseError: rawResults.length === 0,
   })
 
   return validated

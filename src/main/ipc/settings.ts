@@ -18,6 +18,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoSelfReviewThresholdFiles: 3,
   autoSelfReviewThresholdLines: 100,
   autoSelfReviewModel: 'claude-opus-4-7',
+  phaseRunnerPrimaryModel: 'claude-sonnet-4-6',
+  phaseRunnerEscalationModel: 'claude-opus-4-7',
   recordTokenUsage: true,
   applyLearnings: true,
   learningsMaxAgeDays: 14,

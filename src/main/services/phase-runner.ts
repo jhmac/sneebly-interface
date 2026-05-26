@@ -1,8 +1,8 @@
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { PhaseRunConfig, PhaseRunState, ChatMessage } from '../../shared/types'
-import { isChatTurnInFlight, startTurn, turnEmitter } from './agent-session'
-import { loadPhasePlan, getMilestoneById, getNextMilestone, syncCheckedState } from './phase-tracker'
+import { isChatTurnInFlight, startTurn, turnEmitter, type TurnMetrics } from './agent-session'
+import { loadPhasePlan, getMilestoneById, getNextMilestone, syncCheckedState, markMilestoneComplete } from './phase-tracker'
 import { listProjects } from './project-registry'
 import { composeSystemPromptAddendum } from './system-prompt-composer'
 import { sendToProjectWindows } from './window-registry'
@@ -117,7 +117,8 @@ async function driveRun(
   sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, userMsg)
 
   const appSettings = store.get('appSettings', {}) as Record<string, unknown>
-  const model = (appSettings['defaultModel'] as string | undefined) ?? 'claude-sonnet-4-6'
+  const primaryModel = (appSettings['phaseRunnerPrimaryModel'] as string | undefined) ?? 'claude-sonnet-4-6'
+  const escalationModel = (appSettings['phaseRunnerEscalationModel'] as string | undefined) ?? 'claude-opus-4-7'
   const recordEvents = (appSettings['recordEventStream'] as boolean | undefined) ?? true
   const recordUsage = (appSettings['recordTokenUsage'] as boolean | undefined) ?? true
   const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
@@ -130,6 +131,9 @@ async function driveRun(
 
   sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: true })
 
+  let buildError: string | undefined
+  let buildMetrics: TurnMetrics | undefined
+
   await new Promise<void>((resolve) => {
     startTurn(
       {
@@ -138,15 +142,17 @@ async function driveRun(
         sneeblySessionId: sessionId,
         claudeCodeSessionId,
         prompt: milestone.kickoffPrompt,
-        model,
+        model: primaryModel,
         appendSystemPrompt: systemPromptAddendum ?? undefined,
         recordEvents,
         recordUsage,
       },
       (event) => { pushAgentEvent(event, projectId) },
-      (newClaudeId, error) => {
+      (newClaudeId, error, metrics) => {
         sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: false })
         if (newClaudeId) store.set(`claudeSessionIds.${sessionId}`, newClaudeId)
+        buildError = error
+        buildMetrics = metrics
         if (error) {
           setRunState(projectId, { ...getRunState(projectId), status: 'paused', lastError: error })
         }
@@ -158,6 +164,60 @@ async function driveRun(
   const stateAfterBuild = getRunState(projectId)
   if (stateAfterBuild.status !== 'building') return  // stopped or errored
 
+  // Detect silent failure: no error but Claude made no file changes
+  if (!buildError && buildMetrics && buildMetrics.filesTouched.length === 0 && buildMetrics.linesChanged === 0 && !buildMetrics.wasAborted) {
+    setRunState(projectId, {
+      ...getRunState(projectId),
+      status: 'paused',
+      lastError: `Build produced no file changes for "${milestone.text}" — milestone may need a more specific kickoff prompt. Use "Build" to refine it manually.`,
+    })
+    return
+  }
+
+  // Auto-review with Opus: re-read what was just built, fix critical issues
+  if (config.autoReview) {
+    const reviewClaudeId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
+    const reviewMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      text: `[Auto-review] You just finished building "${milestone.text}". Review your implementation: check for bugs, type errors, security issues, broken imports, and obvious refactoring opportunities. Fix any critical issues you find. Keep the summary brief.`,
+      ts: Date.now(),
+    }
+    sessionStore.appendMessage(project.path, sessionId, reviewMsg)
+    sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, reviewMsg)
+    sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: true })
+
+    await new Promise<void>((resolve) => {
+      startTurn(
+        {
+          cwd: project.path,
+          projectId,
+          sneeblySessionId: sessionId,
+          claudeCodeSessionId: reviewClaudeId,
+          prompt: reviewMsg.text,
+          model: escalationModel,
+          appendSystemPrompt: systemPromptAddendum ?? undefined,
+          recordEvents,
+          recordUsage,
+          isAutoReview: true,
+        },
+        (event) => { pushAgentEvent(event, projectId) },
+        (newClaudeId, _reviewError) => {
+          sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: false })
+          if (newClaudeId) store.set(`claudeSessionIds.${sessionId}`, newClaudeId)
+          // Review errors don't stop the pipeline — resolve regardless
+          resolve()
+        }
+      )
+    })
+
+    // User may have stopped the run during the review
+    if (getRunState(projectId).status !== 'building') return
+  }
+
+  // Mark the milestone complete after build (and optional review) succeed
+  markMilestoneComplete(project.path, milestoneId)
+
   // Advance
   const completedInBatch = stateAfterBuild.completedInBatch + 1
   const batchSize = stateAfterBuild.batchSize
@@ -168,11 +228,12 @@ async function driveRun(
     activeChecklist: milestone.testChecklist,
   })
 
-  // Check if we've hit the batch limit or reached a checkpoint
+  // Pause if the batch limit is reached.
+  // Only treat checkpoints as stop points when batchSize === 0 ("Until next checkpoint" mode).
   const hitBatchLimit = batchSize > 0 && completedInBatch >= batchSize
-  const isCheckpoint = milestone.suggestedCheckpoint
+  const hitCheckpoint = batchSize === 0 && milestone.suggestedCheckpoint
 
-  if (hitBatchLimit || isCheckpoint) {
+  if (hitBatchLimit || hitCheckpoint) {
     setRunState(projectId, {
       ...getRunState(projectId),
       status: 'paused',
