@@ -365,6 +365,9 @@ export interface PendingFix {
   // True once a re-review has been fired for this cycle — prevents a second turn-end
   // from stacking duplicate re-reviews before the first resolves.
   verifying: boolean
+  // Backstop timer that reverts the chip if no fix commit ever lands. Cleared when the
+  // cycle resolves, is superseded, or transitions to verifying.
+  expiryTimer?: ReturnType<typeof setTimeout>
 }
 
 const FIX_TIMEOUT_MS = 30 * 60 * 1000
@@ -372,6 +375,33 @@ const pendingFixByMilestone = new Map<string, PendingFix>()
 
 function fixKey(projectId: string, milestoneId: string): string {
   return `${projectId}:${milestoneId}`
+}
+
+// Cancel the backstop timer (if any) and drop the entry. Single removal path so a
+// stale timer can never fire against a superseded or already-resolved cycle.
+function removePendingFix(key: string): void {
+  const entry = pendingFixByMilestone.get(key)
+  if (entry?.expiryTimer) clearTimeout(entry.expiryTimer)
+  pendingFixByMilestone.delete(key)
+}
+
+// Schedule the "paste but no commit" backstop. unref'd so it never keeps the process
+// (or a test run) alive; the startedAt guard ignores a superseded cycle.
+function scheduleFixExpiry(
+  projectId: string,
+  milestoneId: string,
+  startedAt: number,
+  deps: FixTrackingDeps,
+): ReturnType<typeof setTimeout> {
+  const t = setTimeout(() => {
+    const key = fixKey(projectId, milestoneId)
+    const entry = pendingFixByMilestone.get(key)
+    if (!entry || entry.startedAt !== startedAt) return
+    pendingFixByMilestone.delete(key)
+    deps.emitFixState(projectId, milestoneId, 'cleared')
+  }, FIX_TIMEOUT_MS)
+  if (typeof t.unref === 'function') t.unref()
+  return t
 }
 
 // ── Pure helpers (unit-tested directly) ──
@@ -433,12 +463,12 @@ export async function beginFixTracking(
   } catch {
     return // not a git repo / git unavailable — can't detect the fix commit
   }
-  pendingFixByMilestone.set(fixKey(projectId, milestoneId), {
-    startedAt: deps.now(),
-    fromReviewId: reviewId,
-    sinceCommit,
-    verifying: false,
-  })
+  const key = fixKey(projectId, milestoneId)
+  removePendingFix(key) // supersede any prior cycle on this milestone (cancels its timer)
+  const startedAt = deps.now()
+  const entry: PendingFix = { startedAt, fromReviewId: reviewId, sinceCommit, verifying: false }
+  entry.expiryTimer = scheduleFixExpiry(projectId, milestoneId, startedAt, deps)
+  pendingFixByMilestone.set(key, entry)
   deps.emitFixState(projectId, milestoneId, 'fixing')
 }
 
@@ -448,19 +478,22 @@ export async function handleTurnEndForFix(
   projectId: string,
   deps: FixTrackingDeps = defaultFixDeps,
 ): Promise<void> {
+  const prefix = `${projectId}:`
+  const matching = [...pendingFixByMilestone.entries()].filter(([key]) => key.startsWith(prefix))
+  if (matching.length === 0) return
+
   const now = deps.now()
-  for (const [key, pendingFix] of [...pendingFixByMilestone.entries()]) {
-    if (!key.startsWith(`${projectId}:`)) continue
+  const project = deps.listProjects().find((p) => p.id === projectId)
+
+  for (const [key, pendingFix] of matching) {
     const milestoneId = key.slice(projectId.length + 1)
 
     if (isFixExpired(pendingFix.startedAt, now)) {
-      pendingFixByMilestone.delete(key)
+      removePendingFix(key)
       deps.emitFixState(projectId, milestoneId, 'cleared')
       continue
     }
     if (pendingFix.verifying) continue // a re-review is already running for this cycle
-
-    const project = deps.listProjects().find((p) => p.id === projectId)
     if (!project) continue
 
     let commits: string[]
@@ -471,13 +504,16 @@ export async function handleTurnEndForFix(
     }
     if (commits.length === 0) continue // no fix commit yet
 
+    // A commit landed: verification supersedes the backstop timer (the re-review's
+    // completion now owns the outcome).
+    if (pendingFix.expiryTimer) { clearTimeout(pendingFix.expiryTimer); pendingFix.expiryTimer = undefined }
     pendingFix.verifying = true
     const turnId = deps.fireFixReview(projectId, milestoneId)
     if (turnId) {
       deps.emitFixState(projectId, milestoneId, 'verifying')
     } else {
       // Review Agent disabled mid-cycle — can't verify; stop tracking.
-      pendingFixByMilestone.delete(key)
+      removePendingFix(key)
       deps.emitFixState(projectId, milestoneId, 'cleared')
     }
   }
@@ -496,7 +532,7 @@ export async function handleReviewDoneForFix(
   const key = fixKey(projectId, milestoneId)
   const pendingFix = pendingFixByMilestone.get(key)
   if (!pendingFix) return // not a fix cycle — a normal first-time / auto-fire review
-  pendingFixByMilestone.delete(key)
+  removePendingFix(key)
 
   const outcome = resolveFixOutcome(result, error)
   deps.emitFixState(projectId, milestoneId, outcome)
@@ -523,6 +559,9 @@ export function __getPendingFix(projectId: string, milestoneId: string): Pending
   return pendingFixByMilestone.get(fixKey(projectId, milestoneId))
 }
 export function __resetFixTracking(): void {
+  for (const entry of pendingFixByMilestone.values()) {
+    if (entry.expiryTimer) clearTimeout(entry.expiryTimer)
+  }
   pendingFixByMilestone.clear()
 }
 

@@ -125,7 +125,7 @@ describe('fix-tracking — handleTurnEndForFix', () => {
     expect(deps.fireFixReview).toHaveBeenCalledTimes(1)
   })
 
-  it('drops an expired pendingFix and emits "cleared" (timeout)', async () => {
+  it('drops an expired pendingFix and emits "cleared" on a later turn-end', async () => {
     const deps = makeDeps({ gitLogSince: vi.fn().mockResolvedValue(['c1']) })
     await beginFixTracking('p1', 'm1', 'rev-0', deps) // startedAt = nowValue
     nowValue += 31 * 60 * 1000
@@ -135,6 +135,22 @@ describe('fix-tracking — handleTurnEndForFix', () => {
     expect(__getPendingFix('p1', 'm1')).toBeUndefined()
     expect(deps.emitFixState).toHaveBeenLastCalledWith('p1', 'm1', 'cleared')
     expect(deps.fireFixReview).not.toHaveBeenCalled()
+  })
+
+  it('backstop timer reverts the chip after the timeout with no turn-end at all', async () => {
+    vi.useFakeTimers()
+    try {
+      const deps = makeDeps()
+      await beginFixTracking('p1', 'm1', 'rev-0', deps)
+      expect(__getPendingFix('p1', 'm1')).toBeDefined()
+
+      await vi.advanceTimersByTimeAsync(31 * 60 * 1000)
+
+      expect(__getPendingFix('p1', 'm1')).toBeUndefined()
+      expect(deps.emitFixState).toHaveBeenLastCalledWith('p1', 'm1', 'cleared')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('handles two milestones in the same project independently', async () => {
