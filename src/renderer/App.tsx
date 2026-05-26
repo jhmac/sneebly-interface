@@ -56,6 +56,11 @@ export default function App() {
     return () => clearInterval(timer)
   }, [activeProjectId])
 
+  // Clear cached review verdicts when switching projects (in-memory, per-project).
+  useEffect(() => {
+    useReviewAgentStore.getState().clearForProject()
+  }, [activeProjectId])
+
   // ── Daemon status polling ──────────────────────────────────────────────
   useEffect(() => {
     const { refreshStatus, refreshQuestionCounts } = useDaemonStore.getState()
@@ -152,11 +157,11 @@ export default function App() {
 
   // ── Review Agent push channels ─────────────────────────────────────────
   useEffect(() => {
-    const offThinking = window.api.reviewAgentOnThinking((turnId, status) =>
-      useReviewAgentStore.getState()._onThinking(turnId, status)
+    const offThinking = window.api.reviewAgentOnThinking((turnId, milestoneId, status) =>
+      useReviewAgentStore.getState()._onThinking(turnId, milestoneId, status)
     )
-    const offDone = window.api.reviewAgentOnDone((turnId, result, error) =>
-      useReviewAgentStore.getState()._onDone(turnId, result, error)
+    const offDone = window.api.reviewAgentOnDone((turnId, milestoneId, result, error) =>
+      useReviewAgentStore.getState()._onDone(turnId, milestoneId, result, error)
     )
     return () => { offThinking(); offDone() }
   }, [])

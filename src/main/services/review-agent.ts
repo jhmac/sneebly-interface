@@ -3,19 +3,25 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { execFile, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
+import Store from 'electron-store'
 import { runStandaloneTurn, extractJson } from './standalone-turn'
 import { getSkillPrompt } from './skills-loader'
 import { listProjects } from './project-registry'
 import { loadPhasePlan, getMilestoneById } from './phase-tracker'
 import { readEventsForDateRange, appendEvent } from './event-stream'
+import { sendToProjectWindows } from './window-registry'
+import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type {
   AgentEvent,
   AgentContentToolUse,
+  AppSettings,
   ModelName,
   ReviewOutput,
   ReviewAction,
   SemanticEventKind,
 } from '../../shared/types'
+
+const settingsStore = new Store()
 
 const execFileAsync = promisify(execFile)
 const DOC_TRUNCATE = 6000
@@ -159,6 +165,7 @@ export function startReview(
   projectId: string,
   milestoneId: string,
   model: ModelName,
+  autoFired: boolean,
   cb: ReviewCallbacks
 ): string {
   const turnId = randomUUID()
@@ -176,7 +183,9 @@ export function startReview(
 
   const turn: ActiveTurn = { cancelled: false }
   activeTurns.set(turnId, turn)
-  emitEvent(project.path, projectId, 'review_agent_started', { milestoneId, model })
+  // Surface the chip immediately, before the (async) bundle build + first tool call.
+  cb.onThinking(turnId, 'Starting review…')
+  emitEvent(project.path, projectId, 'review_agent_started', { milestoneId, model, autoFired })
 
   const systemPrompt = getSkillPrompt('review-agent') ?? undefined
   const startedAt = Date.now()
@@ -221,7 +230,7 @@ export function startReview(
           uncertaintyFlags: ['JSON parsing failed'],
           rawText: result.assistantText.slice(0, 4000),
         }
-        emitEvent(project.path, projectId, 'review_agent_completed', { milestoneId, verdict: 'broken', confidence: 'low', recommendedActionType: 'escalate', durationMs })
+        emitEvent(project.path, projectId, 'review_agent_completed', { milestoneId, verdict: 'broken', confidence: 'low', recommendedActionType: 'escalate', durationMs, autoFired })
         cb.onDone(turnId, broken)
         return
       }
@@ -234,6 +243,7 @@ export function startReview(
         confidence: output.confidence,
         recommendedActionType: output.recommendedAction.type,
         durationMs,
+        autoFired,
       })
       cb.onDone(turnId, output)
     })
@@ -243,6 +253,23 @@ export function startReview(
     })
 
   return turnId
+}
+
+// Single entry point used by the IPC handler (manual) and the auto-fire call sites.
+// Self-gates on settings, resolves the model, and pushes THINKING/DONE events
+// (with milestoneId so the renderer can key its per-milestone chip). Returns the
+// turnId, or null if the review was skipped (disabled / auto-fire off).
+export function fireReview(projectId: string, milestoneId: string, autoFired: boolean): string | null {
+  const settings = settingsStore.get('appSettings', {}) as Partial<AppSettings>
+  if (settings.reviewAgentEnabled === false) return null
+  if (autoFired && settings.reviewAgentAutoFire !== true) return null
+  const model = (settings.reviewAgentModel as ModelName | undefined) ?? 'claude-opus-4-7'
+  return startReview(projectId, milestoneId, model, autoFired, {
+    onThinking: (turnId, status) =>
+      sendToProjectWindows(projectId, IPC_CHANNELS.REVIEW_AGENT_THINKING, turnId, milestoneId, status),
+    onDone: (turnId, result, error) =>
+      sendToProjectWindows(projectId, IPC_CHANNELS.REVIEW_AGENT_DONE, turnId, milestoneId, result, error),
+  })
 }
 
 async function buildBundle(

@@ -706,8 +706,8 @@ export interface ElectronAPI {
   reviewAgentStart: (opts: ReviewInput) => Promise<{ turnId: string }>
   reviewAgentCancel: (turnId: string) => Promise<void>
   reviewAgentRecordAction: (opts: { projectId: string; milestoneId: string; action: string }) => Promise<void>
-  reviewAgentOnThinking: (cb: (turnId: string, status: string) => void) => () => void
-  reviewAgentOnDone: (cb: (turnId: string, result?: ReviewOutput, error?: string) => void) => () => void
+  reviewAgentOnThinking: (cb: (turnId: string, milestoneId: string, status: string) => void) => () => void
+  reviewAgentOnDone: (cb: (turnId: string, milestoneId: string, result?: ReviewOutput, error?: string) => void) => () => void
 }
 
 export interface AskSneeblyStartInput {

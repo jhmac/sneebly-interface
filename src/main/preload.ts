@@ -411,13 +411,13 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.REVIEW_AGENT_CANCEL, turnId),
   reviewAgentRecordAction: (opts: { projectId: string; milestoneId: string; action: string }): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.REVIEW_AGENT_ACTION, opts),
-  reviewAgentOnThinking: (cb: (turnId: string, status: string) => void): (() => void) => {
-    const h = (_: IpcRendererEvent, turnId: string, status: string) => cb(turnId, status)
+  reviewAgentOnThinking: (cb: (turnId: string, milestoneId: string, status: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, turnId: string, milestoneId: string, status: string) => cb(turnId, milestoneId, status)
     ipcRenderer.on(IPC_CHANNELS.REVIEW_AGENT_THINKING, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.REVIEW_AGENT_THINKING, h)
   },
-  reviewAgentOnDone: (cb: (turnId: string, result?: ReviewOutput, error?: string) => void): (() => void) => {
-    const h = (_: IpcRendererEvent, turnId: string, result?: ReviewOutput, error?: string) => cb(turnId, result, error)
+  reviewAgentOnDone: (cb: (turnId: string, milestoneId: string, result?: ReviewOutput, error?: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, turnId: string, milestoneId: string, result?: ReviewOutput, error?: string) => cb(turnId, milestoneId, result, error)
     ipcRenderer.on(IPC_CHANNELS.REVIEW_AGENT_DONE, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.REVIEW_AGENT_DONE, h)
   },

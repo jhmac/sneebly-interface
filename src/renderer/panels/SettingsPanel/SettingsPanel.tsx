@@ -254,8 +254,11 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-500" />
             </div>
           </Row>
-          <Row label="Auto-fire after build" description="Available in v1.1 after verdict reliability is validated. For now, fire reviews manually from milestone cards.">
-            <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">v1.1</span>
+          <Row label="Auto-fire after build" description="Automatically audit each milestone against its spec when marked complete. Verdicts appear as a chip on the milestone card. Never blocks the autonomous loop — log-only.">
+            <Toggle
+              value={settings.reviewAgentAutoFire ?? false}
+              onChange={(v) => handleSave({ reviewAgentAutoFire: v })}
+            />
           </Row>
         </Section>
 

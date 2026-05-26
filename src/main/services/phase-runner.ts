@@ -16,6 +16,7 @@ import { getServerUrl } from './dev-server'
 import { runBrowserCheck } from '../mcp-servers/browser-check/browser'
 import { appendEvent } from './event-stream'
 import { runPlaywrightVerification } from './phase-playwright-runner'
+import { fireReview } from './review-agent'
 
 const execFileAsync = promisify(execFile)
 const GIT_MAX_BUFFER = 16 * 1024 * 1024  // porcelain output can be large for codegen-heavy milestones
@@ -458,6 +459,12 @@ async function driveRun(
 
   // Mark the milestone complete after build, optional review, and smoke test succeed
   markMilestoneComplete(project.path, milestoneId)
+
+  // Auto-fire the Review Agent (log-only, fire-and-forget). fireReview self-gates on
+  // settings (enabled + autoFire) and runs in parallel — the run never waits on it.
+  try { fireReview(projectId, milestoneId, true) } catch (err) {
+    console.warn('[phase-runner] auto-fire review failed to start:', err)
+  }
 
   // Auto-commit the milestone's changes so the run is traceable in git history.
   if (appSettings['autoCommitMilestones'] !== false) {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Loader2, Check, Copy, ArrowRightToLine, ChevronDown, ChevronRight } from 'lucide-react'
+import { X, Loader2, Check, Copy, ArrowRightToLine, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import type { ReviewOutput, ReviewLensFinding } from '../../../shared/types'
 import { useReviewAgentStore } from './useReviewAgentStore'
 import { useProjectStore } from '../../state/projectStore'
@@ -35,9 +35,20 @@ export default function ReviewPanel() {
           <span className="text-sm font-medium text-zinc-200">
             Review: {current.milestoneId} — {current.milestoneText}
           </span>
-          <button onClick={current.status === 'thinking' ? cancelCurrent : closeModal} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* turnId === null means we're showing a cached result — offer a fresh run. */}
+            {current.status === 'done' && current.turnId === null && (
+              <button
+                onClick={() => useReviewAgentStore.getState().rerun()}
+                className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-[10px] text-zinc-300 hover:bg-zinc-700"
+              >
+                <RefreshCw className="h-3 w-3" /> Re-run review
+              </button>
+            )}
+            <button onClick={current.status === 'thinking' ? cancelCurrent : closeModal} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 text-xs">

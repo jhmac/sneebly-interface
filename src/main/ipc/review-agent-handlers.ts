@@ -1,12 +1,7 @@
 import { ipcMain } from 'electron'
-import Store from 'electron-store'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
-import type { AppSettings, ModelName } from '../../shared/types'
-import { sendToProjectWindows } from '../services/window-registry'
-import { startReview, cancelReview, recordReviewAction } from '../services/review-agent'
-
-const store = new Store()
+import { fireReview, cancelReview, recordReviewAction } from '../services/review-agent'
 
 const StartSchema = z.object({
   projectId: z.string().min(1),
@@ -16,17 +11,8 @@ const StartSchema = z.object({
 export function registerReviewAgentHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.REVIEW_AGENT_START, (_e, raw: unknown) => {
     const opts = StartSchema.parse(raw)
-    const settings = store.get('appSettings', {}) as Partial<AppSettings>
-    if (settings.reviewAgentEnabled === false) {
-      throw new Error('Review Agent is disabled in settings')
-    }
-    const model = (settings.reviewAgentModel as ModelName | undefined) ?? 'claude-opus-4-7'
-    const turnId = startReview(opts.projectId, opts.milestoneId, model, {
-      onThinking: (tid, status) =>
-        sendToProjectWindows(opts.projectId, IPC_CHANNELS.REVIEW_AGENT_THINKING, tid, status),
-      onDone: (tid, result, error) =>
-        sendToProjectWindows(opts.projectId, IPC_CHANNELS.REVIEW_AGENT_DONE, tid, result, error),
-    })
+    const turnId = fireReview(opts.projectId, opts.milestoneId, false)
+    if (!turnId) throw new Error('Review Agent is disabled in settings')
     return { turnId }
   })
 

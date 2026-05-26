@@ -5,28 +5,40 @@ interface CurrentReview {
   projectId: string
   milestoneId: string
   milestoneText: string
-  turnId: string | null
+  turnId: string | null // null when viewing a cached result (enables the Re-run button)
   status: 'thinking' | 'done' | 'error'
   thinking: string[]
   result?: ReviewOutput
   error?: string
 }
 
+interface CachedReview {
+  result: ReviewOutput
+  completedAt: number
+}
+
 interface ReviewAgentStore {
   current: CurrentReview | null
   modalOpen: boolean
+  reviewsByMilestoneId: Record<string, CachedReview>
+  inFlightByMilestoneId: Record<string, boolean>
 
   startReview: (projectId: string, milestoneId: string, milestoneText: string) => Promise<void>
+  viewCached: (projectId: string, milestoneId: string, milestoneText: string) => void
+  rerun: () => void
   cancelCurrent: () => void
   closeModal: () => void
+  clearForProject: () => void
 
-  _onThinking: (turnId: string, status: string) => void
-  _onDone: (turnId: string, result?: ReviewOutput, error?: string) => void
+  _onThinking: (turnId: string, milestoneId: string, status: string) => void
+  _onDone: (turnId: string, milestoneId: string, result?: ReviewOutput, error?: string) => void
 }
 
 export const useReviewAgentStore = create<ReviewAgentStore>((set, get) => ({
   current: null,
   modalOpen: false,
+  reviewsByMilestoneId: {},
+  inFlightByMilestoneId: {},
 
   startReview: async (projectId, milestoneId, milestoneText) => {
     set({
@@ -42,6 +54,21 @@ export const useReviewAgentStore = create<ReviewAgentStore>((set, get) => ({
     }
   },
 
+  viewCached: (projectId, milestoneId, milestoneText) => {
+    const cached = get().reviewsByMilestoneId[milestoneId]
+    if (!cached) return
+    set({
+      modalOpen: true,
+      current: { projectId, milestoneId, milestoneText, turnId: null, status: 'done', thinking: [], result: cached.result },
+    })
+  },
+
+  rerun: () => {
+    const c = get().current
+    if (!c) return
+    get().startReview(c.projectId, c.milestoneId, c.milestoneText)
+  },
+
   cancelCurrent: () => {
     const turnId = get().current?.turnId
     if (turnId) window.api.reviewAgentCancel(turnId).catch(() => {})
@@ -50,19 +77,33 @@ export const useReviewAgentStore = create<ReviewAgentStore>((set, get) => ({
 
   closeModal: () => set({ modalOpen: false }),
 
-  _onThinking: (turnId, status) => {
-    set((s) => {
-      if (!s.current || s.current.turnId !== turnId) return s
-      return { current: { ...s.current, thinking: [...s.current.thinking, status] } }
-    })
+  clearForProject: () => set({ reviewsByMilestoneId: {}, inFlightByMilestoneId: {}, current: null, modalOpen: false }),
+
+  _onThinking: (turnId, milestoneId, status) => {
+    set((s) => ({
+      inFlightByMilestoneId: { ...s.inFlightByMilestoneId, [milestoneId]: true },
+      current: s.current && s.current.turnId === turnId
+        ? { ...s.current, thinking: [...s.current.thinking, status] }
+        : s.current,
+    }))
   },
 
-  _onDone: (turnId, result, error) => {
+  _onDone: (turnId, milestoneId, result, error) => {
     set((s) => {
-      if (!s.current || s.current.turnId !== turnId) return s
-      if (error === 'cancelled') return { current: null, modalOpen: false }
-      if (error) return { current: { ...s.current, status: 'error', error } }
-      return { current: { ...s.current, status: 'done', result } }
+      const inFlight = { ...s.inFlightByMilestoneId }
+      delete inFlight[milestoneId]
+
+      const reviews = { ...s.reviewsByMilestoneId }
+      if (result) reviews[milestoneId] = { result, completedAt: Date.now() }
+
+      // Update the modal only if it's showing this turn.
+      let current = s.current
+      if (current && current.turnId === turnId) {
+        if (error === 'cancelled') current = null
+        else if (error) current = { ...current, status: 'error', error }
+        else current = { ...current, status: 'done', result }
+      }
+      return { inFlightByMilestoneId: inFlight, reviewsByMilestoneId: reviews, current }
     })
   },
 }))

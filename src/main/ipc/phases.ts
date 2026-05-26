@@ -12,6 +12,7 @@ import {
 } from '../services/phase-tracker'
 import { startRun, stopRun, getRunState } from '../services/phase-runner'
 import { auditPhasePlan, stopAudit } from '../services/phase-auditor'
+import { fireReview } from '../services/review-agent'
 
 function projectPath(projectId: string): string | null {
   return listProjects().find((p) => p.id === projectId)?.path ?? null
@@ -41,7 +42,10 @@ export function registerPhaseHandlers(): void {
     (_e, projectId: string, milestoneId: string) => {
       const path = projectPath(projectId)
       if (!path) throw new Error(`Project ${projectId} not found`)
-      return markMilestoneComplete(path, milestoneId)
+      const plan = markMilestoneComplete(path, milestoneId)
+      // Auto-fire the Review Agent (log-only, fire-and-forget). Self-gates on settings.
+      try { fireReview(projectId, milestoneId, true) } catch { /* never block mark-complete */ }
+      return plan
     }
   )
 

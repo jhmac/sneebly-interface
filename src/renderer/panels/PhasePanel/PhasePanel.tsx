@@ -7,7 +7,20 @@ import {
 import { usePhaseStore } from '../../state/phaseStore'
 import { useReviewAgentStore } from '../ReviewAgent/useReviewAgentStore'
 import { useSettingsStore } from '../../state/settingsStore'
-import type { OrderedMilestone, PhasePlan, PhaseRunConfig, PhaseRunState, PhaseAuditProgress } from '../../../shared/types'
+import { timeAgo } from '../../../shared/utils'
+import type { OrderedMilestone, PhasePlan, PhaseRunConfig, PhaseRunState, PhaseAuditProgress, ReviewOutput } from '../../../shared/types'
+
+const VERDICT_CHIP: Record<ReviewOutput['verdict'], string> = {
+  complete: 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25',
+  partial: 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25',
+  broken: 'bg-rose-500/15 text-rose-400 hover:bg-rose-500/25',
+}
+
+const VERDICT_LABEL: Record<ReviewOutput['verdict'], string> = {
+  complete: 'Complete',
+  partial: 'Partial',
+  broken: 'Broken',
+}
 
 interface Props {
   open: boolean
@@ -275,6 +288,7 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
               onBuild={handleBuildMilestone}
               onMarkComplete={handleMarkComplete}
               onReview={reviewEnabled ? handleReview : undefined}
+              projectId={projectId}
             />
           ))}
         </div>
@@ -338,6 +352,7 @@ function PhaseGroup({
   onBuild,
   onMarkComplete,
   onReview,
+  projectId,
 }: {
   phase: PhaseGroupData
   runState: PhaseRunState
@@ -346,6 +361,7 @@ function PhaseGroup({
   onBuild: (id: string) => void
   onMarkComplete: (id: string) => void
   onReview?: (id: string) => void
+  projectId: string
 }) {
   const pct = phase.milestones.length > 0
     ? Math.round((phase.completedCount / phase.milestones.length) * 100)
@@ -398,6 +414,7 @@ function PhaseGroup({
               onBuild={onBuild}
               onMarkComplete={onMarkComplete}
               onReview={onReview}
+              projectId={projectId}
             />
           ))}
         </div>
@@ -420,15 +437,19 @@ function MilestoneRow({
   onBuild,
   onMarkComplete,
   onReview,
+  projectId,
 }: {
   milestone: OrderedMilestone
   runState: PhaseRunState
   onBuild: (id: string) => void
   onMarkComplete: (id: string) => void
   onReview?: (id: string) => void
+  projectId: string
 }) {
   const [hovered, setHovered] = useState(false)
   const isRunning = runState.currentMilestoneId === milestone.id && runState.status === 'building'
+  const cachedReview = useReviewAgentStore((s) => s.reviewsByMilestoneId[milestone.id])
+  const reviewing = useReviewAgentStore((s) => !!s.inFlightByMilestoneId[milestone.id])
 
   return (
     <div
@@ -459,6 +480,20 @@ function MilestoneRow({
               <Zap className="h-2.5 w-2.5" /> checkpoint
             </span>
           )}
+          {onReview && reviewing && (
+            <span className="flex items-center gap-1 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-400">
+              <Loader2 className="h-2.5 w-2.5 animate-spin" /> Reviewing…
+            </span>
+          )}
+          {onReview && !reviewing && cachedReview && (
+            <button
+              onClick={() => useReviewAgentStore.getState().viewCached(projectId, milestone.id, milestone.text)}
+              title={`Reviewed ${timeAgo(cachedReview.completedAt)} — click to view`}
+              className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${VERDICT_CHIP[cachedReview.result.verdict]}`}
+            >
+              {VERDICT_LABEL[cachedReview.result.verdict]}
+            </button>
+          )}
         </div>
 
         {milestone.specPath && (
@@ -476,14 +511,24 @@ function MilestoneRow({
       {/* Actions */}
       {(hovered || isRunning) && (
         <div className="flex flex-shrink-0 items-center gap-1">
-          {onReview && (
-            <button
-              onClick={() => onReview(milestone.id)}
-              title="Audit this milestone against its spec"
-              className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-amber-400 hover:bg-amber-500/10"
-            >
-              <ScanSearch className="h-3 w-3" /> Review
-            </button>
+          {onReview && !reviewing && (
+            cachedReview ? (
+              <button
+                onClick={() => useReviewAgentStore.getState().viewCached(projectId, milestone.id, milestone.text)}
+                title="View the cached review verdict"
+                className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-amber-400 hover:bg-amber-500/10"
+              >
+                <ScanSearch className="h-3 w-3" /> View
+              </button>
+            ) : (
+              <button
+                onClick={() => onReview(milestone.id)}
+                title="Audit this milestone against its spec"
+                className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-amber-400 hover:bg-amber-500/10"
+              >
+                <ScanSearch className="h-3 w-3" /> Review
+              </button>
+            )
           )}
           {!milestone.checked && (
             <>
