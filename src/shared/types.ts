@@ -637,6 +637,7 @@ export interface ElectronAPI {
   phaseOnRunStateChanged: (cb: (projectId: string, state: PhaseRunState) => void) => () => void
   phaseKickoffFill: (projectId: string, milestoneId: string) => Promise<{ text: string; specPath: string | null } | null>
   phaseAudit: (projectId: string) => Promise<MilestoneAuditResult[]>
+  phaseAuditStop: (projectId: string) => Promise<void>
   phaseOnAuditProgress: (cb: (progress: PhaseAuditProgress) => void) => () => void
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────

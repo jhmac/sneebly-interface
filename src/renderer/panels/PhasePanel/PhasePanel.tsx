@@ -72,9 +72,14 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
     setAuditProgress(null)
     try {
       await window.api.phaseAudit(projectId)
-    } catch (e) {
+    } catch {
       setAuditing(false)
     }
+  }
+
+  const handleAuditStop = () => {
+    window.api.phaseAuditStop(projectId)
+    setAuditing(false)
   }
 
   const handleBuildMilestone = async (milestoneId: string) => {
@@ -159,19 +164,26 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleAudit}
-              disabled={auditing || runState.status === 'building'}
-              title="Audit codebase to auto-check completed milestones"
-              className="flex items-center gap-1.5 rounded-md bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {auditing ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
+            {auditing ? (
+              <button
+                onClick={handleAuditStop}
+                title="Stop audit"
+                className="flex items-center gap-1.5 rounded-md bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-red-900/60 hover:text-red-300"
+              >
+                <Square className="h-3 w-3" />
+                Stop audit
+              </button>
+            ) : (
+              <button
+                onClick={handleAudit}
+                disabled={runState.status === 'building'}
+                title="Audit codebase to auto-check completed milestones"
+                className="flex items-center gap-1.5 rounded-md bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
                 <ScanSearch className="h-3 w-3" />
-              )}
-              {auditing ? 'Auditing…' : 'Audit'}
-            </button>
+                Audit
+              </button>
+            )}
             {runState.status === 'idle' || runState.status === 'paused' || runState.status === 'complete' ? (
               <button
                 onClick={() => setRunConfigOpen(true)}

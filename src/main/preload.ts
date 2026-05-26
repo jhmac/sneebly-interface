@@ -318,6 +318,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.PHASE_KICKOFF_FILL, projectId, milestoneId),
   phaseAudit: (projectId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.PHASE_AUDIT, projectId),
+  phaseAuditStop: (projectId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_AUDIT_STOP, projectId),
   phaseOnAuditProgress: (cb: (progress: PhaseAuditProgress) => void): (() => void) => {
     const h = (_: IpcRendererEvent, progress: PhaseAuditProgress) => cb(progress)
     ipcRenderer.on(IPC_CHANNELS.PHASE_AUDIT_PROGRESS, h)

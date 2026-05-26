@@ -11,7 +11,7 @@ import {
   getMilestoneById,
 } from '../services/phase-tracker'
 import { startRun, stopRun, getRunState } from '../services/phase-runner'
-import { auditPhasePlan } from '../services/phase-auditor'
+import { auditPhasePlan, stopAudit } from '../services/phase-auditor'
 
 function projectPath(projectId: string): string | null {
   return listProjects().find((p) => p.id === projectId)?.path ?? null
@@ -75,5 +75,9 @@ export function registerPhaseHandlers(): void {
     const path = projectPath(projectId)
     if (!path) throw new Error(`Project ${projectId} not found`)
     return auditPhasePlan(path, projectId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PHASE_AUDIT_STOP, (_e, projectId: string) => {
+    stopAudit(projectId)
   })
 }
