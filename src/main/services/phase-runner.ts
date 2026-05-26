@@ -1,7 +1,8 @@
 import Store from 'electron-store'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { execFileSync } from 'child_process'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { PhaseRunConfig, PhaseRunState, ChatMessage, ModelName, OrderedMilestone } from '../../shared/types'
 import { isChatTurnInFlight, startTurn, turnEmitter, type TurnMetrics } from './agent-session'
@@ -15,6 +16,9 @@ import { getServerUrl } from './dev-server'
 import { runBrowserCheck } from '../mcp-servers/browser-check/browser'
 import { appendEvent } from './event-stream'
 import { runPlaywrightVerification } from './phase-playwright-runner'
+
+const execFileAsync = promisify(execFile)
+const GIT_MAX_BUFFER = 16 * 1024 * 1024  // porcelain output can be large for codegen-heavy milestones
 
 const store = new Store()
 
@@ -109,15 +113,15 @@ function parsePorcelainZ(out: string): Set<string> {
   return paths
 }
 
-function gitStatusBaseline(projectPath: string): Set<string> {
+async function gitStatusBaseline(projectPath: string): Promise<Set<string>> {
   try {
-    const out = execFileSync('git', ['status', '--porcelain=v1', '-z'], {
+    const { stdout } = await execFileAsync('git', ['status', '--porcelain=v1', '-z'], {
       cwd: projectPath,
       encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 30_000,
+      maxBuffer: GIT_MAX_BUFFER,
     })
-    return parsePorcelainZ(out)
+    return parsePorcelainZ(stdout)
   } catch {
     // Not a git repo, or git not installed — auto-commit will skip.
     return new Set()
@@ -131,12 +135,12 @@ interface AutoCommitResult {
   reason?: string
 }
 
-function autoCommitMilestone(
+async function autoCommitMilestone(
   projectPath: string,
   milestone: OrderedMilestone,
   buildMetrics: TurnMetrics | undefined,
   preBuildDirtyFiles: Set<string>,
-): AutoCommitResult {
+): Promise<AutoCommitResult> {
   // The .git existence check also guarantees projectPath is the repo root, so porcelain
   // paths and normalized filesTouched paths are both relative to projectPath.
   if (!existsSync(join(projectPath, '.git'))) {
@@ -144,8 +148,8 @@ function autoCommitMilestone(
   }
 
   try {
-    const current = execFileSync('git', ['status', '--porcelain=v1', '-z'], {
-      cwd: projectPath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000,
+    const { stdout: current } = await execFileAsync('git', ['status', '--porcelain=v1', '-z'], {
+      cwd: projectPath, encoding: 'utf-8', timeout: 30_000, maxBuffer: GIT_MAX_BUFFER,
     })
 
     // Normalize Claude's filesTouched (absolute) to repo-root-relative.
@@ -177,13 +181,13 @@ function autoCommitMilestone(
       return { committed: false, filesIncluded: 0, reason: 'no files to stage' }
     }
 
-    execFileSync('git', ['add', '--', ...filesToStage], {
-      cwd: projectPath, stdio: ['ignore', 'ignore', 'pipe'], timeout: 30_000,
+    await execFileAsync('git', ['add', '--', ...filesToStage], {
+      cwd: projectPath, timeout: 30_000,
     })
 
     // Gitignored matches won't stage — bail if nothing is actually staged.
-    const stagedCheck = execFileSync('git', ['diff', '--cached', '--name-only'], {
-      cwd: projectPath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000,
+    const { stdout: stagedCheck } = await execFileAsync('git', ['diff', '--cached', '--name-only'], {
+      cwd: projectPath, encoding: 'utf-8', timeout: 30_000, maxBuffer: GIT_MAX_BUFFER,
     })
     if (!stagedCheck.trim()) {
       return { committed: false, filesIncluded: 0, reason: 'all matched files gitignored' }
@@ -193,21 +197,21 @@ function autoCommitMilestone(
     const kickoffSummary = milestone.kickoffPrompt.slice(0, 200).replace(/\n/g, ' ')
     const body = [
       'Autonomous build by Sneebly phase runner.',
-      `Files: ${filesToStage.length} (Claude touched ${touchedByClaude.size})`,
+      `Files committed: ${filesToStage.length}`,
       `Kickoff: ${kickoffSummary}${milestone.kickoffPrompt.length > 200 ? '…' : ''}`,
       '',
       'Co-Authored-By: Sneebly Phase Runner <runner@sneebly.local>',
     ].join('\n')
 
-    execFileSync('git', ['commit', '-m', subject, '-m', body], {
-      cwd: projectPath, stdio: ['ignore', 'ignore', 'pipe'], timeout: 30_000,
+    await execFileAsync('git', ['commit', '-m', subject, '-m', body], {
+      cwd: projectPath, timeout: 30_000,
     })
 
-    const hash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
-      cwd: projectPath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000,
-    }).trim()
+    const { stdout: hash } = await execFileAsync('git', ['rev-parse', '--short', 'HEAD'], {
+      cwd: projectPath, encoding: 'utf-8', timeout: 30_000,
+    })
 
-    return { committed: true, hash, filesIncluded: filesToStage.length }
+    return { committed: true, hash: hash.trim(), filesIncluded: filesToStage.length }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return { committed: false, filesIncluded: 0, reason: `git error: ${msg}` }
@@ -304,7 +308,7 @@ async function driveRun(
   if (currentState.status !== 'building') return  // stopped externally
 
   // Snapshot dirty files before the build so auto-commit can exclude the user's pre-existing work.
-  const preBuildDirtyFiles = gitStatusBaseline(project.path)
+  const preBuildDirtyFiles = await gitStatusBaseline(project.path)
 
   // Get or create a session
   const sessionId = getOrCreateSessionId(projectId, project.path)
@@ -457,8 +461,10 @@ async function driveRun(
 
   // Auto-commit the milestone's changes so the run is traceable in git history.
   if (appSettings['autoCommitMilestones'] !== false) {
-    const commitResult = autoCommitMilestone(project.path, milestone, buildMetrics, preBuildDirtyFiles)
+    const commitResult = await autoCommitMilestone(project.path, milestone, buildMetrics, preBuildDirtyFiles)
 
+    // Record the outcome regardless — the commit (if made) is durable and git is the
+    // source of truth, so the event stream should reflect it even if the user stopped.
     appendEvent(project.path, sessionId, {
       id: crypto.randomUUID(),
       sessionId,
@@ -480,6 +486,9 @@ async function driveRun(
     } else {
       console.warn(`[phase-runner] auto-commit skipped for ${milestoneId}: ${commitResult.reason}`)
     }
+
+    // A Stop during the (async) commit must not be overwritten by the advance logic below.
+    if (getRunState(projectId).status !== 'building') return
   }
 
   // Playwright checklist test (best-effort — failures surface as warnings, don't pause)
