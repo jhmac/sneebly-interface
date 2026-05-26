@@ -1,5 +1,6 @@
 import { join, relative } from 'path'
 import { execSync } from 'child_process'
+import { readFileSync, existsSync } from 'fs'
 import type { ChildProcess } from 'child_process'
 import { runStandaloneTurn, extractJson } from './standalone-turn'
 import { loadPhasePlan, syncCheckedState, markMilestoneComplete } from './phase-tracker'
@@ -7,13 +8,31 @@ import { sendToProjectWindows } from './window-registry'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { MilestoneAuditResult, OrderedMilestone } from '../../shared/types'
 
-const BATCH_SIZE = 6
-const MAX_TURNS = 50
+// Max bytes of source content to inject (keeps prompt inside context window)
+const MAX_SOURCE_BYTES = 180_000
 
-// Per-project abort controller: set to true to cancel the running audit loop
-const abortFlags = new Map<string, boolean>()
-// The currently running subprocess for a project (so we can kill it immediately)
+const AUDITOR_SYSTEM_PROMPT = `You are a codebase auditor. You will receive source code files and a list of milestones. For each milestone, determine its implementation status based solely on the provided source code.
+
+Status definitions:
+- "complete": Feature is fully implemented end-to-end (real logic, not just a UI shell, stub, or placeholder)
+- "partial": Some real implementation exists but key parts are missing (UI exists but no API wiring, stub functions, mock data only)
+- "not-started": No meaningful implementation found
+
+Confidence:
+- "high": You found clear, direct code that implements the feature
+- "medium": You found related code but could not trace the full feature path
+- "low": You are inferring from file names or indirect evidence only
+
+Output ONLY a JSON array — no prose, no markdown fences, nothing else:
+[
+  { "id": "...", "status": "complete|partial|not-started", "confidence": "high|medium|low", "evidence": "one sentence" },
+  ...
+]
+One entry per milestone, in the same order as the input list.`
+
+// Active process per project for abort support
 const activeProcs = new Map<string, ChildProcess>()
+const abortFlags = new Map<string, boolean>()
 
 export function stopAudit(projectId: string): void {
   abortFlags.set(projectId, true)
@@ -24,74 +43,85 @@ export function stopAudit(projectId: string): void {
   }
 }
 
-const AUDITOR_SYSTEM_PROMPT = `You are auditing a software project codebase to determine which features from a milestone checklist are already implemented.
+function collectSourceContent(projectPath: string): string {
+  // Priority order: API routes > feature pages > feature components > libs
+  const priorityGlobs = [
+    'artifacts/api-server/src/routes',
+    'artifacts/api-server/src/lib',
+    'artifacts/api-server/src/middlewares',
+    'artifacts/nyous/src/pages',
+    'artifacts/nyous/src/hooks',
+    'artifacts/nyous/src/lib',
+    'artifacts/nyous/src/components',
+    'src/routes',
+    'src/pages',
+    'src/lib',
+    'src/components',
+    'src/hooks',
+  ]
 
-You will be given:
-1. A list of source files in the project (pre-collected for you)
-2. A small batch of milestones to audit
-
-For each milestone, use your Read and Bash tools to investigate:
-- Read specific files that look relevant based on the file list
-- Use Bash to grep for keywords, function names, or route patterns
-- Focus on implementation depth: scaffolded/stubbed UI does NOT count as "complete"
-
-Status definitions:
-- "complete": Feature is fully implemented end-to-end with real logic (not just UI shell or placeholder)
-- "partial": Some real implementation exists but key parts are missing (e.g. UI exists but no API, or stub functions)
-- "not-started": No meaningful implementation found
-
-Confidence:
-- "high": You read the actual implementation files and confirmed the feature works end-to-end
-- "medium": You found relevant files and code but did not trace every path
-- "low": You are inferring from file names or partial reads only
-
-After checking ALL milestones in the batch, output ONLY a JSON array — no prose, no markdown fences:
-[
-  { "id": "...", "status": "complete|partial|not-started", "confidence": "high|medium|low", "evidence": "one sentence" },
-  ...
-]
-One entry per milestone, in the same order as the input.`
-
-function collectFileTree(projectPath: string): string {
+  // Collect all candidate files in priority order
+  let candidates: string[] = []
   try {
-    const out = execSync(
-      `find . -type f \\( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.py" -o -name "*.go" -o -name "*.sql" \\) | grep -v "node_modules\\|\\.next\\|dist\\|\\.vite\\|\\.git\\|__pycache__" | sort | head -300`,
+    const raw = execSync(
+      `find . -type f \\( -name "*.ts" -o -name "*.tsx" \\) | grep -v "node_modules\\|\\.next\\|dist\\|\\.vite\\|\\.git\\|/ui/\\|__pycache__\\|\\.migration" | sort`,
       { cwd: projectPath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
     )
-    return out.trim()
+    const allFiles = raw.trim().split('\n').filter(Boolean)
+
+    // Sort by priority
+    const scored = allFiles.map((f) => {
+      const score = priorityGlobs.findIndex((g) => f.includes(g.replace(/\//g, '/')))
+      return { f, score: score === -1 ? 99 : score }
+    })
+    scored.sort((a, b) => a.score - b.score)
+    candidates = scored.map((x) => x.f)
   } catch {
-    return '(could not collect file tree)'
+    return ''
   }
+
+  const parts: string[] = []
+  let totalBytes = 0
+
+  for (const relPath of candidates) {
+    const absPath = join(projectPath, relPath)
+    if (!existsSync(absPath)) continue
+    try {
+      const content = readFileSync(absPath, 'utf-8')
+      const entry = `\n\n=== ${relPath} ===\n${content}`
+      if (totalBytes + entry.length > MAX_SOURCE_BYTES) {
+        parts.push(`\n\n(remaining files omitted — ${candidates.length - parts.length} more)`)
+        break
+      }
+      parts.push(entry)
+      totalBytes += entry.length
+    } catch { /* skip unreadable */ }
+  }
+
+  return parts.join('')
 }
 
 function buildAuditPrompt(
   projectPath: string,
   milestones: OrderedMilestone[],
-  fileTree: string
+  sourceContent: string
 ): string {
-  const rel = (p: string) => relative(projectPath, p)
   const milestoneList = milestones
-    .map((m, i) =>
-      `${i + 1}. id="${m.id}" — ${m.text}${m.specPath ? ` (spec: ${rel(join(projectPath, m.specPath))})` : ''}`
-    )
+    .map((m, i) => `${i + 1}. id="${m.id}" — ${m.text}`)
     .join('\n')
 
-  return `Audit these ${milestones.length} milestones against the codebase at: ${projectPath}
+  return `Project path: ${projectPath}
 
-PROJECT SOURCE FILES:
-${fileTree}
+SOURCE CODE:
+${sourceContent}
 
-MILESTONES TO AUDIT:
+---
+
+MILESTONES TO AUDIT (${milestones.length} total):
 ${milestoneList}
 
-Use Read and Bash to investigate each milestone. The file list above is your map — read files that look relevant.
-When done with ALL ${milestones.length} milestones, output ONLY the JSON array.`
-}
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size))
-  return chunks
+Based on the source code above, determine the implementation status of each milestone.
+Output ONLY the JSON array.`
 }
 
 export async function auditPhasePlan(
@@ -102,10 +132,23 @@ export async function auditPhasePlan(
   if (!rawPlan) throw new Error('No phase plan found — generate one first')
 
   const plan = syncCheckedState(projectPath, rawPlan)
-  const unchecked = plan.milestones.filter((m) => !m.checked)
-  const total = unchecked.length
+  const milestones = plan.milestones
+  const total = milestones.length
 
-  if (total === 0) {
+  abortFlags.set(projectId, false)
+
+  sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
+    stage: 'running',
+    checked: 0,
+    total,
+    currentMilestone: 'Reading source files…',
+  })
+
+  // Collect all source content in main process — no Claude tool calls needed
+  const sourceContent = collectSourceContent(projectPath)
+
+  if (abortFlags.get(projectId)) {
+    abortFlags.delete(projectId)
     sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
       stage: 'done',
       results: [],
@@ -114,86 +157,66 @@ export async function auditPhasePlan(
     return []
   }
 
-  // Collect file tree once for all batches
-  const fileTree = collectFileTree(projectPath)
+  sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
+    stage: 'running',
+    checked: 0,
+    total,
+    currentMilestone: `Analyzing ${total} milestones…`,
+  })
 
-  abortFlags.set(projectId, false)
+  const prompt = buildAuditPrompt(projectPath, milestones, sourceContent)
 
-  const allResults: MilestoneAuditResult[] = []
-  let appliedCount = 0
-  const batches = chunk(unchecked, BATCH_SIZE)
+  const result = await runStandaloneTurn({
+    cwd: projectPath,
+    projectId,
+    prompt,
+    model: 'claude-sonnet-4-6',
+    permissionMode: 'bypassPermissions',
+    allowedTools: [],   // no tools — source is already in the prompt
+    appendSystemPrompt: AUDITOR_SYSTEM_PROMPT,
+    maxTurns: 1,
+    onProcess: (proc) => { activeProcs.set(projectId, proc) },
+  })
 
-  for (let i = 0; i < batches.length; i++) {
-    if (abortFlags.get(projectId)) break
+  activeProcs.delete(projectId)
+  abortFlags.delete(projectId)
 
-    const batch = batches[i]!
-    const checkedSoFar = i * BATCH_SIZE
+  const raw = extractJson<MilestoneAuditResult[]>(result.assistantText) ?? []
 
-    sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
-      stage: 'running',
-      checked: checkedSoFar,
-      total,
-      currentMilestone: batch[0]!.text,
-    })
+  const validIds = new Set(milestones.map((m) => m.id))
+  const validated = raw.filter(
+    (r) =>
+      validIds.has(r.id) &&
+      ['complete', 'partial', 'not-started'].includes(r.status) &&
+      ['high', 'medium', 'low'].includes(r.confidence)
+  )
 
-    const prompt = buildAuditPrompt(projectPath, batch, fileTree)
-    const result = await runStandaloneTurn({
-      cwd: projectPath,
-      projectId,
-      prompt,
-      model: 'claude-sonnet-4-6',
-      permissionMode: 'bypassPermissions',
-      allowedTools: ['Read', 'Bash'],
-      appendSystemPrompt: AUDITOR_SYSTEM_PROMPT,
-      maxTurns: MAX_TURNS,
-      onProcess: (proc) => { activeProcs.set(projectId, proc) },
-    })
-
-    const batchResults = extractJson<MilestoneAuditResult[]>(result.assistantText) ?? []
-
-    const validIds = new Set(batch.map((m) => m.id))
-    const validated = batchResults.filter(
-      (r) =>
-        validIds.has(r.id) &&
-        ['complete', 'partial', 'not-started'].includes(r.status) &&
-        ['high', 'medium', 'low'].includes(r.confidence)
-    )
-
-    // Fill in any milestones Claude didn't return
-    const returnedIds = new Set(validated.map((r) => r.id))
-    for (const m of batch) {
-      if (!returnedIds.has(m.id)) {
-        validated.push({
-          id: m.id,
-          status: 'not-started',
-          confidence: 'low',
-          evidence: result.error
-            ? `Auditor error: ${result.error}`
-            : 'No result returned — auditor may have hit turn limit',
-        })
-      }
-    }
-
-    activeProcs.delete(projectId)
-
-    allResults.push(...validated)
-
-    // Auto-check milestones Claude confirmed complete with high or medium confidence
-    for (const r of validated) {
-      if (r.status === 'complete' && r.confidence !== 'low') {
-        markMilestoneComplete(projectPath, r.id)
-        appliedCount++
-      }
+  // Fill any milestones Claude didn't return
+  const returnedIds = new Set(validated.map((r) => r.id))
+  for (const m of milestones) {
+    if (!returnedIds.has(m.id)) {
+      validated.push({
+        id: m.id,
+        status: 'not-started',
+        confidence: 'low',
+        evidence: result.error ? `Auditor error: ${result.error}` : 'Not returned by auditor',
+      })
     }
   }
 
-  abortFlags.delete(projectId)
+  let appliedCount = 0
+  for (const r of validated) {
+    if (r.status === 'complete' && r.confidence !== 'low') {
+      markMilestoneComplete(projectPath, r.id)
+      appliedCount++
+    }
+  }
 
   sendToProjectWindows(projectId, IPC_CHANNELS.PHASE_AUDIT_PROGRESS, {
     stage: 'done',
-    results: allResults,
+    results: validated,
     appliedCount,
   })
 
-  return allResults
+  return validated
 }
