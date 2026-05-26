@@ -12,6 +12,12 @@ import type { SkillSeedResult } from '../../../shared/types'
 // finishes them.)
 const IMPORT_META_PROMPT = `Analyze this entire project and write a GOALS.md file at the repository root, then commit and push it. GOALS.md is the ONLY document a downstream coding assistant (Sneebly) will use to generate detailed build specs and finish this app — so it must be honest about what's done AND rich enough that someone who has never seen this codebase could build the unfinished features correctly from the descriptions alone.
 
+## CRITICAL FORMAT RULE (read this first, twice)
+
+Every feature bullet in the "## Roadmap" section MUST start with "- [x] " (done) or "- [ ] " (not done). Sneebly's parser silently drops any bullet that doesn't match this exact pattern. Do NOT use "* Feature", "- Feature" (no checkbox), "1. Feature" (numbered), or any other bullet style — only "- [x] " and "- [ ] ".
+
+If you write the Roadmap with the wrong bullets, the downstream coding assistant sees zero features and the whole import is wasted. This is the single most common mistake here — so you will verify it in Step 7 before committing.
+
 ## Step 1 — Scan the project
 
 Read the source thoroughly. Pay attention to:
@@ -80,30 +86,46 @@ Done features don't need this detail — their code is the source of truth, so a
 
 <one-line note on how the phases ship>
 
-### Phase 1: <Phase title>
+Copy the bullet style from these examples exactly — "- [x] " or "- [ ] " then the feature name:
 
-- [x] <Feature name> — <one-line description>
-- [ ] <Feature name> — <one-line description> (partial: <what's missing>)
-- [ ] <Feature name> — <one-line description> (not started)
+### Phase 1: Core Operations
 
-### Phase 2: <Phase title>
+- [x] User authentication — Clerk OAuth, email/password fallback, JWT session management
+- [x] Employee profiles — HR metadata (name, role, hire date), document upload, availability templates
+- [ ] AI auto-scheduling — Claude-generated weekly schedules from sales history (partial: prompt works in dev, no production wiring or zone-minimum enforcement)
+- [ ] RAG semantic search — pgvector + local Xenova embeddings for SOP search (not started)
 
-- [x] <Feature name> — <one-line description>
-- [ ] <Feature name> — <one-line description> (partial: <what's missing>)
+### Phase 2: AI Intelligence Layer
+
+- [x] AI Morning Briefing — daily store summary on the Owner dashboard, generated via Claude
+- [ ] SOP Evolution System — AI-proposed SOP revisions from execution feedback (partial: revision generator exists, no UI to review/accept proposals)
 
 ## Output rules (critical)
 
 - GOALS.md MUST exist at the repository root when you finish.
 - The product description MUST live under a "## Mission" heading (Sneebly parses the mission from there).
 - EVERY unfinished feature (any "- [ ]" in the Roadmap) MUST have a matching "### <Feature name>" entry under "## Key Features" with the detail from Step 4. Use the same feature name in both places. This is what Sneebly builds specs from — a one-liner is not enough for unfinished work.
-- Use ONLY "- [x]" (done) and "- [ ]" (not done) in the Roadmap. There is no partial marker — mark partial features "- [ ]" and note the gap inline as "(partial: ...)". The downstream phase runner will finish anything unchecked.
+- Roadmap bullets MUST start with "- [x] " (done) or "- [ ] " (not done). There is no partial marker — mark partial features "- [ ]" and note the gap inline as "(partial: <what's missing>)". The downstream phase runner finishes anything unchecked.
+  - GOOD: "- [x] User authentication — Clerk OAuth, session JWT"
+  - GOOD: "- [ ] AI scheduler — prompt works, no prod wiring (partial: missing zone minimums)"
+  - BAD:  "* User authentication — ..."   (asterisk bullet; parser ignores it)
+  - BAD:  "- User authentication — ..."   (no [ ] checkbox; parser ignores it)
+  - BAD:  "1. User authentication — ..."  (numbered; parser ignores it)
 - The Roadmap MUST live under a "## Roadmap" heading, with each phase as "### Phase N: <Title>" and feature bullets directly under it.
 - Don't invent features that aren't in the code or docs. Don't claim done what isn't — when uncertain, leave it unchecked.
 - Roadmap feature names short (3-6 words); roadmap descriptions one line. No emoji.
 
-## Step 7 — Commit and push
+## Step 7 — Verify the format, then commit
 
-git add GOALS.md && git commit -m "Add GOALS.md describing current project state" && git push origin main
+Before staging, verify the Roadmap bullets are correct. Run:
+
+    grep -c "^- \\[" GOALS.md
+
+That counts lines starting with a proper "- [" checkbox marker. The count MUST be >= the total number of features you listed across all phases. If it is lower (or zero), your Roadmap bullets are wrong — almost certainly "*" or a plain "-" without brackets. Rewrite the Roadmap so every feature line starts with "- [x] " or "- [ ] ", then run the check again.
+
+Once the count is right, commit and push:
+
+    git add GOALS.md && git commit -m "Add GOALS.md describing current project state" && git push origin main
 
 If git isn't configured or the push fails, save GOALS.md anyway and tell me what happened.`
 
