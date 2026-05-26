@@ -18,6 +18,7 @@ const MODELS: { id: ModelName; label: string }[] = [
 
 export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const { messages, pastSessions, defaultModel, pendingSend, switchModel, createNewSession, switchSession } = useChatStore()
+  const activeSessionId = useChatStore((s) => s.activeSessionId)
 
   return (
     <div className="flex h-full flex-col bg-zinc-900 text-zinc-100">
@@ -29,7 +30,8 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: () => v
         onSwitchSession={switchSession}
         onOpenSettings={onOpenSettings}
       />
-      <MessageList messages={messages} pendingSend={pendingSend} />
+      {/* Keyed on session so scroll/collapse state resets when switching sessions. */}
+      <MessageList key={activeSessionId ?? 'none'} messages={messages} pendingSend={pendingSend} />
       <Composer />
     </div>
   )

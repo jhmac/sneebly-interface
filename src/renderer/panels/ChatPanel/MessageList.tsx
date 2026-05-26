@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { FileText, Image, Wrench } from 'lucide-react'
+import { FileText, Image, Wrench, ChevronDown, ArrowDown } from 'lucide-react'
 import type { ChatMessage } from '../../../shared/types'
 import CodeBlock from './CodeBlock'
 import { useActivityStore } from '../../state/activityStore'
@@ -11,20 +11,52 @@ interface Props {
   pendingSend: boolean
 }
 
+const NEAR_BOTTOM_PX = 80
+const PREVIEW_CHARS = 110
+
 export default function MessageList({ messages, pendingSend }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // atBottom reflects the scroll position *before* new content was appended, so it's the
+  // correct signal for whether to follow. showPill is reactive state for the affordance.
   const atBottom = useRef(true)
+  const [showPill, setShowPill] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const lastAssistantId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant') return messages[i].id
+    }
+    return null
+  }, [messages])
 
   function onScroll() {
     const el = containerRef.current
     if (!el) return
-    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
+    atBottom.current = nearBottom
+    if (nearBottom && showPill) setShowPill(false)
   }
 
+  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+    bottomRef.current?.scrollIntoView({ behavior })
+    atBottom.current = true
+    setShowPill(false)
+  }
+
+  // Jump to the bottom on first mount (MessageList is keyed on session id, so this
+  // also fires on session switch).
+  useEffect(() => {
+    scrollToBottom('auto')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // On new content: follow if the user was near the bottom, otherwise surface the pill.
   useEffect(() => {
     if (atBottom.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      setShowPill(true)
     }
   }, [messages, pendingSend])
 
@@ -37,20 +69,36 @@ export default function MessageList({ messages, pendingSend }: Props) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      onScroll={onScroll}
-      className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
-    >
-      {messages.map((msg) =>
-        msg.role === 'user' ? (
-          <UserMessage key={msg.id} message={msg} />
-        ) : (
-          <AssistantMessage key={msg.id} message={msg} />
-        )
+    <div className="relative min-h-0 flex-1">
+      <div
+        ref={containerRef}
+        onScroll={onScroll}
+        className="flex h-full flex-col gap-4 overflow-y-auto px-4 py-4"
+      >
+        {messages.map((msg) =>
+          msg.role === 'user' ? (
+            <UserMessage key={msg.id} message={msg} />
+          ) : (
+            <AssistantMessage
+              key={msg.id}
+              message={msg}
+              collapsed={msg.id !== lastAssistantId && !expanded.has(msg.id)}
+              onExpand={() => setExpanded((s) => new Set(s).add(msg.id))}
+            />
+          )
+        )}
+        {pendingSend && <WorkingPill />}
+        <div ref={bottomRef} />
+      </div>
+      {showPill && (
+        <button
+          onClick={() => scrollToBottom('smooth')}
+          className="absolute bottom-4 right-4 z-10 flex items-center gap-1 rounded-full bg-zinc-700 px-3 py-1.5 text-xs text-zinc-100 shadow-lg transition-colors hover:bg-zinc-600"
+        >
+          <ArrowDown className="h-3 w-3" />
+          New messages
+        </button>
       )}
-      {pendingSend && <WorkingPill />}
-      <div ref={bottomRef} />
     </div>
   )
 }
@@ -104,7 +152,47 @@ function WorkingPill() {
   )
 }
 
-function AssistantMessage({ message }: { message: ChatMessage }) {
+// Reduce an assistant turn to a single muted line for the collapsed state.
+function previewText(text: string): string {
+  const trimmed = text.trim()
+  if (trimmed.startsWith('```')) {
+    const lines = trimmed.split('\n').length
+    return `<code block: ${lines} lines>`
+  }
+  const stripped = trimmed
+    .replace(/```[\s\S]*?```/g, ' <code> ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!stripped) return '<no text>'
+  return stripped.length > PREVIEW_CHARS ? stripped.slice(0, PREVIEW_CHARS) + '…' : stripped
+}
+
+function AssistantMessage({
+  message,
+  collapsed,
+  onExpand,
+}: {
+  message: ChatMessage
+  collapsed: boolean
+  onExpand: () => void
+}) {
+  if (collapsed) {
+    return (
+      <button
+        onClick={onExpand}
+        className="group flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left text-xs text-zinc-500 transition-colors hover:bg-zinc-800/40 hover:text-zinc-400"
+      >
+        <span className="min-w-0 flex-1 truncate">{previewText(message.text)}</span>
+        <ChevronDown className="h-3 w-3 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+      </button>
+    )
+  }
   return (
     <div className="prose prose-invert prose-sm max-w-none text-zinc-200 [&_a]:text-blue-400 [&_a]:no-underline hover:[&_a]:underline [&_code]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_code]:text-zinc-300 [&_pre]:bg-transparent [&_pre]:p-0">
       <ReactMarkdown
