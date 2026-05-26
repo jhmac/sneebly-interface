@@ -43,6 +43,8 @@ Be ruthlessly honest. "It compiles" is not "done." "There's a button" is not "do
 
 # <Project name>
 
+## Mission
+
 <3-5 sentence product description>
 
 ## Roadmap
@@ -63,8 +65,9 @@ Be ruthlessly honest. "It compiles" is not "done." "There's a button" is not "do
 ## Output rules (critical)
 
 - GOALS.md MUST exist at the repository root when you finish.
+- The product description MUST live under a "## Mission" heading (Sneebly parses the mission from there).
 - Use ONLY "- [x]" (done) and "- [ ]" (not done). There is no partial marker — mark partial features "- [ ]" and note the gap inline as "(partial: ...)". The downstream phase runner will finish anything unchecked.
-- The Roadmap MUST live under a "## Roadmap" heading, with each phase as "### Phase N: <Title>".
+- The Roadmap MUST live under a "## Roadmap" heading, with each phase as "### Phase N: <Title>" and feature bullets directly under it.
 - Don't invent features that aren't in the code or docs. Don't claim done what isn't — when uncertain, leave it unchecked.
 - Feature names short (3-6 words); descriptions one line. No emoji.
 
