@@ -21,6 +21,7 @@ export type SemanticEventKind =
   | 'phase_runner_smoke_test'
   | 'phase_runner_playwright_passed'
   | 'phase_runner_playwright_failed'
+  | 'phase_runner_auto_commit'
 
 export type FrictionTag =
   | 'user_correction'
@@ -467,6 +468,7 @@ export interface AppSettings {
   showSuggestedShortcuts: boolean
   runUISmokeTests: boolean
   runPlaywrightChecklistTests: boolean
+  autoCommitMilestones: boolean
 }
 
 export interface SessionUsage {

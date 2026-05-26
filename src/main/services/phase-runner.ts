@@ -1,7 +1,9 @@
 import Store from 'electron-store'
 import { join } from 'path'
+import { existsSync } from 'fs'
+import { execFileSync } from 'child_process'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
-import type { PhaseRunConfig, PhaseRunState, ChatMessage, ModelName } from '../../shared/types'
+import type { PhaseRunConfig, PhaseRunState, ChatMessage, ModelName, OrderedMilestone } from '../../shared/types'
 import { isChatTurnInFlight, startTurn, turnEmitter, type TurnMetrics } from './agent-session'
 import { loadPhasePlan, getMilestoneById, getNextMilestone, syncCheckedState, markMilestoneComplete } from './phase-tracker'
 import { listProjects } from './project-registry'
@@ -87,6 +89,128 @@ async function runSmokeTest(projectId: string): Promise<SmokeTestResult | null> 
   } catch (e) {
     console.error('[phase-runner] smoke test failed to execute:', e)
     return null
+  }
+}
+
+// Parse `git status --porcelain=v1 -z` output into a set of paths (relative to repo root).
+// -z entries are NUL-separated, format "XY path"; rename/copy entries are followed by a
+// second NUL field carrying the original path, which we consume and ignore.
+function parsePorcelainZ(out: string): Set<string> {
+  const paths = new Set<string>()
+  const fields = out.split('\0')
+  for (let i = 0; i < fields.length; i++) {
+    const entry = fields[i]
+    if (!entry || entry.length < 4) continue
+    const xy = entry.slice(0, 2)
+    paths.add(entry.slice(3))
+    // Rename/copy: the next field is the original path — skip it.
+    if (xy[0] === 'R' || xy[0] === 'C' || xy[1] === 'R' || xy[1] === 'C') i++
+  }
+  return paths
+}
+
+function gitStatusBaseline(projectPath: string): Set<string> {
+  try {
+    const out = execFileSync('git', ['status', '--porcelain=v1', '-z'], {
+      cwd: projectPath,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 30_000,
+    })
+    return parsePorcelainZ(out)
+  } catch {
+    // Not a git repo, or git not installed — auto-commit will skip.
+    return new Set()
+  }
+}
+
+interface AutoCommitResult {
+  committed: boolean
+  hash?: string
+  filesIncluded: number
+  reason?: string
+}
+
+function autoCommitMilestone(
+  projectPath: string,
+  milestone: OrderedMilestone,
+  buildMetrics: TurnMetrics | undefined,
+  preBuildDirtyFiles: Set<string>,
+): AutoCommitResult {
+  // The .git existence check also guarantees projectPath is the repo root, so porcelain
+  // paths and normalized filesTouched paths are both relative to projectPath.
+  if (!existsSync(join(projectPath, '.git'))) {
+    return { committed: false, filesIncluded: 0, reason: 'no git repo' }
+  }
+
+  try {
+    const current = execFileSync('git', ['status', '--porcelain=v1', '-z'], {
+      cwd: projectPath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000,
+    })
+
+    // Normalize Claude's filesTouched (absolute) to repo-root-relative.
+    const touchedByClaude = new Set<string>()
+    for (const absPath of buildMetrics?.filesTouched ?? []) {
+      if (absPath.startsWith(projectPath + '/')) {
+        touchedByClaude.add(absPath.slice(projectPath.length + 1))
+      } else if (!absPath.startsWith('/')) {
+        touchedByClaude.add(absPath)
+      }
+      // Paths outside the project are ignored — not part of this repo.
+    }
+
+    const filesToStage: string[] = []
+    for (const path of parsePorcelainZ(current)) {
+      // Never sweep Sneebly's own internal state into the milestone commit.
+      if (path.startsWith('.sneebly-interface/')) continue
+      // GOALS.md always — markMilestoneComplete just flipped its checkmark.
+      if (path === 'GOALS.md' || path.endsWith('/GOALS.md')) { filesToStage.push(path); continue }
+      // Files Claude wrote/edited this turn.
+      if (touchedByClaude.has(path)) { filesToStage.push(path); continue }
+      // Pre-existing dirty files Claude didn't touch = user's unrelated work — leave them.
+      if (preBuildDirtyFiles.has(path)) continue
+      // Newly dirty during this milestone (Bash deletions, codegen output, etc.) — include.
+      filesToStage.push(path)
+    }
+
+    if (filesToStage.length === 0) {
+      return { committed: false, filesIncluded: 0, reason: 'no files to stage' }
+    }
+
+    execFileSync('git', ['add', '--', ...filesToStage], {
+      cwd: projectPath, stdio: ['ignore', 'ignore', 'pipe'], timeout: 30_000,
+    })
+
+    // Gitignored matches won't stage — bail if nothing is actually staged.
+    const stagedCheck = execFileSync('git', ['diff', '--cached', '--name-only'], {
+      cwd: projectPath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000,
+    })
+    if (!stagedCheck.trim()) {
+      return { committed: false, filesIncluded: 0, reason: 'all matched files gitignored' }
+    }
+
+    const subject = `[${milestone.id}] ${milestone.text}`.slice(0, 100)
+    const kickoffSummary = milestone.kickoffPrompt.slice(0, 200).replace(/\n/g, ' ')
+    const body = [
+      'Autonomous build by Sneebly phase runner.',
+      `Files: ${filesToStage.length} (Claude touched ${touchedByClaude.size})`,
+      `Kickoff: ${kickoffSummary}${milestone.kickoffPrompt.length > 200 ? '…' : ''}`,
+      '',
+      'Co-Authored-By: Sneebly Phase Runner <runner@sneebly.local>',
+    ].join('\n')
+
+    execFileSync('git', ['commit', '-m', subject, '-m', body], {
+      cwd: projectPath, stdio: ['ignore', 'ignore', 'pipe'], timeout: 30_000,
+    })
+
+    const hash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+      cwd: projectPath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000,
+    }).trim()
+
+    return { committed: true, hash, filesIncluded: filesToStage.length }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { committed: false, filesIncluded: 0, reason: `git error: ${msg}` }
   }
 }
 
@@ -178,6 +302,9 @@ async function driveRun(
 
   const currentState = getRunState(projectId)
   if (currentState.status !== 'building') return  // stopped externally
+
+  // Snapshot dirty files before the build so auto-commit can exclude the user's pre-existing work.
+  const preBuildDirtyFiles = gitStatusBaseline(project.path)
 
   // Get or create a session
   const sessionId = getOrCreateSessionId(projectId, project.path)
@@ -327,6 +454,33 @@ async function driveRun(
 
   // Mark the milestone complete after build, optional review, and smoke test succeed
   markMilestoneComplete(project.path, milestoneId)
+
+  // Auto-commit the milestone's changes so the run is traceable in git history.
+  if (appSettings['autoCommitMilestones'] !== false) {
+    const commitResult = autoCommitMilestone(project.path, milestone, buildMetrics, preBuildDirtyFiles)
+
+    appendEvent(project.path, sessionId, {
+      id: crypto.randomUUID(),
+      sessionId,
+      projectId,
+      ts: Date.now(),
+      kind: 'phase_runner_auto_commit',
+      source: 'chat',
+      payload: {
+        milestoneId,
+        committed: commitResult.committed,
+        hash: commitResult.hash ?? null,
+        filesIncluded: commitResult.filesIncluded,
+        reason: commitResult.reason ?? null,
+      },
+    })
+
+    if (commitResult.committed) {
+      console.log(`[phase-runner] auto-committed ${milestoneId} as ${commitResult.hash} (${commitResult.filesIncluded} files)`)
+    } else {
+      console.warn(`[phase-runner] auto-commit skipped for ${milestoneId}: ${commitResult.reason}`)
+    }
+  }
 
   // Playwright checklist test (best-effort — failures surface as warnings, don't pause)
   if (

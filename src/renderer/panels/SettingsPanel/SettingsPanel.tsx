@@ -202,6 +202,12 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
               onChange={(v) => handleSave({ runPlaywrightChecklistTests: v })}
             />
           </Row>
+          <Row label="Auto-commit milestones" description="After each milestone completes, commit Claude's changes + GOALS.md to git automatically. Disables silently if the project isn't a git repo.">
+            <Toggle
+              value={settings.autoCommitMilestones ?? true}
+              onChange={(v) => handleSave({ autoCommitMilestones: v })}
+            />
+          </Row>
         </Section>
 
         {/* Projects */}

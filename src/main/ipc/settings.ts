@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   showSuggestedShortcuts: true,
   runUISmokeTests: true,
   runPlaywrightChecklistTests: false,
+  autoCommitMilestones: true,
 }
 
 export function registerSettingsHandlers(): void {
