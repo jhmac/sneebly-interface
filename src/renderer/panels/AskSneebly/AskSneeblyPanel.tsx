@@ -28,12 +28,20 @@ export default function AskSneeblyPanel() {
   const [includeDiff, setIncludeDiff] = useState(false)
   const [includeEvents, setIncludeEvents] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const prevCount = useRef(0)
 
   const messages = currentConversation?.messages ?? []
 
+  // Always scroll to a newly added message. During token streaming (content grows on
+  // the same message) only auto-scroll if the user is already near the bottom, so
+  // scrolling up to re-read isn't fought on every token.
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    const isNewMessage = messages.length !== prevCount.current
+    prevCount.current = messages.length
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (isNewMessage || nearBottom) el.scrollTop = el.scrollHeight
   }, [messages])
 
   function send(text?: string) {
