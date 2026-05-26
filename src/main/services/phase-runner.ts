@@ -294,6 +294,7 @@ async function driveRun(
   // UI smoke test: verify the page actually renders after a UI milestone
   if (isUIMilestone(buildMetrics) && appSettings['runUISmokeTests'] !== false) {
     const smokeResult = await runSmokeTest(projectId)
+    if (getRunState(projectId).status !== 'building') return  // stopped during smoke test
 
     appendEvent(project.path, sessionId, {
       id: crypto.randomUUID(),
@@ -345,6 +346,8 @@ async function driveRun(
         escalationModel as ModelName,
       )
       if (playwrightResult) {
+        if (getRunState(projectId).status !== 'building') return  // stopped during Playwright run
+
         appendEvent(project.path, sessionId, {
           id: crypto.randomUUID(),
           sessionId,

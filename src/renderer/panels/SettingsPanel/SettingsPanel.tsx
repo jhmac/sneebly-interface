@@ -191,19 +191,15 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
             </div>
           </Row>
           <Row label="Run UI smoke tests" description="After each UI milestone builds, load the dev server in headless Chromium and verify the page renders without console errors or broken assets. Adds ~5s per UI milestone.">
-            <input
-              type="checkbox"
-              checked={settings.runUISmokeTests ?? true}
-              onChange={(e) => handleSave({ runUISmokeTests: e.target.checked })}
-              className="h-4 w-4 rounded border-zinc-600 bg-zinc-800 accent-indigo-500"
+            <Toggle
+              value={settings.runUISmokeTests ?? true}
+              onChange={(v) => handleSave({ runUISmokeTests: v })}
             />
           </Row>
           <Row label="Run Playwright checklist tests" description="Generates and runs a Playwright spec from each UI milestone's test checklist. Adds 30-60s per milestone. Failures surface as warnings — they don't pause the run.">
-            <input
-              type="checkbox"
-              checked={settings.runPlaywrightChecklistTests ?? false}
-              onChange={(e) => handleSave({ runPlaywrightChecklistTests: e.target.checked })}
-              className="h-4 w-4 rounded border-zinc-600 bg-zinc-800 accent-indigo-500"
+            <Toggle
+              value={settings.runPlaywrightChecklistTests ?? false}
+              onChange={(v) => handleSave({ runPlaywrightChecklistTests: v })}
             />
           </Row>
         </Section>
