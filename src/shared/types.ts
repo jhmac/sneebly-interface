@@ -629,6 +629,7 @@ export interface ElectronAPI {
     body?: string
     pushAfter: boolean
   }) => Promise<{ commitSha?: string; pushed: boolean; error?: string }>
+  gitPull: (projectPath: string) => Promise<{ ok: boolean; error?: string }>
 
   // ── Reflections ───────────────────────────────────────────────────────────
   reflectionList: (projectId: string) => Promise<ReflectionEntry[]>

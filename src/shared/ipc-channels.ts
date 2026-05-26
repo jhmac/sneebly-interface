@@ -71,6 +71,7 @@ export const IPC_CHANNELS = {
   GIT_GET_STATUS: 'git:get-status',
   GIT_GET_DIFF: 'git:get-diff',
   GIT_COMMIT_AND_PUSH: 'git:commit-and-push',
+  GIT_PULL: 'git:pull',
   SPEC_GENERATE: 'spec:generate',
   SPEC_REFINE: 'spec:refine',
   SPEC_PROGRESS: 'spec:progress',

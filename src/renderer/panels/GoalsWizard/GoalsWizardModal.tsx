@@ -1,8 +1,222 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Copy, Check, Sparkles, ArrowRight, RotateCcw } from 'lucide-react'
+import { X, Copy, Check, Sparkles, ArrowRight, RotateCcw, FilePlus2, FolderInput, RefreshCw } from 'lucide-react'
 import { useGoalsWizardStore } from '../../state/goalsWizardStore'
 import { useProjectStore } from '../../state/projectStore'
 import type { SkillSeedResult } from '../../../shared/types'
+
+// Pasted by the user into their existing AI coding tool (Replit Agent, Cursor,
+// Lovable, Claude Code). Emits GOALS.md in Sneebly's canonical format — the same
+// "## Roadmap" + "### Phase N: Title" + "- [x]/- [ ]" structure the spec generator
+// and phase planner parse. (Sneebly's parser has no "[~]" partial marker: partial
+// features are unchecked "[ ]" with the gap noted inline, so the phase runner
+// finishes them.)
+const IMPORT_META_PROMPT = `Analyze this entire project and write a GOALS.md file at the repository root, then commit and push it. GOALS.md gives a downstream coding assistant (Sneebly) an honest picture of what's done, what's partial, and what's left.
+
+## Step 1 — Scan the project
+
+Read the source. Pay attention to:
+- README, CLAUDE.md, /docs, /specs (anything describing the product)
+- Database schemas (tables/columns — Drizzle, Prisma, raw SQL)
+- API routes/handlers (registered + implemented vs stubbed)
+- Frontend pages/components (rendered vs returning null/TODO)
+- Tests (what's tested is likely implemented)
+- TODO / FIXME / "not implemented" / throw new Error("...") markers
+Skip node_modules, .git, build output, vendored libs. If /specs exists, treat it as authoritative for intent.
+
+## Step 2 — Describe the product
+
+In 3-5 sentences: what does the app do (lead with the core user value), then the technical context. No marketing fluff — this is for a coding assistant.
+
+## Step 3 — Identify features and their honest state
+
+Break the product into discrete, shippable features. For each, decide:
+- Done: implemented end-to-end (UI through to storage). No critical TODOs. You'd trust it in production.
+- Partial: started but incomplete — UI without backend, backend without UI, happy path only, or a function that doesn't actually do its job.
+- Not started: mentioned in docs/comments but no meaningful code.
+Be ruthlessly honest. "It compiles" is not "done." "There's a button" is not "done." If unsure, call it partial.
+
+## Step 4 — Group into phases
+
+5-12 features per phase, shipping in order (MVP first). If there's no natural phasing, use a single "Phase 1: All features".
+
+## Step 5 — Write GOALS.md in EXACTLY this format
+
+# <Project name>
+
+<3-5 sentence product description>
+
+## Roadmap
+
+<one-line note on how the phases ship>
+
+### Phase 1: <Phase title>
+
+- [x] <Feature name> — <one-line description>
+- [ ] <Feature name> — <one-line description> (partial: <what's missing>)
+- [ ] <Feature name> — <one-line description> (not started)
+
+### Phase 2: <Phase title>
+
+- [x] <Feature name> — <one-line description>
+- [ ] <Feature name> — <one-line description> (partial: <what's missing>)
+
+## Output rules (critical)
+
+- GOALS.md MUST exist at the repository root when you finish.
+- Use ONLY "- [x]" (done) and "- [ ]" (not done). There is no partial marker — mark partial features "- [ ]" and note the gap inline as "(partial: ...)". The downstream phase runner will finish anything unchecked.
+- The Roadmap MUST live under a "## Roadmap" heading, with each phase as "### Phase N: <Title>".
+- Don't invent features that aren't in the code or docs. Don't claim done what isn't — when uncertain, leave it unchecked.
+- Feature names short (3-6 words); descriptions one line. No emoji.
+
+## Step 6 — Commit and push
+
+git add GOALS.md && git commit -m "Add GOALS.md describing current project state" && git push origin main
+
+If git isn't configured or the push fails, save GOALS.md anyway and tell me what happened.`
+
+// ── Stage: Path picker ──────────────────────────────────────────────────────────
+
+function PathPickStage() {
+  const { setStage } = useGoalsWizardStore()
+  const goals = useProjectStore((s) => s.activeProjectGoals)
+  // No parsed roadmap → this project needs a GOALS.md, so nudge toward import.
+  const needsOnboarding = !goals || goals.phases.length === 0
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-8">
+      <div className="w-full max-w-3xl">
+        <div className="mb-8 text-center">
+          <div className="mb-3 flex items-center justify-center gap-2">
+            <Sparkles className="h-5 w-5 text-purple-400" />
+            <span className="text-sm font-medium uppercase tracking-widest text-purple-400">Goals Wizard</span>
+          </div>
+          <h1 className="text-3xl font-semibold text-zinc-100">What are we doing?</h1>
+          {needsOnboarding && (
+            <p className="mt-2 text-sm text-amber-400">
+              Looks like this project doesn&apos;t have a GOALS.md yet — let&apos;s generate one.
+            </p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            onClick={() => setStage('hook')}
+            className={`flex flex-col items-start gap-2 rounded-xl border p-5 text-left transition-colors ${
+              needsOnboarding
+                ? 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
+                : 'border-purple-700/50 bg-purple-950/20 hover:border-purple-600'
+            }`}
+          >
+            <FilePlus2 className="h-5 w-5 text-purple-400" />
+            <span className="text-base font-medium text-zinc-100">Start a new project</span>
+            <span className="text-xs leading-relaxed text-zinc-500">
+              Describe an idea — Sneebly writes a build prompt for Replit or your AI tool of choice.
+            </span>
+          </button>
+
+          <button
+            onClick={() => setStage('import')}
+            className={`flex flex-col items-start gap-2 rounded-xl border p-5 text-left transition-colors ${
+              needsOnboarding
+                ? 'border-amber-600/60 bg-amber-950/20 hover:border-amber-500'
+                : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
+            }`}
+          >
+            <FolderInput className="h-5 w-5 text-amber-400" />
+            <span className="text-base font-medium text-zinc-100">Import existing project</span>
+            <span className="text-xs leading-relaxed text-zinc-500">
+              You already have most of a project (Replit, Cursor, etc.) — generate GOALS.md from the existing code.
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Stage: Import existing project ──────────────────────────────────────────────
+
+function ImportStage() {
+  const { setStage, closeWizard } = useGoalsWizardStore()
+  const { activeProjectId, projects } = useProjectStore()
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
+  const [copied, copy] = useCopy(IMPORT_META_PROMPT)
+  const [reloading, setReloading] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+
+  async function handleReload() {
+    if (!activeProject || reloading) return
+    setReloading(true)
+    setNote(null)
+    try {
+      const pull = await window.api.gitPull(activeProject.path)
+      // Re-activate to re-parse GOALS.md (works whether or not the pull succeeded).
+      await useProjectStore.getState().activateProject(activeProject.id)
+      const goals = useProjectStore.getState().activeProjectGoals
+      if (goals && goals.phases.length > 0) {
+        closeWizard()
+      } else {
+        setNote(
+          pull.ok
+            ? 'Pulled, but still no valid GOALS.md detected — re-run the prompt in your AI tool, or check the file format.'
+            : `Still no valid GOALS.md detected${pull.error ? ` (git pull: ${pull.error})` : ''}.`
+        )
+      }
+    } finally {
+      setReloading(false)
+    }
+  }
+
+  return (
+    <div className="mx-auto flex h-full w-full max-w-3xl flex-col overflow-y-auto px-8 py-6">
+      <button onClick={() => setStage('path-pick')} className="mb-4 self-start text-xs text-zinc-500 hover:text-zinc-300">
+        ← Back
+      </button>
+
+      <h1 className="text-2xl font-semibold text-zinc-100">Generate GOALS.md from your existing project</h1>
+      <p className="mt-2 text-sm text-zinc-500">
+        Works with Replit Agent, Cursor, Lovable, Claude Code — any AI coding assistant that can read and edit your project files.
+      </p>
+
+      <div className="mt-6">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-medium text-zinc-300">1. Copy this prompt</span>
+          <button
+            onClick={copy}
+            className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
+          >
+            {copied ? <><Check className="h-3 w-3 text-green-400" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+          </button>
+        </div>
+        <pre className="max-h-64 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-400 whitespace-pre-wrap">
+          {IMPORT_META_PROMPT}
+        </pre>
+      </div>
+
+      <div className="mt-5 space-y-2 text-sm text-zinc-400">
+        <p><span className="text-zinc-300">2. Paste it into your AI tool</span> (Replit Agent, Cursor, etc.) and run it. Usually 2-5 minutes — it scans your code and writes GOALS.md.</p>
+        <p><span className="text-zinc-300">3. Commit and push to GitHub</span>, then come back and reload below.</p>
+      </div>
+
+      {note && <p className="mt-4 rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-400">{note}</p>}
+
+      <div className="mt-6 flex items-center justify-end gap-3 border-t border-zinc-800 pt-4">
+        {!activeProject ? (
+          <span className="text-xs text-zinc-600">Open a project first</span>
+        ) : (
+          <button
+            onClick={handleReload}
+            disabled={reloading}
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${reloading ? 'animate-spin' : ''}`} />
+            {reloading ? 'Pulling…' : "I've pushed — reload"}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -546,6 +760,8 @@ Database: PostgreSQL via Supabase
 // ── Main modal ────────────────────────────────────────────────────────────────
 
 const STAGE_TITLES: Record<string, string> = {
+  'path-pick': 'Goals Wizard',
+  import: 'Import Existing Project',
   hook: 'New App',
   grill: 'Define Your App',
   generating: 'Generating',
@@ -566,7 +782,7 @@ export default function GoalsWizardModal() {
           <span className="text-sm font-medium text-zinc-300">{STAGE_TITLES[stage] ?? 'Goals Wizard'}</span>
         </div>
         <div className="flex items-center gap-2">
-          {stage !== 'hook' && stage !== 'generating' && (
+          {stage !== 'path-pick' && stage !== 'generating' && (
             <button
               onClick={reset}
               title="Start over"
@@ -588,6 +804,8 @@ export default function GoalsWizardModal() {
 
       {/* Stage content */}
       <div className="flex-1 min-h-0">
+        {stage === 'path-pick' && <PathPickStage />}
+        {stage === 'import' && <ImportStage />}
         {stage === 'hook' && <HookStage />}
         {stage === 'grill' && <GrillStage />}
         {stage === 'generating' && <GeneratingStage />}

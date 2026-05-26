@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { GrillMessage } from '../../shared/types'
 
-export type WizardStage = 'hook' | 'grill' | 'generating' | 'output' | 'stack-report'
+export type WizardStage = 'path-pick' | 'import' | 'hook' | 'grill' | 'generating' | 'output' | 'stack-report'
 
 interface GoalsWizardStore {
   open: boolean
@@ -31,7 +31,7 @@ interface GoalsWizardStore {
 
 const BLANK: Omit<GoalsWizardStore, 'openWizard' | 'closeWizard' | 'setStage' | 'setIdeaSeed' | 'addMessages' | 'setGenerated' | 'setStackReport' | 'setGoalsMd' | 'setError' | 'reset'> = {
   open: false,
-  stage: 'hook',
+  stage: 'path-pick',
   ideaSeed: '',
   messages: [],
   grillReady: false,

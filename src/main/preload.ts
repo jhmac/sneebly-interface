@@ -254,6 +254,8 @@ const api: ElectronAPI = {
     pushAfter: boolean
   }): Promise<{ commitSha?: string; pushed: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_AND_PUSH, opts),
+  gitPull: (projectPath: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_PULL, projectPath),
 
   // ── Reflections ───────────────────────────────────────────────────────────
   reflectionList: (projectId: string): Promise<ReflectionEntry[]> =>

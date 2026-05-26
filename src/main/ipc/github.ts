@@ -121,6 +121,21 @@ export function registerGitHubHandlers(): void {
     }
   })
 
+  // ── Git pull ──────────────────────────────────────────────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.GIT_PULL, async (
+    _e,
+    projectPath: string
+  ): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      await simpleGit(projectPath).pull()
+      return { ok: true }
+    } catch (e) {
+      // Not a git repo, no remote/upstream, or a conflict — caller re-detects anyway.
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
   // ── Git diff ──────────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.GIT_GET_DIFF, async (
