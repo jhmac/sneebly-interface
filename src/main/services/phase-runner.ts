@@ -460,12 +460,6 @@ async function driveRun(
   // Mark the milestone complete after build, optional review, and smoke test succeed
   markMilestoneComplete(project.path, milestoneId)
 
-  // Auto-fire the Review Agent (log-only, fire-and-forget). fireReview self-gates on
-  // settings (enabled + autoFire) and runs in parallel — the run never waits on it.
-  try { fireReview(projectId, milestoneId, true) } catch (err) {
-    console.warn('[phase-runner] auto-fire review failed to start:', err)
-  }
-
   // Auto-commit the milestone's changes so the run is traceable in git history.
   if (appSettings['autoCommitMilestones'] !== false) {
     const commitResult = await autoCommitMilestone(project.path, milestone, buildMetrics, preBuildDirtyFiles)
@@ -496,6 +490,13 @@ async function driveRun(
 
     // A Stop during the (async) commit must not be overwritten by the advance logic below.
     if (getRunState(projectId).status !== 'building') return
+  }
+
+  // Auto-fire the Review Agent (log-only, fire-and-forget). Placed after the auto-commit
+  // so the review can diff the isolated [milestoneId] commit instead of the whole tree.
+  // fireReview self-gates on settings (enabled + autoFire); the run never waits on it.
+  try { fireReview(projectId, milestoneId, true) } catch (err) {
+    console.warn('[phase-runner] auto-fire review failed to start:', err)
   }
 
   // Playwright checklist test (best-effort — failures surface as warnings, don't pause)

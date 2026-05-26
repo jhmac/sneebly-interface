@@ -80,12 +80,18 @@ export const useReviewAgentStore = create<ReviewAgentStore>((set, get) => ({
   clearForProject: () => set({ reviewsByMilestoneId: {}, inFlightByMilestoneId: {}, current: null, modalOpen: false }),
 
   _onThinking: (turnId, milestoneId, status) => {
-    set((s) => ({
-      inFlightByMilestoneId: { ...s.inFlightByMilestoneId, [milestoneId]: true },
-      current: s.current && s.current.turnId === turnId
-        ? { ...s.current, thinking: [...s.current.thinking, status] }
-        : s.current,
-    }))
+    set((s) => {
+      const patch: Partial<ReviewAgentStore> = {}
+      // Only recreate the map on the first thinking event — avoids re-rendering the
+      // whole milestone list on every subsequent tool call.
+      if (!s.inFlightByMilestoneId[milestoneId]) {
+        patch.inFlightByMilestoneId = { ...s.inFlightByMilestoneId, [milestoneId]: true }
+      }
+      if (s.current && s.current.turnId === turnId) {
+        patch.current = { ...s.current, thinking: [...s.current.thinking, status] }
+      }
+      return patch
+    })
   },
 
   _onDone: (turnId, milestoneId, result, error) => {
