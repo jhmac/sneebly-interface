@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Plus, X, Send, Square, MessagesSquare } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useAskSneeblyStore } from './useAskSneeblyStore'
 import { useProjectStore } from '../../state/projectStore'
+
+const MARKDOWN_CLASS =
+  'prose prose-invert prose-sm max-w-none text-zinc-300 [&_a]:text-blue-400 [&_a]:no-underline hover:[&_a]:underline [&_strong]:text-zinc-200 [&_li]:text-zinc-300 [&_code]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_code]:text-zinc-300 [&_pre]:bg-zinc-900 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5'
 
 const EXAMPLE_QUESTIONS = [
   'What is this project building?',
@@ -108,6 +113,10 @@ export default function AskSneeblyPanel() {
                       </div>
                     ))
                   )}
+                </div>
+              ) : m.role === 'assistant' ? (
+                <div className={MARKDOWN_CLASS}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                 </div>
               ) : (
                 <div className="whitespace-pre-wrap text-zinc-300">{m.content}</div>

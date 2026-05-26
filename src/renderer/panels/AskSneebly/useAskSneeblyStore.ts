@@ -50,6 +50,9 @@ export const useAskSneeblyStore = create<AskSneeblyStore>((set, get) => ({
   toggleSidebar: () => get().setSidebarVisible(!get().sidebarVisible),
 
   newConversation: (projectId) => {
+    // Cancel any in-flight turn so starting fresh doesn't orphan a running subprocess.
+    const inFlight = get().currentTurnId
+    if (inFlight) window.api.askSneeblyCancel(inFlight).catch(() => {})
     set({
       currentConversation: {
         id: crypto.randomUUID(),

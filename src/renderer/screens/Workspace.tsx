@@ -123,6 +123,9 @@ export default function Workspace() {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         if (!(useSettingsStore.getState().settings?.askSneeblyEnabled ?? true)) return
+        // Don't hijack Cmd+/ from text editors (Monaco uses it to toggle comments) or inputs.
+        const t = e.target as HTMLElement | null
+        if (t && (t.isContentEditable || t.closest('input, textarea, .monaco-editor'))) return
         e.preventDefault()
         useAskSneeblyStore.getState().toggleSidebar()
       }

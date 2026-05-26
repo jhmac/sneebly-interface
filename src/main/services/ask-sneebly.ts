@@ -171,7 +171,9 @@ export function startAskSneeblyTurn(
         projectId: opts.projectId,
         prompt: bundle,
         model,
-        permissionMode: 'bypassPermissions',
+        // Read-only Q&A: 'default' is the conservative choice (matches reflector). Combined
+        // with the allowedTools allowlist, the model can only Read/Grep/Glob — never edit.
+        permissionMode: 'default',
         allowedTools: ['Read', 'Grep', 'Glob'],
         appendSystemPrompt: systemPrompt,
         onProcess: (proc) => { turn.proc = proc },
