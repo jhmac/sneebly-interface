@@ -18,6 +18,9 @@ export type SemanticEventKind =
   | 'goals_md_auto_appended'
   | 'skill_selected'
   | 'shortcut_rejected'
+  | 'phase_runner_smoke_test'
+  | 'phase_runner_playwright_passed'
+  | 'phase_runner_playwright_failed'
 
 export type FrictionTag =
   | 'user_correction'
@@ -462,6 +465,8 @@ export interface AppSettings {
   generateLearningProposals: boolean
   runShadowSessions: boolean
   showSuggestedShortcuts: boolean
+  runUISmokeTests: boolean
+  runPlaywrightChecklistTests: boolean
 }
 
 export interface SessionUsage {

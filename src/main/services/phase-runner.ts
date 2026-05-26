@@ -1,6 +1,7 @@
 import Store from 'electron-store'
+import { join } from 'path'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
-import type { PhaseRunConfig, PhaseRunState, ChatMessage } from '../../shared/types'
+import type { PhaseRunConfig, PhaseRunState, ChatMessage, ModelName } from '../../shared/types'
 import { isChatTurnInFlight, startTurn, turnEmitter, type TurnMetrics } from './agent-session'
 import { loadPhasePlan, getMilestoneById, getNextMilestone, syncCheckedState, markMilestoneComplete } from './phase-tracker'
 import { listProjects } from './project-registry'
@@ -8,11 +9,86 @@ import { composeSystemPromptAddendum } from './system-prompt-composer'
 import { sendToProjectWindows } from './window-registry'
 import * as sessionStore from './session-store'
 import { pushAgentEvent } from '../ipc/agent'
+import { getServerUrl } from './dev-server'
+import { runBrowserCheck } from '../mcp-servers/browser-check/browser'
+import { appendEvent } from './event-stream'
+import { runPlaywrightVerification } from './phase-playwright-runner'
 
 const store = new Store()
 
 // Per-project run state
 const runStates = new Map<string, PhaseRunState>()
+
+const UI_FILE_EXTENSIONS = new Set([
+  '.tsx', '.jsx', '.vue', '.svelte', '.html', '.htm', '.css', '.scss', '.sass', '.less',
+])
+
+function isUIMilestone(metrics: TurnMetrics | undefined): boolean {
+  if (!metrics) return false
+  return metrics.filesTouched.some((fp) => {
+    const dot = fp.lastIndexOf('.')
+    if (dot === -1) return false
+    return UI_FILE_EXTENSIONS.has(fp.slice(dot).toLowerCase())
+  })
+}
+
+interface SmokeTestResult {
+  passed: boolean
+  reason?: string
+  consoleErrors: string[]
+  failedRequests: string[]
+}
+
+async function runSmokeTest(projectId: string): Promise<SmokeTestResult | null> {
+  const url = getServerUrl(projectId)
+  if (!url) return null
+
+  try {
+    const result = await runBrowserCheck({ url, waitFor: 'networkidle', timeoutMs: 15_000 })
+
+    const consoleErrors = result.consoleMessages
+      .filter((m) => m.level === 'error')
+      .map((m) => m.text)
+
+    const failedRequests = result.networkRequests
+      .filter((r) => r.status !== undefined && r.status >= 400 && !r.url.includes('favicon'))
+      .map((r) => `${r.status} ${r.url}`)
+
+    const hasFatalErrors = consoleErrors.some((e) =>
+      /Uncaught|TypeError|ReferenceError|SyntaxError|Cannot read/i.test(e)
+    )
+
+    if (result.rootChildren === 0) {
+      return {
+        passed: false,
+        reason: 'React root has no children (page did not render)',
+        consoleErrors,
+        failedRequests,
+      }
+    }
+    if (hasFatalErrors) {
+      return {
+        passed: false,
+        reason: `Fatal console errors: ${consoleErrors.slice(0, 3).join(' | ')}`,
+        consoleErrors,
+        failedRequests,
+      }
+    }
+    if (failedRequests.length > 0) {
+      return {
+        passed: false,
+        reason: `Failed asset requests: ${failedRequests.slice(0, 3).join(' | ')}`,
+        consoleErrors,
+        failedRequests,
+      }
+    }
+
+    return { passed: true, consoleErrors, failedRequests }
+  } catch (e) {
+    console.error('[phase-runner] smoke test failed to execute:', e)
+    return null
+  }
+}
 
 function idleState(): PhaseRunState {
   return {
@@ -215,8 +291,92 @@ async function driveRun(
     if (getRunState(projectId).status !== 'building') return
   }
 
-  // Mark the milestone complete after build (and optional review) succeed
+  // UI smoke test: verify the page actually renders after a UI milestone
+  if (isUIMilestone(buildMetrics) && appSettings['runUISmokeTests'] !== false) {
+    const smokeResult = await runSmokeTest(projectId)
+
+    appendEvent(project.path, sessionId, {
+      id: crypto.randomUUID(),
+      sessionId,
+      projectId,
+      ts: Date.now(),
+      kind: 'phase_runner_smoke_test',
+      source: 'chat',
+      payload: {
+        milestoneId,
+        passed: smokeResult?.passed ?? null,
+        skipped: smokeResult === null,
+        reason: smokeResult?.reason ?? null,
+        consoleErrors: smokeResult?.consoleErrors ?? [],
+        failedRequests: smokeResult?.failedRequests ?? [],
+      },
+    })
+
+    if (smokeResult === null) {
+      console.warn('[phase-runner] smoke test skipped — dev server not running or browser check failed')
+    } else if (!smokeResult.passed) {
+      setRunState(projectId, {
+        ...getRunState(projectId),
+        status: 'paused',
+        lastError: `UI smoke test failed: ${smokeResult.reason ?? 'unknown'}`,
+      })
+      return
+    }
+  }
+
+  // Mark the milestone complete after build, optional review, and smoke test succeed
   markMilestoneComplete(project.path, milestoneId)
+
+  // Playwright checklist test (best-effort — failures surface as warnings, don't pause)
+  if (
+    isUIMilestone(buildMetrics) &&
+    appSettings['runPlaywrightChecklistTests'] === true &&
+    milestone.testChecklist.length > 0
+  ) {
+    const devServerUrl = getServerUrl(projectId)
+    if (devServerUrl) {
+      const playwrightResult = await runPlaywrightVerification(
+        project.path,
+        projectId,
+        milestoneId,
+        milestone.text,
+        milestone.testChecklist,
+        devServerUrl,
+        escalationModel as ModelName,
+      )
+      if (playwrightResult) {
+        appendEvent(project.path, sessionId, {
+          id: crypto.randomUUID(),
+          sessionId,
+          projectId,
+          ts: Date.now(),
+          kind: playwrightResult.passed ? 'phase_runner_playwright_passed' : 'phase_runner_playwright_failed',
+          source: 'chat',
+          payload: {
+            milestoneId,
+            ...(playwrightResult.passed
+              ? {}
+              : {
+                  failureDetails: playwrightResult.failureDetails,
+                  output: playwrightResult.output.slice(0, 2000),
+                }),
+          },
+        })
+
+        if (!playwrightResult.passed) {
+          const specRelPath = join('.sneebly-interface', 'playwright-tests', `${milestoneId}.spec.ts`)
+          const warningMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            text: `Playwright tests reported failures for milestone "${milestone.text}". Review the generated spec at \`${specRelPath}\`.\n\n${(playwrightResult.failureDetails ?? playwrightResult.output).slice(0, 500)}`,
+            ts: Date.now(),
+          }
+          sessionStore.appendMessage(project.path, sessionId, warningMsg)
+          sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, warningMsg)
+        }
+      }
+    }
+  }
 
   // Advance
   const completedInBatch = stateAfterBuild.completedInBatch + 1

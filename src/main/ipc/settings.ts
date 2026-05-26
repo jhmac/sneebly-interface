@@ -27,6 +27,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   generateLearningProposals: true,
   runShadowSessions: false,
   showSuggestedShortcuts: true,
+  runUISmokeTests: true,
+  runPlaywrightChecklistTests: false,
 }
 
 export function registerSettingsHandlers(): void {

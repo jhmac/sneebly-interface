@@ -195,3 +195,7 @@ export function stopAllServers(): void {
 export function getLogs(projectId: string): string[] {
   return [...(active.get(projectId)?.logs ?? [])]
 }
+
+export function getServerUrl(projectId: string): string | null {
+  return active.get(projectId)?.url ?? null
+}
