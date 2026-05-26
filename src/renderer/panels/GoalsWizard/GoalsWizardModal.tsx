@@ -208,6 +208,13 @@ function ImportStage() {
       await useProjectStore.getState().activateProject(activeProject.id)
       const goals = useProjectStore.getState().activeProjectGoals
       if (goals && goals.phases.length > 0) {
+        // Seed Sneebly's skills into the freshly-imported project. Bonus — a failure
+        // here must not block the import, so swallow and log rather than surface.
+        try {
+          await window.api.skillsSeedIntoProject(activeProject.id)
+        } catch (e) {
+          console.error('[GoalsWizard] skill seeding failed:', e)
+        }
         closeWizard()
       } else {
         setNote(

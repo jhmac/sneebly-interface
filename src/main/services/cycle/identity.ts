@@ -123,6 +123,11 @@ export { parseSafePaths, parseProtectedPaths } from './path-safety'
 
 // ── GOALS.md parsing → GoalsMd (shared type used by the renderer) ──────────
 
+// A Roadmap line counts as a bullet if it starts with "-", "*", "+", or "1." then
+// whitespace. Single source of truth so the parser gate, the behaviors stripper, and
+// normalizeRoadmapBullet can never disagree on what a bullet is. Stateless (no /g).
+const ROADMAP_BULLET_PREFIX = /^(?:[-*+]|\d+\.)\s+/
+
 export function parseGoals(content: string): GoalsMd {
   const lines = content.split('\n')
   let mission = ''
@@ -194,9 +199,9 @@ export function parseGoals(content: string): GoalsMd {
       if (trimmed.match(/^\*\*Behaviors introduced\*\*:?/i)) { phaseSection = 'behaviors'; continue }
       if (trimmed.match(/^\*\*Milestones\*\*:?/i)) { phaseSection = 'milestones'; continue }
       // Any bullet style: "-", "*", "+", or "1."
-      if (/^(?:[-*+]|\d+\.)\s+/.test(trimmed)) {
+      if (ROADMAP_BULLET_PREFIX.test(trimmed)) {
         if (phaseSection === 'behaviors') {
-          currentPhase.behaviors.push(trimmed.replace(/^(?:[-*+]|\d+\.)\s+/, '').trim())
+          currentPhase.behaviors.push(trimmed.replace(ROADMAP_BULLET_PREFIX, '').trim())
         } else {
           // Normalize non-canonical bullets ("* Foo", bare "- Foo", "1. Foo") to
           // "- [x]/[ ] Foo" so parseMilestone can read them; canonical lines pass through.
@@ -284,9 +289,9 @@ function parseMilestone(bullet: string): GoalsMilestone | null {
  */
 export function normalizeRoadmapBullet(line: string, keyFeatureNames: Set<string>): string {
   if (/^- \[[ xX]\]\s+/.test(line)) return line // already canonical
-  const m = line.match(/^(?:[-*+]|\d+\.)\s+(.+)$/)
-  if (!m) return line // not a bullet — leave alone
-  const content = m[1]!
+  if (!ROADMAP_BULLET_PREFIX.test(line)) return line // not a bullet — leave alone
+  const content = line.replace(ROADMAP_BULLET_PREFIX, '')
+  if (!content) return line // bullet marker with no text — leave alone
   const featureName = content.split(/\s[—–-]\s/)[0]!.trim().toLowerCase()
   const unfinished =
     /\(partial:|\(not started\)/i.test(content) || keyFeatureNames.has(featureName)

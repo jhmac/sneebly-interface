@@ -83,8 +83,6 @@ export const IPC_CHANNELS = {
   SKILLS_SEED_INTO_PROJECT: 'skills:seed-into-project',
   GOALS_GRILL_TURN: 'goals:grill-turn',
   GOALS_GENERATE: 'goals:generate',
-  GOALS_WRITE: 'goals:write',
-  GOALS_WRITE_CONTEXT: 'goals:write-context',
   GOALS_UPDATE_STACK: 'goals:update-stack',
   REFLECTION_LIST: 'reflection:list',
   REFLECTION_READ: 'reflection:read',

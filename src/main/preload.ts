@@ -345,12 +345,6 @@ const api: ElectronAPI = {
   goalsGenerate: (ideaSeed: string, messages: GrillMessage[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.GOALS_GENERATE, ideaSeed, messages),
 
-  goalsWrite: (projectId: string, content: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.GOALS_WRITE, projectId, content),
-
-  goalsWriteContext: (projectId: string, content: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.GOALS_WRITE_CONTEXT, projectId, content),
-
   goalsUpdateStack: (goalsMd: string, stackReport: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GOALS_UPDATE_STACK, goalsMd, stackReport),
 

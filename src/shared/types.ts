@@ -676,8 +676,6 @@ export interface ElectronAPI {
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>
   goalsGenerate: (ideaSeed: string, messages: GrillMessage[]) => Promise<GoalsGenerateResult>
-  goalsWrite: (projectId: string, content: string) => Promise<void>
-  goalsWriteContext: (projectId: string, content: string) => Promise<void>
   goalsUpdateStack: (goalsMd: string, stackReport: string) => Promise<string>
 
   // ── Spec Architect ────────────────────────────────────────────────────────

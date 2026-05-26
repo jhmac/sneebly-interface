@@ -1,5 +1,3 @@
-import { writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { runStandaloneTurn } from '../standalone-turn'
 import type { GrillMessage } from '../../../shared/types'
@@ -245,14 +243,4 @@ OUTPUT: The complete updated GOALS.md with the Tech Stack section filled in. Not
   })
 
   return result.assistantText.trim()
-}
-
-// ── Write GOALS.md / CONTEXT.md ───────────────────────────────────────────────
-
-export function writeGoalsMd(projectPath: string, content: string): void {
-  writeFileSync(join(projectPath, 'GOALS.md'), content, 'utf-8')
-}
-
-export function writeContextMd(projectPath: string, content: string): void {
-  writeFileSync(join(projectPath, 'CONTEXT.md'), content, 'utf-8')
 }
