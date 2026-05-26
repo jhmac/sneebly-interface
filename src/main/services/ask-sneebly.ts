@@ -30,6 +30,7 @@ interface ActiveTurn {
   proc?: ChildProcess
   cancelled: boolean
   answer: string
+  sawPartial: boolean
   startedAt: number
   projectId: string
   projectPath: string
@@ -148,6 +149,7 @@ export function startAskSneeblyTurn(
   const turn: ActiveTurn = {
     cancelled: false,
     answer: '',
+    sawPartial: false,
     startedAt: Date.now(),
     projectId: opts.projectId,
     projectPath: project.path,
@@ -176,15 +178,25 @@ export function startAskSneeblyTurn(
         permissionMode: 'default',
         allowedTools: ['Read', 'Grep', 'Glob'],
         appendSystemPrompt: systemPrompt,
+        includePartialMessages: true,
         onProcess: (proc) => { turn.proc = proc },
         onEvent: (event: AgentEvent) => {
-          if (turn.cancelled || event.type !== 'assistant') return
+          if (turn.cancelled) return
+          if (event.type === 'partial_text') {
+            turn.sawPartial = true
+            turn.answer += event.textDelta
+            cb.onChunk(turnId, event.textDelta)
+            return
+          }
+          if (event.type !== 'assistant') return
           for (const block of event.message.content) {
-            if (block.type === 'text' && block.text) {
+            if (block.type === 'tool_use') {
+              cb.onThinking(turnId, toolStatus(block))
+            } else if (block.type === 'text' && block.text && !turn.sawPartial) {
+              // Fallback: no partial deltas arrived, so emit the full block.
+              // When partials streamed the text, skip here to avoid duplication.
               turn.answer += block.text
               cb.onChunk(turnId, block.text)
-            } else if (block.type === 'tool_use') {
-              cb.onThinking(turnId, toolStatus(block))
             }
           }
         },

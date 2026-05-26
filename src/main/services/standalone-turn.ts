@@ -17,6 +17,10 @@ export interface StandaloneTurnOpts {
   allowedTools?: string[]
   appendSystemPrompt?: string
   extraArgs?: string[]
+  // When true, pass --include-partial-messages so claude-code emits content_block_delta
+  // events (wrapped in stream_event); these are translated to AgentPartialTextEvent and
+  // forwarded via onEvent for token-level streaming. Default off — existing callers unchanged.
+  includePartialMessages?: boolean
   onEvent?: (event: AgentEvent) => void
   // Called immediately after the process is spawned, before any events arrive.
   // Lets callers register the process for abort without exposing internals.
@@ -75,6 +79,19 @@ export function extractJson<T>(output: string): T | null {
   try { return JSON.parse(jsonMatch[0]) as T } catch { return null }
 }
 
+// claude-code wraps Anthropic streaming events as { type: 'stream_event', event: {...} }.
+// Pull out a text_delta if this line is one; returns null otherwise.
+function extractPartialText(raw: unknown): { blockIndex: number; textDelta: string } | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const e = raw as {
+    type?: string
+    event?: { type?: string; index?: number; delta?: { type?: string; text?: string } }
+  }
+  if (e.type !== 'stream_event' || !e.event) return null
+  if (e.event.type !== 'content_block_delta' || e.event.delta?.type !== 'text_delta') return null
+  return { blockIndex: e.event.index ?? 0, textDelta: e.event.delta.text ?? '' }
+}
+
 export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<StandaloneTurnResult> {
   const start = Date.now()
   const events: AgentEvent[] = []
@@ -100,6 +117,7 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
   }
   if (opts.appendSystemPrompt) args.push('--append-system-prompt', opts.appendSystemPrompt)
   if (opts.resumeSessionId) args.push('--resume', opts.resumeSessionId)
+  if (opts.includePartialMessages) args.push('--include-partial-messages')
   if (opts.extraArgs) args.push(...opts.extraArgs)
 
   let secrets: Record<string, string> = {}
@@ -136,6 +154,17 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
         cacheReadTokens = event.usage?.cache_read_input_tokens ?? 0
         cacheCreationTokens = event.usage?.cache_creation_input_tokens ?? 0
         costUsd = event.total_cost_usd ?? 0
+      }
+
+      // Token-level streaming: unwrap stream_event text deltas into a synthetic
+      // partial_text event. The raw stream_event is not forwarded (it would be noise);
+      // the full assistant message still fires normally at the block boundary.
+      if (opts.includePartialMessages) {
+        const delta = extractPartialText(event)
+        if (delta) {
+          opts.onEvent?.({ type: 'partial_text', blockIndex: delta.blockIndex, textDelta: delta.textDelta })
+          return
+        }
       }
 
       opts.onEvent?.(event)

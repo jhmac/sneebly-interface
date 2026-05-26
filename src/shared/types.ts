@@ -283,6 +283,14 @@ export interface AgentErrorEvent {
   message: string
 }
 
+// Synthesized by standalone-turn from claude-code's stream_event/content_block_delta
+// wrapper when includePartialMessages is on. Enables token-level UI streaming.
+export interface AgentPartialTextEvent {
+  type: 'partial_text'
+  blockIndex: number
+  textDelta: string
+}
+
 // source is injected by the Interface layer — not in the claude CLI wire format.
 // 'chat' = triggered by user in the chat panel
 // 'daemon' = triggered by the autonomous background engine
@@ -294,6 +302,7 @@ export type AgentEvent = (
   | AgentUserEvent
   | AgentResultEvent
   | AgentErrorEvent
+  | AgentPartialTextEvent
 ) & { source?: AgentEventSource; projectId?: string }
 
 // ── Activity card data types ───────────────────────────────────────────────
