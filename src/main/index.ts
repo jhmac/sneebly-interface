@@ -37,6 +37,7 @@ import { getDaemonStatus, stopDaemon } from './services/cycle/daemon-runner'
 import { scheduleConventionExtraction } from './services/convention-extractor'
 import { registerShortcutsHandlers, scheduleAllShortcutRefreshes } from './ipc/shortcuts'
 import { registerPhaseHandlers } from './ipc/phases'
+import { registerAskSneeblyHandlers } from './ipc/ask-sneebly-handlers'
 
 // ── User data migration (sneebly-interface → Sneebly) ─────────────────────────
 function migrateUserData(): void {
@@ -113,6 +114,7 @@ function registerIpcHandlers(): void {
   registerLearningsInboxHandlers()
   registerShortcutsHandlers()
   registerPhaseHandlers()
+  registerAskSneeblyHandlers()
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
     createProjectWindow(projectId)

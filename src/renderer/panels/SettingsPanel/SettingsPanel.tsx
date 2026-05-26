@@ -210,6 +210,29 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
           </Row>
         </Section>
 
+        <Section title="Ask Sneebly">
+          <Row label="Ask Sneebly sidebar" description="Side panel (Cmd+/) for asking questions about your project while the build agent runs. Answers come from an independent Claude session that sees your project files but not the build chat.">
+            <Toggle
+              value={settings.askSneeblyEnabled ?? true}
+              onChange={(v) => handleSave({ askSneeblyEnabled: v })}
+            />
+          </Row>
+          <Row label="Ask Sneebly model" description="Model used for Ask Sneebly answers. Sonnet is fine for most questions; Opus for deeper analysis.">
+            <div className="relative">
+              <select
+                value={settings.askSneeblyModel ?? 'claude-sonnet-4-6'}
+                onChange={(e) => handleSave({ askSneeblyModel: e.target.value as ModelName })}
+                className="appearance-none rounded-md bg-zinc-800 py-1.5 pl-3 pr-8 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+              >
+                {MODEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-500" />
+            </div>
+          </Row>
+        </Section>
+
         {/* Projects */}
         <Section title="Projects">
           <Row label="Default projects folder" description="Where cloned repos are placed by default">

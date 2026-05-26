@@ -22,6 +22,9 @@ export type SemanticEventKind =
   | 'phase_runner_playwright_passed'
   | 'phase_runner_playwright_failed'
   | 'phase_runner_auto_commit'
+  | 'ask_sneebly_question_asked'
+  | 'ask_sneebly_question_answered'
+  | 'ask_sneebly_question_cancelled'
 
 export type FrictionTag =
   | 'user_correction'
@@ -469,6 +472,9 @@ export interface AppSettings {
   runUISmokeTests: boolean
   runPlaywrightChecklistTests: boolean
   autoCommitMilestones: boolean
+  askSneeblyEnabled: boolean
+  askSneeblyModel: ModelName
+  askSneeblySidebarVisible: boolean
 }
 
 export interface SessionUsage {
@@ -671,6 +677,39 @@ export interface ElectronAPI {
   specOnAutoSuggest: (callback: (projectId: string) => void) => () => void
   specList: (projectPath: string) => Promise<string[]>
   specListMilestones: (projectPath: string) => Promise<MilestoneRef[]>
+
+  // ── Ask Sneebly ───────────────────────────────────────────────────────────
+  askSneeblyStart: (opts: AskSneeblyStartInput) => Promise<{ turnId: string }>
+  askSneeblyCancel: (turnId: string) => Promise<void>
+  askSneeblyOnChunk: (cb: (turnId: string, chunk: string) => void) => () => void
+  askSneeblyOnDone: (cb: (turnId: string, error?: string) => void) => () => void
+  askSneeblyOnThinking: (cb: (turnId: string, status: string) => void) => () => void
+}
+
+export interface AskSneeblyStartInput {
+  projectId: string
+  question: string
+  conversationId: string
+  includeDiff?: boolean
+  includeEvents?: boolean
+}
+
+export interface AskSneeblyMessage {
+  id: string
+  conversationId: string
+  role: 'user' | 'assistant'
+  content: string
+  thinking?: string[]
+  createdAt: number
+  isStreaming?: boolean
+  error?: string
+}
+
+export interface AskSneeblyConversation {
+  id: string
+  projectId: string
+  startedAt: number
+  messages: AskSneeblyMessage[]
 }
 
 export type ResearchDepth = 'light' | 'standard' | 'deep'

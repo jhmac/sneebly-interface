@@ -30,6 +30,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   runUISmokeTests: true,
   runPlaywrightChecklistTests: false,
   autoCommitMilestones: true,
+  askSneeblyEnabled: true,
+  askSneeblyModel: 'claude-sonnet-4-6',
+  askSneeblySidebarVisible: false,
 }
 
 export function registerSettingsHandlers(): void {

@@ -114,4 +114,9 @@ export const IPC_CHANNELS = {
   PHASE_AUDIT: 'phase:audit',
   PHASE_AUDIT_PROGRESS: 'phase:audit-progress',
   PHASE_AUDIT_STOP: 'phase:audit-stop',
+  ASK_SNEEBLY_START: 'askSneebly:start',
+  ASK_SNEEBLY_CANCEL: 'askSneebly:cancel',
+  ASK_SNEEBLY_CHUNK: 'askSneebly:chunk',
+  ASK_SNEEBLY_DONE: 'askSneebly:done',
+  ASK_SNEEBLY_THINKING: 'askSneebly:thinking',
 } as const

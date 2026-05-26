@@ -6,7 +6,7 @@ import {
   useGroupRef,
   type Layout,
 } from 'react-resizable-panels'
-import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X, Sparkles, ListChecks } from 'lucide-react'
+import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X, Sparkles, ListChecks, MessagesSquare } from 'lucide-react'
 import type { LayoutSizes, UsageSummary, ShortcutAction } from '../../shared/types'
 import { fmtTokens, fmtDuration } from '../../shared/utils'
 import { useProjectStore } from '../state/projectStore'
@@ -31,6 +31,8 @@ import EditorPanel from '../panels/FilesPanel/EditorPanel'
 import LearningsPanel from '../panels/LearningsPanel/LearningsPanel'
 import ShortcutsBar from '../panels/ShortcutsBar/ShortcutsBar'
 import PhasePanel from '../panels/PhasePanel/PhasePanel'
+import AskSneeblyPanel from '../panels/AskSneebly/AskSneeblyPanel'
+import { useAskSneeblyStore } from '../panels/AskSneebly/useAskSneeblyStore'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -67,6 +69,10 @@ export default function Workspace() {
   const loadShortcuts = useShortcutsStore((s) => s.load)
   const { settings } = useSettingsStore()
   const showSuggestedShortcuts = settings?.showSuggestedShortcuts ?? true
+  const askEnabled = settings?.askSneeblyEnabled ?? true
+  const askSidebarVisible = useAskSneeblyStore((s) => s.sidebarVisible)
+  const toggleAsk = useAskSneeblyStore((s) => s.toggleSidebar)
+  const askVisible = askEnabled && askSidebarVisible
   const setActiveSkill = useChatStore((s) => s.setActiveSkill)
   const editorOpenFile = useEditorStore((s) => s.openFile)
 
@@ -111,6 +117,19 @@ export default function Workspace() {
   useEffect(() => {
     resetForProject()
   }, [activeProjectId])
+
+  // Cmd+/ toggles the Ask Sneebly sidebar (only when the feature is enabled)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        if (!(useSettingsStore.getState().settings?.askSneeblyEnabled ?? true)) return
+        e.preventDefault()
+        useAskSneeblyStore.getState().toggleSidebar()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     window.api.layoutGetSizes().then((loaded) => {
@@ -176,6 +195,9 @@ export default function Workspace() {
         learningsBadge={learningsBadge}
         onOpenLearnings={() => setLearningsOpen(true)}
         onOpenPhases={() => setPhasesOpen(true)}
+        askEnabled={askEnabled}
+        askActive={askVisible}
+        onToggleAsk={toggleAsk}
       />
 
       {activeProjectId && (
@@ -207,21 +229,30 @@ export default function Workspace() {
           </Panel>
           <ResizeHandle orientation="horizontal" />
           <Panel id="bottom" defaultSize={45} minSize={20}>
-            <Group
-              groupRef={horizontalRef}
-              orientation="horizontal"
-              defaultLayout={DEFAULT_SIZES.horizontal}
-              onLayoutChanged={handleHorizontalLayout}
-              className="h-full"
-            >
-              <Panel id="chat" defaultSize={50} minSize={20}>
-                <ChatPanel onOpenSettings={() => setSettingsOpen(true)} />
-              </Panel>
-              <ResizeHandle orientation="vertical" />
-              <Panel id="activity" defaultSize={50} minSize={20}>
-                <ActivityPanel />
-              </Panel>
-            </Group>
+            <div className="flex h-full">
+              <div className="min-w-0 flex-1">
+                <Group
+                  groupRef={horizontalRef}
+                  orientation="horizontal"
+                  defaultLayout={DEFAULT_SIZES.horizontal}
+                  onLayoutChanged={handleHorizontalLayout}
+                  className="h-full"
+                >
+                  <Panel id="chat" defaultSize={50} minSize={20}>
+                    <ChatPanel onOpenSettings={() => setSettingsOpen(true)} />
+                  </Panel>
+                  <ResizeHandle orientation="vertical" />
+                  <Panel id="activity" defaultSize={50} minSize={20}>
+                    <ActivityPanel />
+                  </Panel>
+                </Group>
+              </div>
+              {askVisible && (
+                <div className="w-[32%] min-w-[300px] flex-shrink-0 border-l border-zinc-800">
+                  <AskSneeblyPanel />
+                </div>
+              )}
+            </div>
           </Panel>
         </Group>
       </div>
@@ -296,6 +327,9 @@ function WorkspaceHeader({
   learningsBadge,
   onOpenLearnings,
   onOpenPhases,
+  askEnabled,
+  askActive,
+  onToggleAsk,
 }: {
   projectName: string | null
   activeProjectId: string | null
@@ -315,6 +349,9 @@ function WorkspaceHeader({
   learningsBadge: number
   onOpenLearnings: () => void
   onOpenPhases: () => void
+  askEnabled: boolean
+  askActive: boolean
+  onToggleAsk: () => void
 }) {
   const hasChanges = gitChangedFiles > 0
   const hasSyncInfo = gitAhead > 0 || gitBehind > 0
@@ -350,6 +387,21 @@ function WorkspaceHeader({
       </div>
 
       <div className="flex items-center gap-1">
+        {askEnabled && (
+          <button
+            onClick={onToggleAsk}
+            title="Ask Sneebly (Cmd+/)"
+            className={[
+              'flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
+              askActive
+                ? 'bg-indigo-600/20 text-indigo-300'
+                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300',
+            ].join(' ')}
+          >
+            <MessagesSquare className="h-3 w-3" />
+            Ask
+          </button>
+        )}
         <button
           onClick={onOpenLearnings}
           title="Learnings inbox"

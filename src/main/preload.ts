@@ -43,6 +43,7 @@ import type {
   PhaseRunConfig,
   PhaseRunState,
   PhaseAuditProgress,
+  AskSneeblyStartInput,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -372,6 +373,27 @@ const api: ElectronAPI = {
 
   specListMilestones: (projectPath: string): Promise<MilestoneRef[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.SPEC_LIST_MILESTONES, projectPath),
+
+  // ── Ask Sneebly ───────────────────────────────────────────────────────────
+  askSneeblyStart: (opts: AskSneeblyStartInput): Promise<{ turnId: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ASK_SNEEBLY_START, opts),
+  askSneeblyCancel: (turnId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ASK_SNEEBLY_CANCEL, turnId),
+  askSneeblyOnChunk: (cb: (turnId: string, chunk: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, turnId: string, chunk: string) => cb(turnId, chunk)
+    ipcRenderer.on(IPC_CHANNELS.ASK_SNEEBLY_CHUNK, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ASK_SNEEBLY_CHUNK, h)
+  },
+  askSneeblyOnDone: (cb: (turnId: string, error?: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, turnId: string, error?: string) => cb(turnId, error)
+    ipcRenderer.on(IPC_CHANNELS.ASK_SNEEBLY_DONE, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ASK_SNEEBLY_DONE, h)
+  },
+  askSneeblyOnThinking: (cb: (turnId: string, status: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, turnId: string, status: string) => cb(turnId, status)
+    ipcRenderer.on(IPC_CHANNELS.ASK_SNEEBLY_THINKING, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ASK_SNEEBLY_THINKING, h)
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -17,6 +17,7 @@ import { useGitStatusStore } from './state/gitStatusStore'
 import GoalsWizardModal from './panels/GoalsWizard/GoalsWizardModal'
 import { loadSkills } from './skills'
 import { useSettingsStore } from './state/settingsStore'
+import { useAskSneeblyStore } from './panels/AskSneebly/useAskSneeblyStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -35,6 +36,9 @@ export default function App() {
     })
     loadSkills().catch(console.error)
     useSettingsStore.getState().load().catch(console.error)
+    window.api.settingsGet()
+      .then((s) => useAskSneeblyStore.setState({ sidebarVisible: s.askSneeblySidebarVisible ?? false }))
+      .catch(() => {})
   }, [])
 
   // ── GitHub auth status check ───────────────────────────────────────────
@@ -122,6 +126,20 @@ export default function App() {
     return window.api.chatOnInFlightChanged((payload) => {
       useActivityStore.getState().setChatInFlight(payload.projectId, payload.inFlight)
     })
+  }, [])
+
+  // ── Ask Sneebly push channels ──────────────────────────────────────────
+  useEffect(() => {
+    const offChunk = window.api.askSneeblyOnChunk((turnId, chunk) =>
+      useAskSneeblyStore.getState()._onChunk(turnId, chunk)
+    )
+    const offThinking = window.api.askSneeblyOnThinking((turnId, status) =>
+      useAskSneeblyStore.getState()._onThinking(turnId, status)
+    )
+    const offDone = window.api.askSneeblyOnDone((turnId, error) =>
+      useAskSneeblyStore.getState()._onDone(turnId, error)
+    )
+    return () => { offChunk(); offThinking(); offDone() }
   }, [])
 
   // ── File watcher push channel ──────────────────────────────────────────
