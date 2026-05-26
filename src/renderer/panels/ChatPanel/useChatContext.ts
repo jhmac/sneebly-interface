@@ -14,6 +14,15 @@ export interface ChatContextInfo {
 const MILESTONE_RE = /p\d+-m\d+/
 const RECENT_MESSAGES = 5
 
+function findLast<T, S extends T>(arr: readonly T[], pred: (x: T) => x is S): S | undefined
+function findLast<T>(arr: readonly T[], pred: (x: T) => boolean): T | undefined
+function findLast<T>(arr: readonly T[], pred: (x: T) => boolean): T | undefined {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (pred(arr[i])) return arr[i]
+  }
+  return undefined
+}
+
 function fileName(p: string): string {
   return p.split('/').pop() || p
 }
@@ -62,7 +71,8 @@ export function useChatContext(): ChatContextInfo {
     }
 
     // 2. Most recent spec file read
-    const specRead = [...cards].reverse().find(
+    const specRead = findLast(
+      cards,
       (c): c is ReadCard =>
         c.cardType === 'read' && /spec/i.test((c as ReadCard).filePath) && /\.md$/i.test((c as ReadCard).filePath)
     )
@@ -89,7 +99,8 @@ export function useChatContext(): ChatContextInfo {
     }
 
     // 4. Most recently edited file
-    const edit = [...cards].reverse().find(
+    const edit = findLast(
+      cards,
       (c): c is EditCard | WriteCard => c.cardType === 'edit' || c.cardType === 'write'
     )
     if (edit) {

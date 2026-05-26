@@ -28,20 +28,25 @@ export default function CodeBlock({ language, code }: { language: string; code: 
   const [html, setHtml] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
+  // Debounce highlighting: while a message streams in, `code` grows every token.
+  // Highlighting per token thrashes the CPU, so wait until the code settles and
+  // show the plain <pre> fallback in the meantime.
   useEffect(() => {
     let cancelled = false
-    getHighlighter()
-      .then((h) => {
-        if (cancelled) return
-        try {
-          const lang = h.getLoadedLanguages().includes(language as never) ? language : 'text'
-          setHtml(h.codeToHtml(code, { lang, theme: 'vitesse-dark' }))
-        } catch {
-          setHtml(null)
-        }
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
+    const timer = setTimeout(() => {
+      getHighlighter()
+        .then((h) => {
+          if (cancelled) return
+          try {
+            const lang = h.getLoadedLanguages().includes(language as never) ? language : 'text'
+            setHtml(h.codeToHtml(code, { lang, theme: 'vitesse-dark' }))
+          } catch {
+            setHtml(null)
+          }
+        })
+        .catch(() => {})
+    }, 120)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [code, language])
 
   function copy() {
