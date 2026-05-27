@@ -146,7 +146,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     set({
       isDirty: false,
       currentDesign: {
-        name: name ?? `Design ${new Date().toLocaleDateString()}`,
+        name: name ?? `Design ${new Date().toISOString().slice(0, 10)}`,
         createdAt: now,
         updatedAt: now,
         frames: [],

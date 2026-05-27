@@ -16,8 +16,17 @@ function designsDir(projectPath: string): string {
   return join(projectPath, DESIGNS_DIR)
 }
 
+/**
+ * Strip characters that are unsafe in a filename component on macOS/Linux/Windows.
+ * The caller's in-memory name is unchanged — only the on-disk filename is sanitized,
+ * so display always shows the user's original string (e.g. "Hero / V2").
+ */
+function sanitizeFilename(name: string): string {
+  return name.replace(/[/\\:*?"<>|]/g, '-').trim() || 'untitled'
+}
+
 function designFilePath(projectPath: string, name: string): string {
-  return join(designsDir(projectPath), `${name}.json`)
+  return join(designsDir(projectPath), `${sanitizeFilename(name)}.json`)
 }
 
 function ensureDir(projectPath: string): void {
