@@ -173,58 +173,38 @@ For each phase you'll find:
 
 ---
 
-## Design Pipeline — Phase 3: Goals → Design → Scaffold (PARKED)
+## Phase 3 — Goals → Design → Scaffold pipeline
 
-> **Status: PARKED** — dogfooding Phase 2B (seed + iterate + implement) on Plumb
-> first. Single-canvas usage patterns may reshape what Phase 3 should look like.
+Status: PARKED (dogfooding Phase 2B first to validate the underlying mechanics)
 
 ### Problem
-
-New projects have no preview yet, so the Phase 2B seed-from-current-view feature
-doesn't work. But they do have GOALS.md after the Goals Wizard runs. Phase 3 turns
-GOALS.md into the seed for an initial design pass that drives the project's first
-scaffold, instead of starting with empty boilerplate.
+New projects have no preview yet, so the Phase 2B seed-from-current-view feature doesn't work. But they do have GOALS.md after the Goals Wizard runs. Phase 3 turns GOALS.md into the seed for an initial design pass that drives the project's first scaffold, instead of starting with empty boilerplate.
 
 ### Flow
-
 1. Goals Wizard runs as today, produces GOALS.md
 2. New optional step: "Want to design before you code?" prompt
-3. If yes, design agent reads GOALS.md and outputs a structured page manifest
-   (JSON list of {name, purpose, key_elements}) — what pages this app needs
+3. If yes, design agent reads GOALS.md and outputs a structured page manifest (JSON list of {name, purpose, key_elements}) — what pages this app needs
 4. User edits the manifest in a simple modal (rename, reorder, add, remove)
-5. Optional style reference prompt: "make these like stripe.com" or "minimalist,
-   dark mode" — applied across the whole manifest for design coherence
-6. Approve → design agent generates variants per page, in parallel, on a
-   canvas-per-page model. Each page row holds N variants of that page.
+5. Optional style reference prompt: "make these like stripe.com" or "minimalist, dark mode" — applied across the whole manifest for design coherence
+6. Approve → design agent generates variants per page, in parallel, on a canvas-per-page model. Each page row holds N variants of that page.
 7. User picks one variant per page
-8. "Implement all" scaffolds the entire project from the picked set, in one pass.
-   The build agent's first phase becomes "implement this design" rather than
-   "set up boilerplate"
+8. "Implement all" scaffolds the entire project from the picked set, in one pass. The build agent's first phase becomes "implement this design" rather than "set up boilerplate"
 
-### Architecture notes
-
-- Page manifest generation = separate standalone-turn from variant generation;
-  output is structured JSON not freeform code, so the manifest is editable as
-  data not prose
-- Canvas data model needs to support multi-page from day one (each page = its
-  own canvas section or its own tab) — Phase 3 IS the implementation of the
-  "canvas-per-page" future bet from Phase 2A
-- Reuse Phase 2B's project-context-bundler for the style/dep context passed
-  into variant generation — no new context plumbing needed
+### Architecture notes (capture before implementing)
+- Page manifest generation = separate standalone-turn from variant generation, output is structured JSON not freeform code, so the manifest is editable as data not prose
+- Canvas data model needs to support multi-page from day one (each page = its own canvas section or its own tab) — Phase 3 IS the implementation of the "canvas-per-page" future bet from Phase 2A
+- Reuse Phase 2B's project-context-bundler for the style/dep context passed into variant generation — no new context plumbing needed
 
 ### Open questions (don't answer yet, just record)
-
 - Does design generation block the build agent, or run in parallel?
-- How do later build phases interact with the implemented design — fixed, or
-  fair game to restructure?
-- Style references: text-only initially, or eventually fetch+screenshot live
-  sites the user names? (Phase 3.1?)
-- After Phase 3 ships, how does the user add a NEW page to an existing project?
-  The canvas-per-page model must support both initial scaffold AND ongoing
-  page-by-page additions — data model should anticipate this from day one
+- How do later build phases interact with the implemented design — fixed, or fair game to restructure?
+- Style references: text-only initially, or eventually fetch+screenshot live sites the user names? (Phase 3.1?)
+- After Phase 3 ships, how does the user add a NEW page to an existing project? The canvas-per-page model must support both initial scaffold AND ongoing page-by-page additions — data model should anticipate this from day one
+
+### Why parked
+We want real dogfooding evidence from Phase 2B (seed + iterate + implement) on Plumb before designing Phase 3. The single-canvas model may reveal usage patterns that reshape what Phase 3 should look like.
 
 ### Acceptance test (for when un-parked)
-
 1. Click "New App" → Goals Wizard runs → GOALS.md produced
 2. New prompt appears: "Design before you code?" → click yes
 3. Page manifest generated and shown (e.g. Landing / Sign in / Dashboard / Settings)
