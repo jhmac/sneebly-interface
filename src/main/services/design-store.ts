@@ -40,12 +40,14 @@ export function listDesigns(projectPath: string): DesignSummary[] {
     return readdirSync(dir)
       .filter((f) => f.endsWith('.json'))
       .map((f) => {
-        const name = f.slice(0, -5) // strip .json
+        const filenameBase = f.slice(0, -5) // strip .json; used as fallback only
         try {
           const data = JSON.parse(readFileSync(join(dir, f), 'utf-8')) as DesignFile
-          return { name, updatedAt: data.updatedAt ?? 0 }
+          // Prefer the display name stored inside the JSON over the (sanitized) filename.
+          // This preserves characters like slashes that are stripped from disk names.
+          return { name: data.name || filenameBase, updatedAt: data.updatedAt ?? 0 }
         } catch {
-          return { name, updatedAt: 0 }
+          return { name: filenameBase, updatedAt: 0 }
         }
       })
       .sort((a, b) => b.updatedAt - a.updatedAt)

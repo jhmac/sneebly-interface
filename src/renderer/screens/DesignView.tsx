@@ -352,8 +352,15 @@ export default function DesignView({ projectId }: Props) {
 
   function commitNameEdit() {
     const trimmed = nameDraft.trim()
-    // Only rename if the name actually changed — avoids a spurious isDirty + auto-save
-    if (trimmed && trimmed !== currentDesign?.name) renameCurrentDesign(trimmed)
+    if (!trimmed || trimmed === currentDesign?.name) {
+      setNameEditing(false)
+      return
+    }
+    // Rename the on-disk file before auto-save fires so the old file is cleaned up.
+    // renameDesign has an existsSync guard — safe when no file exists yet for a new design.
+    const oldName = currentDesign?.name
+    if (oldName) void window.api.designRename(projectId, oldName, trimmed)
+    renameCurrentDesign(trimmed)
     setNameEditing(false)
   }
 
