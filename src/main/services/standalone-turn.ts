@@ -132,8 +132,16 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
     })
     opts.onProcess?.(proc)
 
-    const stderrChunks: string[] = []
-    proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()))
+    // Cap stderr at 8 KB — keep the tail so the most recent (most useful) output
+    // is preserved if the subprocess is unexpectedly chatty on stderr.
+    const STDERR_CAP = 8 * 1024
+    let stderrBuf = ''
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      stderrBuf += chunk.toString()
+      if (stderrBuf.length > STDERR_CAP) {
+        stderrBuf = stderrBuf.slice(stderrBuf.length - STDERR_CAP)
+      }
+    })
 
     const rl = createInterface({ input: proc.stdout!, terminal: false })
     rl.on('line', (line) => {
@@ -172,11 +180,31 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
 
     proc.on('close', (code) => {
       const durationMs = Date.now() - start
-      const stderr = stderrChunks.join('').trim()
+      let error: string | undefined
+      if (code !== 0 && !assistantText) {
+        // Prefer structured error messages from the JSON event stream — claude-code
+        // emits { type: "error", message: "..." } on stdout, not on stderr.
+        const errorMessages: string[] = []
+        for (const e of events) {
+          if (e.type === 'error') {
+            const msg = (e as AgentEvent & { message?: string }).message
+            if (msg) errorMessages.push(msg)
+          }
+        }
+        const stderrTail = stderrBuf.slice(-500).trim()
+        if (errorMessages.length > 0) {
+          const body = errorMessages.join('\n')
+          error = stderrTail ? `${body}\n\nstderr: ${stderrTail}` : body
+        } else if (stderrTail) {
+          error = `Process exited with code ${code}. stderr: ${stderrTail}`
+        } else {
+          error = `Process exited with code ${code}`
+        }
+      }
       resolve({
         events, assistantText, claudeCodeSessionId,
         durationMs, tokensIn, tokensOut, cacheReadTokens, cacheCreationTokens, costUsd,
-        error: (code !== 0 && !assistantText) ? (stderr || `Process exited with code ${code}`) : undefined,
+        error,
       })
     })
 

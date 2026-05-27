@@ -23,6 +23,61 @@ export interface DesignFrameData extends Record<string, unknown> {
   onImplement: (frameId: string) => void
 }
 
+// ─── Error helpers ────────────────────────────────────────────────────────────
+
+const ERROR_CHAR_THRESHOLD = 120
+
+function classifyError(error: string): string {
+  const lower = error.toLowerCase()
+  if (/not logged in|not authenticated|authentication|unauthorized|401/.test(lower))
+    return 'Not logged in'
+  if (/rate limit|overloaded|too many requests|429/.test(lower))
+    return 'Rate limit hit'
+  if (/context window|context.length|too (many|large)|maximum (context|length)|token.*(limit|exceed)/.test(lower))
+    return 'Context too large'
+  if (/enoent|spawn.*failed|command not found|no such file/.test(lower) && lower.includes('claude'))
+    return 'claude CLI not found'
+  if (/econnrefused|network|connection refused/.test(lower))
+    return 'Network error'
+  const first = error.split('\n')[0] ?? error
+  return first.length > 60 ? `${first.slice(0, 57)}…` : first
+}
+
+function FrameError({ error }: { error: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const headline = classifyError(error)
+  const isLong = error.length > ERROR_CHAR_THRESHOLD
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+      <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-400" />
+      <p className="text-xs font-medium text-red-400">{headline}</p>
+      {!isLong && headline !== error && (
+        <p className="max-w-full break-words text-[10px] text-zinc-500">{error}</p>
+      )}
+      {isLong && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="text-[10px] text-zinc-500 underline transition-colors hover:text-zinc-300"
+        >
+          {expanded ? 'Hide details' : 'Show details'}
+        </button>
+      )}
+      {isLong && expanded && (
+        <div className="w-full max-h-36 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-2 text-left">
+          <pre className="whitespace-pre-wrap break-all text-[9px] text-zinc-400">{error}</pre>
+        </div>
+      )}
+      <button
+        onClick={() => { void navigator.clipboard.writeText(error) }}
+        className="flex items-center gap-1 text-[10px] text-zinc-600 transition-colors hover:text-zinc-400"
+      >
+        <Copy className="h-2.5 w-2.5" />
+        Copy error
+      </button>
+    </div>
+  )
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 // BODY_H imported from frameUtils (shared with SeedFrame)
@@ -166,11 +221,7 @@ export default function DesignFrame({ data }: NodeProps<Node<DesignFrameData>>) 
             <span className="max-w-[80%] text-center text-xs">Generating…</span>
           </div>
         ) : data.error ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <AlertCircle className="h-5 w-5 text-red-400" />
-            <p className="text-xs text-red-400">Generation failed</p>
-            <p className="text-[10px] text-zinc-500 line-clamp-3">{data.error}</p>
-          </div>
+          <FrameError error={data.error} />
         ) : (
           /* Fixed-height overflow wrapper — prevents SandboxedArtifact's postMessage
              height changes from shifting adjacent react-flow nodes. The iframe can
