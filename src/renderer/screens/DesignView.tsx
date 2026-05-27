@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Layout, Plus, Save, ChevronDown, Loader2, Check } from 'lucide-react'
+import { ChevronLeft, Plus, Save, ChevronDown, Loader2, Check } from 'lucide-react'
 import DesignCanvas from '../panels/DesignCanvas/DesignCanvas'
 import ImplementConfirmModal from '../panels/DesignCanvas/ImplementConfirmModal'
 import ImplementProgressPanel from '../panels/DesignCanvas/ImplementProgressPanel'
@@ -7,6 +7,7 @@ import { useDesignStore } from '../state/designStore'
 import { usePreviewStore } from '../state/previewStore'
 import { useProjectStore } from '../state/projectStore'
 import { useDesignImplementStore } from '../state/designImplementStore'
+import { useViewStore } from '../state/viewStore'
 import { SEED_FRAME_ID } from '../panels/DesignCanvas/SeedFrame'
 import type { DesignFile } from '../../shared/types'
 import type { DesignState } from '../state/designStore'
@@ -59,6 +60,7 @@ export default function DesignView({ projectId }: Props) {
   const { status: previewStatus, webContentsId } = usePreviewStore()
   const { projects } = useProjectStore()
   const { current: implementState, startPending, reset: resetImplement } = useDesignImplementStore()
+  const { setView } = useViewStore()
 
   const [prompt, setPrompt] = useState('')
   const [variantMode, setVariantMode] = useState(false)
@@ -68,12 +70,14 @@ export default function DesignView({ projectId }: Props) {
   const [generating, setGenerating] = useState(false)
   const [saved, setSaved] = useState(false)
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const capturingRef = useRef(false)
   const [nameEditing, setNameEditing] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [loadMenuOpen, setLoadMenuOpen] = useState(false)
 
   // frameId being confirmed for implementation (null = no modal)
   const [confirmingFrameId, setConfirmingFrameId] = useState<string | null>(null)
+  const [implementStartError, setImplementStartError] = useState<string | null>(null)
 
   const activeProject = projects.find((p) => p.id === projectId) ?? null
 
@@ -94,7 +98,9 @@ export default function DesignView({ projectId }: Props) {
     const hasFrames = (currentDesign?.frames.length ?? 0) > 0
     if (hasFrames || seedFrame) return                          // already have content
     if (previewStatus !== 'running' || !webContentsId) return  // no live preview
+    if (capturingRef.current) return                           // prevent concurrent captures
 
+    capturingRef.current = true
     window.api.designCapturePreview({ projectId, webContentsId })
       .then((result) => {
         if (result) {
@@ -102,6 +108,7 @@ export default function DesignView({ projectId }: Props) {
         }
       })
       .catch(console.error)
+      .finally(() => { capturingRef.current = false })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewStatus, webContentsId])
 
@@ -290,14 +297,16 @@ export default function DesignView({ projectId }: Props) {
     try {
       const { implementId } = await window.api.designImplementStart({
         projectId,
-        frameId: frame.id,
         frameCode: frame.code,
         frameKind: frame.kind,
         framePrompt: frame.prompt,
       })
       startPending(implementId)
     } catch (err) {
-      console.error('[DesignView] implement error:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[DesignView] implement error:', msg)
+      setImplementStartError(msg)
+      setTimeout(() => setImplementStartError(null), 4000)
     }
   }
 
@@ -325,7 +334,13 @@ export default function DesignView({ projectId }: Props) {
     <div className="flex h-full flex-col bg-zinc-950">
       {/* Top bar */}
       <div className="flex h-10 flex-shrink-0 items-center gap-2 border-b border-zinc-800 px-3">
-        <Layout className="h-3.5 w-3.5 flex-shrink-0 text-zinc-500" />
+        <button
+          onClick={() => setView('workspace')}
+          title="Back to workspace"
+          className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
 
         {/* Design name */}
         {nameEditing ? (
@@ -436,7 +451,7 @@ export default function DesignView({ projectId }: Props) {
             }}
           />
           <button
-            onClick={handleIterateSubmit}
+            onClick={() => void handleIterateSubmit()}
             disabled={!iteratePrompt.trim()}
             className="flex-shrink-0 rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-40"
           >
@@ -454,6 +469,13 @@ export default function DesignView({ projectId }: Props) {
       {/* Implement progress panel (shown while implementation is in-flight or done) */}
       {implementState.status !== 'idle' && implementState.implementId && (
         <ImplementProgressPanel onClose={resetImplement} />
+      )}
+
+      {/* Implement start error (IPC failure before the subprocess even started) */}
+      {implementStartError && (
+        <div className="flex items-center gap-2 border-t border-red-900/50 bg-red-950/30 px-3 py-2">
+          <span className="text-xs text-red-400">Failed to start implementation: {implementStartError}</span>
+        </div>
       )}
 
       {/* Bottom command bar */}
@@ -500,7 +522,7 @@ export default function DesignView({ projectId }: Props) {
         </div>
 
         <button
-          onClick={handleGenerate}
+          onClick={() => void handleGenerate()}
           disabled={!prompt.trim() || generating}
           className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 disabled:opacity-40"
         >

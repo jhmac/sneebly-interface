@@ -1,6 +1,9 @@
 import { webContents } from 'electron'
 import { join } from 'node:path'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises'
+
+// Keep only the N most-recent seed PNGs; older ones are deleted automatically.
+const MAX_SEED_FILES = 5
 
 /**
  * Capture the page rendered by the webview whose webContentsId is given,
@@ -28,15 +31,29 @@ export async function capturePreview(
 
     const pngBuffer = image.toPNG()
 
-    // Persist to disk so the seed survives a reload (optional — renderer uses dataUrl)
+    // Persist to disk asynchronously — does not block the IPC response.
     const dir = join(projectPath, '.sneebly-interface', 'designs', '_seeds')
-    mkdirSync(dir, { recursive: true })
-    const filePath = join(dir, `seed-${Date.now()}.png`)
-    writeFileSync(filePath, pngBuffer)
+    await mkdir(dir, { recursive: true })
+    const filename = `seed-${Date.now()}.png`
+    await writeFile(join(dir, filename), pngBuffer)
+
+    // Prune old seeds so they don't accumulate indefinitely.
+    pruneOldSeeds(dir).catch(() => { /* best-effort */ })
 
     const dataUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`
     return { dataUrl }
   } catch {
     return null
   }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function pruneOldSeeds(dir: string): Promise<void> {
+  const entries = await readdir(dir)
+  const seeds = entries
+    .filter((f) => f.startsWith('seed-') && f.endsWith('.png'))
+    .sort()  // lexicographic = chronological because filenames embed timestamps
+  const toDelete = seeds.slice(0, Math.max(0, seeds.length - MAX_SEED_FILES))
+  await Promise.all(toDelete.map((f) => unlink(join(dir, f))))
 }

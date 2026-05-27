@@ -38,8 +38,8 @@ export function extractCodeBlock(text: string): { code: string; kind: ArtifactKi
     svg: 'svg',
     mermaid: 'mermaid',
   }
-  // \w* (not \w+) — tolerates bare ``` blocks
-  const match = /```(\w*)\s*\n([\s\S]*?)\n```/.exec(text)
+  // \w* (not \w+) — tolerates bare ``` blocks; \r?\n handles both Unix and Windows line endings
+  const match = /```(\w*)\s*\r?\n([\s\S]*?)\r?\n```/.exec(text)
   if (!match) return null
   const lang = match[1]!.toLowerCase()
   const code = match[2]!.trim()

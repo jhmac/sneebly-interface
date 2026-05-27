@@ -14,8 +14,8 @@ import {
   deleteDesign,
   renameDesign,
 } from '../services/design-store'
-import { listProjects } from '../services/project-registry'
 import { formatProjectContext } from '../services/project-context-bundler'
+import { getProjectPath } from './design-handler-utils'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -67,14 +67,6 @@ const RenameDesignSchema = z.object({
   oldName: z.string().min(1),
   newName: z.string().min(1),
 })
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getProjectPath(projectId: string): string {
-  const project = listProjects().find((p) => p.id === projectId)
-  if (!project) throw new Error(`Project not found: ${projectId}`)
-  return project.path
-}
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 

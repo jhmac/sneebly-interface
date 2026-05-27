@@ -4,7 +4,7 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import { sendToProjectWindows } from '../services/window-registry'
 import { capturePreview } from '../services/preview-capture'
 import { startImplementation, cancelImplementation } from '../services/design-implementer'
-import { listProjects } from '../services/project-registry'
+import { getProjectPath } from './design-handler-utils'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -15,7 +15,6 @@ const CapturePreviewSchema = z.object({
 
 const ImplementStartSchema = z.object({
   projectId: z.string().min(1),
-  frameId: z.string().min(1),
   frameCode: z.string().min(1),
   frameKind: z.enum(['html', 'react', 'svg', 'mermaid']),
   framePrompt: z.string().min(1),
@@ -24,14 +23,6 @@ const ImplementStartSchema = z.object({
 const ImplementCancelSchema = z.object({
   implementId: z.string().min(1),
 })
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
-function getProjectPath(projectId: string): string {
-  const project = listProjects().find((p) => p.id === projectId)
-  if (!project) throw new Error(`Project not found: ${projectId}`)
-  return project.path
-}
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 

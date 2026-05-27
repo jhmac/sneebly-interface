@@ -254,7 +254,6 @@ export interface SeedFrameState {
 
 export interface DesignImplementOpts {
   projectId: string
-  frameId: string
   frameCode: string
   frameKind: ArtifactKind
   framePrompt: string
