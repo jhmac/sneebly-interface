@@ -2,13 +2,13 @@ import {
   useRef,
   useEffect,
   useState,
-  useCallback,
   type KeyboardEvent,
   type DragEvent,
   type ClipboardEvent,
 } from 'react'
-import { Paperclip, Camera, ImageIcon, X, FileText, Image } from 'lucide-react'
+import { Paperclip, Camera, ImageIcon, X, FileText, Image, Square } from 'lucide-react'
 import { useChatStore } from '../../state/chatStore'
+import { useActivityStore } from '../../state/activityStore'
 import { useProjectStore } from '../../state/projectStore'
 import type { PendingAttachment } from '../../../shared/types'
 import { basename } from '../../../shared/utils'
@@ -35,6 +35,8 @@ export default function Composer() {
     addAttachment, removeAttachment, sendMessage, clearCurrentSession } = useChatStore()
   const { activeProjectId, projects, activeProjectGoals } = useProjectStore()
   const activeProject = projects.find((p) => p.id === activeProjectId)
+  const { currentTurn, abortTurn } = useActivityStore()
+  const isActive = currentTurn?.active === true
 
   // Auto-grow textarea
   useEffect(() => {
@@ -301,17 +303,28 @@ export default function Composer() {
 
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-2 pb-2">
-        <ToolbarBtn onClick={handleAttachFile} title="Attach file">
+        <ToolbarBtn onClick={handleAttachFile} title="Attach file" disabled={isActive}>
           <Paperclip className="h-3.5 w-3.5" />
         </ToolbarBtn>
-        <ToolbarBtn onClick={handleScreenshot} title="Take screenshot">
+        <ToolbarBtn onClick={handleScreenshot} title="Take screenshot" disabled={isActive}>
           <Camera className="h-3.5 w-3.5" />
         </ToolbarBtn>
-        <ToolbarBtn onClick={handleClipboardImage} title="Paste from clipboard">
+        <ToolbarBtn onClick={handleClipboardImage} title="Paste from clipboard" disabled={isActive}>
           <ImageIcon className="h-3.5 w-3.5" />
         </ToolbarBtn>
         <div className="flex-1" />
-        <span className="text-[10px] text-zinc-700">⌘↵ send</span>
+        {isActive ? (
+          <button
+            onClick={abortTurn}
+            title="Stop Claude Code at the next safe point"
+            className="flex items-center gap-1.5 rounded-md bg-red-950/60 px-2.5 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-900/70 hover:text-red-300"
+          >
+            <Square className="h-3 w-3 fill-current" />
+            Stop
+          </button>
+        ) : (
+          <span className="text-[10px] text-zinc-700">⌘↵ send</span>
+        )}
       </div>
     </div>
   )
@@ -345,17 +358,20 @@ function AttachmentChip({
 function ToolbarBtn({
   onClick,
   title,
+  disabled,
   children,
 }: {
   onClick: () => void
   title: string
+  disabled?: boolean
   children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className="rounded p-1.5 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400"
+      disabled={disabled}
+      className="rounded p-1.5 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400 disabled:pointer-events-none disabled:opacity-30"
     >
       {children}
     </button>
