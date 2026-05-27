@@ -46,6 +46,7 @@ export default function DesignView({ projectId }: Props) {
     currentDesign,
     seedFrame,
     designs,
+    isDirty,
     setDesigns,
     newDesign,
     loadDesignData,
@@ -70,6 +71,7 @@ export default function DesignView({ projectId }: Props) {
   const [generating, setGenerating] = useState(false)
   const [saved, setSaved] = useState(false)
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const implementErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const capturingRef = useRef(false)
   const [nameEditing, setNameEditing] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
@@ -89,13 +91,17 @@ export default function DesignView({ projectId }: Props) {
   // or the load fails.
 
   useEffect(() => {
+    let cancelled = false
+
     void (async () => {
       const list = await window.api.designList(projectId).catch(() => [])
+      if (cancelled) return
       setDesigns(list)
 
       if (list.length > 0) {
         // list is already sorted newest-first by updatedAt (from design-store.ts)
         const file = await window.api.designLoad(projectId, list[0].name).catch(() => null)
+        if (cancelled) return
         if (file) {
           loadDesignData(file)
           return
@@ -107,6 +113,8 @@ export default function DesignView({ projectId }: Props) {
       // cases where DesignView mounts without that path running.)
       if (!useDesignStore.getState().currentDesign) newDesign()
     })()
+
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
@@ -134,9 +142,11 @@ export default function DesignView({ projectId }: Props) {
   }, [previewStatus, webContentsId])
 
   // ── Auto-save (debounced 500ms after any change) ───────────────────────────
+  // Gated on isDirty so loading a design doesn't immediately re-save it
+  // (which would update updatedAt and corrupt the newest-first sort order).
 
   useEffect(() => {
-    if (!currentDesign) return
+    if (!currentDesign || !isDirty) return
     const file = toDesignFile(currentDesign)
     if (file.frames.length === 0) return
 
@@ -148,7 +158,7 @@ export default function DesignView({ projectId }: Props) {
     }, 500)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDesign])
+  }, [currentDesign, isDirty])
 
   // ── Manual save ───────────────────────────────────────────────────────────
 
@@ -184,6 +194,7 @@ export default function DesignView({ projectId }: Props) {
 
   useEffect(() => () => {
     if (savedTimer.current) clearTimeout(savedTimer.current)
+    if (implementErrorTimerRef.current) clearTimeout(implementErrorTimerRef.current)
   }, [])
 
   // ── Load design ───────────────────────────────────────────────────────────
@@ -327,7 +338,8 @@ export default function DesignView({ projectId }: Props) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[DesignView] implement error:', msg)
       setImplementStartError(msg)
-      setTimeout(() => setImplementStartError(null), 4000)
+      if (implementErrorTimerRef.current) clearTimeout(implementErrorTimerRef.current)
+      implementErrorTimerRef.current = setTimeout(() => setImplementStartError(null), 4000)
     }
   }
 
@@ -410,22 +422,18 @@ export default function DesignView({ projectId }: Props) {
             <>
               <div className="fixed inset-0 z-[50]" onClick={() => setLoadMenuOpen(false)} />
               <div className="absolute right-0 top-7 z-[60] w-52 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl">
-                {designs.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-zinc-600">No saved designs</p>
-                ) : (
-                  designs.map((d) => (
-                    <button
-                      key={d.name}
-                      onClick={() => handleLoadDesign(d.name)}
-                      className="flex w-full items-center justify-between px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors"
-                    >
-                      <span className="truncate">{d.name}</span>
-                      <span className="ml-2 flex-shrink-0 text-zinc-600">
-                        {new Date(d.updatedAt).toLocaleDateString()}
-                      </span>
-                    </button>
-                  ))
-                )}
+                {designs.map((d) => (
+                  <button
+                    key={d.name}
+                    onClick={() => void handleLoadDesign(d.name)}
+                    className="flex w-full items-center justify-between px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors"
+                  >
+                    <span className="truncate">{d.name}</span>
+                    <span className="ml-2 flex-shrink-0 text-zinc-600">
+                      {new Date(d.updatedAt).toLocaleDateString()}
+                    </span>
+                  </button>
+                ))}
               </div>
             </>
           )}

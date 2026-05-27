@@ -68,6 +68,12 @@ interface DesignStore {
   designs: DesignSummary[]
   /** Renderer-only screenshot seed. Not part of DesignState.frames, never persisted. */
   seedFrame: SeedFrameState | null
+  /**
+   * True once any frame mutation has occurred since the last load/newDesign.
+   * Guards the auto-save effect so loading a design doesn't immediately
+   * re-save it (which would corrupt the sorted-by-updatedAt order).
+   */
+  isDirty: boolean
 
   // ── Seed frame ───────────────────────────────────────────────────────────
   setSeedFrame: (seed: SeedFrameState) => void
@@ -128,6 +134,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   currentDesign: null,
   designs: [],
   seedFrame: null,
+  isDirty: false,
 
   setSeedFrame: (seed) => set({ seedFrame: seed }),
   clearSeedFrame: () => set({ seedFrame: null }),
@@ -137,6 +144,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   newDesign: (name) => {
     const now = Date.now()
     set({
+      isDirty: false,
       currentDesign: {
         name: name ?? `Design ${new Date().toLocaleDateString()}`,
         createdAt: now,
@@ -148,6 +156,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
   loadDesignData: (file) => {
     set({
+      isDirty: false,
       currentDesign: {
         name: file.name,
         createdAt: file.createdAt,
@@ -162,6 +171,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
   renameCurrentDesign: (newName) =>
     set((s) => ({
+      isDirty: true,
       currentDesign: s.currentDesign
         ? { ...s.currentDesign, name: newName, updatedAt: Date.now() }
         : null,
@@ -183,6 +193,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
         generationId: fd.generationId,
       }))
       return {
+        isDirty: true,
         currentDesign: {
           ...s.currentDesign,
           frames: [...s.currentDesign.frames, ...newFrames],
@@ -199,7 +210,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
           ? { ...f, code, kind, loading: false, generationId: undefined, error: undefined }
           : f
       )
-      return { currentDesign: { ...s.currentDesign, frames, updatedAt: Date.now() } }
+      return { isDirty: true, currentDesign: { ...s.currentDesign, frames, updatedAt: Date.now() } }
     }),
 
   failFrame: (generationId, error) =>
@@ -210,13 +221,14 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
           ? { ...f, loading: false, error, generationId: undefined }
           : f
       )
-      return { currentDesign: { ...s.currentDesign, frames, updatedAt: Date.now() } }
+      return { isDirty: true, currentDesign: { ...s.currentDesign, frames, updatedAt: Date.now() } }
     }),
 
   removeFrame: (frameId) =>
     set((s) => {
       if (!s.currentDesign) return {}
       return {
+        isDirty: true,
         currentDesign: {
           ...s.currentDesign,
           frames: s.currentDesign.frames.filter((f) => f.id !== frameId),
@@ -240,6 +252,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
         error: undefined,
       }
       return {
+        isDirty: true,
         currentDesign: {
           ...s.currentDesign,
           frames: [...s.currentDesign.frames, copy],
@@ -254,7 +267,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       const frames = s.currentDesign.frames.map((f) =>
         f.id === frameId ? { ...f, position } : f
       )
-      return { currentDesign: { ...s.currentDesign, frames, updatedAt: Date.now() } }
+      return { isDirty: true, currentDesign: { ...s.currentDesign, frames, updatedAt: Date.now() } }
     }),
 
   prepareGenerate: () => {
