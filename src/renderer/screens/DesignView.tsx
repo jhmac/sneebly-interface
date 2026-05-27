@@ -82,10 +82,31 @@ export default function DesignView({ projectId }: Props) {
   const activeProject = projects.find((p) => p.id === projectId) ?? null
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
+  // Runs only when projectId changes (not on Design-tab open/close for the same
+  // project — Zustand preserves canvas state across tab navigation).
+  // Auto-loads the most recently saved design so the user never lands on a blank
+  // canvas after having done work. Falls back to newDesign() when nothing is saved
+  // or the load fails.
 
   useEffect(() => {
-    window.api.designList(projectId).then(setDesigns).catch(console.error)
-    if (!currentDesign) newDesign()
+    void (async () => {
+      const list = await window.api.designList(projectId).catch(() => [])
+      setDesigns(list)
+
+      if (list.length > 0) {
+        // list is already sorted newest-first by updatedAt (from design-store.ts)
+        const file = await window.api.designLoad(projectId, list[0].name).catch(() => null)
+        if (file) {
+          loadDesignData(file)
+          return
+        }
+      }
+
+      // No saved designs or load failed — ensure we have a working canvas.
+      // (App.tsx calls newDesign() on project switch, but this guards against
+      // cases where DesignView mounts without that path running.)
+      if (!useDesignStore.getState().currentDesign) newDesign()
+    })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
@@ -342,7 +363,15 @@ export default function DesignView({ projectId }: Props) {
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
 
-        {/* Design name */}
+        {/* Project name prefix — read-only, gives visual scope */}
+        {activeProject && (
+          <>
+            <span className="flex-shrink-0 text-xs text-zinc-600">{activeProject.name}</span>
+            <span className="flex-shrink-0 text-xs text-zinc-700">/</span>
+          </>
+        )}
+
+        {/* Design name — editable inline */}
         {nameEditing ? (
           <input
             autoFocus
@@ -371,9 +400,10 @@ export default function DesignView({ projectId }: Props) {
         <div className="relative">
           <button
             onClick={() => setLoadMenuOpen((v) => !v)}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+            disabled={designs.length === 0}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-default disabled:opacity-40"
           >
-            Load
+            {designs.length > 0 ? `Load (${designs.length})` : 'Load'}
             <ChevronDown className="h-3 w-3" />
           </button>
           {loadMenuOpen && (
