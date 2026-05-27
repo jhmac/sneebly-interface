@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, readdirSync } from 'fs'
 import { join } from 'path'
-import { runStandaloneTurn } from './standalone-turn'
+import { runStandaloneTurn, extractJson } from './standalone-turn'
 import { parseMilestones } from './spec/milestone-parser'
 import type { PhasePlan, OrderedMilestone, MilestoneComplexity } from '../../shared/types'
 
@@ -116,13 +116,12 @@ export async function generatePhasePlan(
     maxTurns: 1,
   })
 
-  let parsed: RawAgentOutput
-  try {
-    // Strip markdown code fences if present
-    const text = result.assistantText.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
-    parsed = JSON.parse(text) as RawAgentOutput
-  } catch (e) {
-    throw new Error(`Phase orderer returned invalid JSON: ${e instanceof Error ? e.message : e}`)
+  if (result.error) throw new Error(`Phase orderer agent failed: ${result.error}`)
+  const parsed = extractJson<RawAgentOutput>(result.assistantText)
+  if (!parsed || !Array.isArray(parsed.milestones)) {
+    throw new Error(
+      `Phase orderer returned no parseable JSON (${result.assistantText.length} chars): ${result.assistantText.slice(0, 200)}`
+    )
   }
 
   // Merge agent output with source milestone data

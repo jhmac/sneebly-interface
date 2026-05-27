@@ -1,0 +1,8 @@
+nodeLinker: hoisted
+
+allowBuilds:
+  electron: true
+  esbuild: true
+  fs-xattr: true
+  keytar: true
+  macos-alias: true
