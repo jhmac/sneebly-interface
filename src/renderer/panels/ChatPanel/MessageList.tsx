@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { FileText, Image, Wrench, ChevronDown, ArrowDown } from 'lucide-react'
+import { FileText, Wrench, ChevronDown, ArrowDown, X } from 'lucide-react'
 import type { ChatMessage } from '../../../shared/types'
 import CodeBlock from './CodeBlock'
 import { useActivityStore } from '../../state/activityStore'
@@ -14,14 +14,21 @@ interface Props {
 const NEAR_BOTTOM_PX = 80
 const PREVIEW_CHARS = 110
 
+type Attachment = NonNullable<ChatMessage['attachments']>[0]
+
+// ─── MessageList ─────────────────────────────────────────────────────────────
+
 export default function MessageList({ messages, pendingSend }: Props) {
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const bottomRef   = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  // atBottom reflects the scroll position *before* new content was appended, so it's the
-  // correct signal for whether to follow. showPill is reactive state for the affordance.
-  const atBottom = useRef(true)
-  const [showPill, setShowPill] = useState(false)
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const atBottom    = useRef(true)
+  const [showPill, setShowPill]   = useState(false)
+  const [expanded, setExpanded]   = useState<Set<string>>(new Set())
+  const [lightboxSrc, setLightboxSrc] = useState<{ src: string; name: string } | null>(null)
+
+  // Stable callbacks — avoid re-rendering every image on each parent update
+  const openLightbox  = useCallback((src: string, name: string) => setLightboxSrc({ src, name }), [])
+  const closeLightbox = useCallback(() => setLightboxSrc(null), [])
 
   const lastAssistantId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -44,14 +51,13 @@ export default function MessageList({ messages, pendingSend }: Props) {
     setShowPill(false)
   }
 
-  // Jump to the bottom on first mount (MessageList is keyed on session id, so this
-  // also fires on session switch).
+  // Jump to bottom on mount / session switch (MessageList is keyed on session id)
   useEffect(() => {
     scrollToBottom('auto')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // On new content: follow if the user was near the bottom, otherwise surface the pill.
+  // Follow new content if the user was near the bottom; otherwise surface the pill
   useEffect(() => {
     if (atBottom.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -77,7 +83,7 @@ export default function MessageList({ messages, pendingSend }: Props) {
       >
         {messages.map((msg) =>
           msg.role === 'user' ? (
-            <UserMessage key={msg.id} message={msg} />
+            <UserMessage key={msg.id} message={msg} onLightbox={openLightbox} />
           ) : (
             <AssistantMessage
               key={msg.id}
@@ -90,6 +96,16 @@ export default function MessageList({ messages, pendingSend }: Props) {
         {pendingSend && <WorkingPill />}
         <div ref={bottomRef} />
       </div>
+
+      {/* Lightbox — fixed overlay, above everything in the app */}
+      {lightboxSrc && (
+        <LightboxOverlay
+          src={lightboxSrc.src}
+          name={lightboxSrc.name}
+          onClose={closeLightbox}
+        />
+      )}
+
       {showPill && (
         <button
           onClick={() => scrollToBottom('smooth')}
@@ -103,40 +119,155 @@ export default function MessageList({ messages, pendingSend }: Props) {
   )
 }
 
-function UserMessage({ message }: { message: ChatMessage }) {
+// ─── UserMessage ──────────────────────────────────────────────────────────────
+
+function UserMessage({
+  message,
+  onLightbox,
+}: {
+  message: ChatMessage
+  onLightbox: (src: string, name: string) => void
+}) {
+  const imageAttachments = message.attachments?.filter(
+    (a) => a.kind === 'image' || a.kind === 'screenshot'
+  ) ?? []
+  const fileAttachments = message.attachments?.filter(
+    (a) => a.kind !== 'image' && a.kind !== 'screenshot'
+  ) ?? []
+
   return (
-    <div className="flex flex-col items-end gap-1">
-      {message.attachments && message.attachments.length > 0 && (
-        <div className="flex flex-wrap justify-end gap-1">
-          {message.attachments.map((a, i) => (
-            <AttachmentChip key={i} attachment={a} />
+    <div className="flex flex-col items-end gap-1.5">
+      {/* Image thumbnails — above the text bubble */}
+      {imageAttachments.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-2">
+          {imageAttachments.map((a, i) => (
+            <ImageThumb key={i} attachment={a} onLightbox={onLightbox} />
           ))}
         </div>
       )}
+      {/* Text bubble */}
       <div className="max-w-[80%] rounded-2xl bg-zinc-700 px-4 py-2.5 text-sm text-zinc-100">
         {message.text}
+      </div>
+      {/* Non-image file chips */}
+      {fileAttachments.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-1">
+          {fileAttachments.map((a, i) => (
+            <FileChip key={i} attachment={a} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ImageThumb ───────────────────────────────────────────────────────────────
+
+function ImageThumb({
+  attachment,
+  onLightbox,
+}: {
+  attachment: Attachment
+  onLightbox: (src: string, name: string) => void
+}) {
+  const [imgError, setImgError] = useState(false)
+  const src = `file://${attachment.path}`
+
+  // File missing or unreadable — degrade to a named chip so context isn't lost
+  if (imgError) {
+    return (
+      <div className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-500">
+        <FileText className="h-3 w-3 flex-shrink-0" />
+        <span className="max-w-[140px] truncate">{attachment.name}</span>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      draggable
+      onDragStart={(e) => {
+        // Custom type lets Composer re-attach the image on drop
+        e.dataTransfer.setData('application/sneebly-image-path', attachment.path)
+        e.dataTransfer.effectAllowed = 'copy'
+      }}
+      onClick={() => onLightbox(src, attachment.name)}
+      title={`${attachment.name} — click to enlarge · drag to re-use`}
+      className="overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800 transition-colors hover:border-zinc-500 cursor-zoom-in"
+    >
+      <img
+        src={src}
+        alt={attachment.name}
+        className="block max-h-64 max-w-xs object-contain"
+        onError={() => setImgError(true)}
+      />
+    </button>
+  )
+}
+
+// ─── FileChip ─────────────────────────────────────────────────────────────────
+
+function FileChip({ attachment }: { attachment: Attachment }) {
+  return (
+    <div className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
+      <FileText className="h-3 w-3 flex-shrink-0" />
+      <span className="max-w-[120px] truncate">{attachment.name}</span>
+    </div>
+  )
+}
+
+// ─── LightboxOverlay ─────────────────────────────────────────────────────────
+
+function LightboxOverlay({
+  src,
+  name,
+  onClose,
+}: {
+  src: string
+  name: string
+  onClose: () => void
+}) {
+  // Ref keeps the Esc handler stable across renders without re-subscribing
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, []) // empty deps — always reads latest via ref
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      {/* Stop clicks on the image itself from closing the overlay */}
+      <div
+        className="relative flex flex-col items-center gap-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={src}
+          alt={name}
+          className="block max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+        />
+        <span className="max-w-[60vw] truncate text-center text-xs text-zinc-500">{name}</span>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute -right-3 -top-3 flex h-7 w-7 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 shadow-lg transition-colors hover:bg-zinc-500 hover:text-zinc-100"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   )
 }
 
-function AttachmentChip({
-  attachment,
-}: {
-  attachment: NonNullable<ChatMessage['attachments']>[0]
-}) {
-  const isImage = attachment.kind === 'image' || attachment.kind === 'screenshot'
-  return (
-    <div className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
-      {isImage ? (
-        <Image className="h-3 w-3 flex-shrink-0" />
-      ) : (
-        <FileText className="h-3 w-3 flex-shrink-0" />
-      )}
-      <span className="max-w-[120px] truncate">{attachment.name}</span>
-    </div>
-  )
-}
+// ─── WorkingPill ──────────────────────────────────────────────────────────────
 
 function WorkingPill() {
   const toolCallCount = useActivityStore((s) => s.currentTurn?.toolCallCount ?? 0)
@@ -151,6 +282,8 @@ function WorkingPill() {
     </div>
   )
 }
+
+// ─── AssistantMessage ─────────────────────────────────────────────────────────
 
 // Reduce an assistant turn to a single muted line for the collapsed state.
 function previewText(text: string): string {
@@ -202,15 +335,10 @@ function AssistantMessage({
             const match = /language-(\w+)/.exec(className ?? '')
             const isBlock = !props.ref // block code has no inline marker
             const code = String(children).replace(/\n$/, '')
-
             if (match || (isBlock && code.includes('\n'))) {
               return <CodeBlock language={match?.[1] ?? 'text'} code={code} />
             }
-            return (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            )
+            return <code className={className} {...props}>{children}</code>
           },
         }}
       >

@@ -14,6 +14,11 @@ import type { PendingAttachment } from '../../../shared/types'
 import { basename } from '../../../shared/utils'
 import { buildSetupPrompt } from '../../../shared/setup-prompt'
 
+const SUPPORTED_IMAGE_MIMES = new Set([
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+])
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
+
 const SLASH_COMMANDS = [
   { cmd: '/clear', desc: 'Clear the current session' },
   { cmd: '/checkpoint', desc: 'Mark a checkpoint in the conversation' },
@@ -24,6 +29,8 @@ const SLASH_COMMANDS = [
 export default function Composer() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
+  const attachErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [slashOpen, setSlashOpen] = useState(false)
   const [slashIdx, setSlashIdx] = useState(0)
   const [atOpen, setAtOpen] = useState(false)
@@ -85,6 +92,17 @@ export default function Composer() {
     setAtQuery(q ?? '')
     if (q === null) setAtIdx(0)
   }, [composerText])
+
+  function showAttachError(msg: string) {
+    if (attachErrorTimer.current) clearTimeout(attachErrorTimer.current)
+    setAttachError(msg)
+    attachErrorTimer.current = setTimeout(() => setAttachError(null), 4000)
+  }
+
+  function clearAttachError() {
+    if (attachErrorTimer.current) clearTimeout(attachErrorTimer.current)
+    setAttachError(null)
+  }
 
   const filteredSlash = SLASH_COMMANDS.filter((c) =>
     c.cmd.includes(composerText.split(' ')[0])
@@ -173,17 +191,27 @@ export default function Composer() {
   async function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
     if (!activeProject) return
     const item = Array.from(e.clipboardData.items).find((i) =>
-      i.type.startsWith('image/')
+      i.kind === 'file' && i.type.startsWith('image/')
     )
     if (!item) return
+
+    if (!SUPPORTED_IMAGE_MIMES.has(item.type)) {
+      showAttachError('Only PNG, JPG, GIF, WebP images supported.')
+      return
+    }
+
     e.preventDefault()
     const file = item.getAsFile()
     if (!file) return
     const buf = await file.arrayBuffer()
-    const fileName = `paste-${crypto.randomUUID()}.png`
+    // Derive extension from actual MIME type so the file isn't misidentified
+    const extMap: Record<string, string> = { 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
+    const ext = extMap[item.type] ?? 'png'
+    const fileName = `paste-${crypto.randomUUID()}.${ext}`
     const savedPath = await window.api.fsSaveAttachment(
       activeProject.path, fileName, new Uint8Array(buf)
     )
+    clearAttachError()
     addAttachment({
       id: crypto.randomUUID(),
       kind: 'image',
@@ -193,21 +221,92 @@ export default function Composer() {
     })
   }
 
-  // Drag + drop files
+  // Cleanup the error timer on unmount
+  useEffect(() => () => {
+    if (attachErrorTimer.current) clearTimeout(attachErrorTimer.current)
+  }, [])
+
+  // ── Drag and drop ────────────────────────────────────────────────────────
+
   function handleDragOver(e: DragEvent) { e.preventDefault(); setDragOver(true) }
-  function handleDragLeave()            { setDragOver(false) }
+
+  function handleDragLeave(e: DragEvent) {
+    // Ignore events fired as the pointer moves into a child element — only
+    // clear the highlight when the drag genuinely leaves the drop zone.
+    const related = e.relatedTarget as Node | null
+    if (related && (e.currentTarget as HTMLElement).contains(related)) return
+    setDragOver(false)
+  }
+
   function handleDrop(e: DragEvent) {
-    e.preventDefault(); setDragOver(false)
-    Array.from(e.dataTransfer.files).forEach((file) => {
-      const path = (file as File & { path?: string }).path ?? file.name
-      addAttachment({ id: crypto.randomUUID(), kind: 'file', path, name: file.name })
-    })
+    setDragOver(false)
+
+    // ── Case 1: image dragged from chat history ──────────────────────────
+    const historyPath = e.dataTransfer.getData('application/sneebly-image-path')
+    if (historyPath) {
+      e.preventDefault()
+      clearAttachError()
+      const name = historyPath.split('/').pop() ?? 'image'
+      addAttachment({
+        id: crypto.randomUUID(),
+        kind: 'image',
+        path: historyPath,
+        name,
+        thumbnailUrl: `file://${historyPath}`,
+      })
+      return
+    }
+
+    // ── Case 2: file(s) dropped from OS ─────────────────────────────────
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) {
+      e.preventDefault()
+      let accepted = 0
+      let rejected = 0
+      for (const file of files) {
+        const filePath = (file as File & { path?: string }).path
+        if (!filePath) { rejected++; continue }
+        if (file.type.startsWith('image/')) {
+          if (SUPPORTED_IMAGE_MIMES.has(file.type)) {
+            addAttachment({
+              id: crypto.randomUUID(),
+              kind: 'image',
+              path: filePath,
+              name: file.name,
+              thumbnailUrl: `file://${filePath}`,
+            })
+            accepted++
+          } else {
+            rejected++
+          }
+        } else {
+          rejected++
+        }
+      }
+      if (rejected > 0) showAttachError('Only PNG, JPG, GIF, WebP images supported.')
+      else if (accepted > 0) clearAttachError()
+      return
+    }
+
+    // ── Case 3: text selection dragged in — let the browser insert naturally
+    // Do NOT call e.preventDefault() here; the textarea handles it.
   }
 
   // Toolbar actions
   async function handleAttachFile() {
     const paths = await window.api.fsShowOpenDialog()
-    paths.forEach((p) => addAttachment({ id: crypto.randomUUID(), kind: 'file', path: p, name: basename(p) }))
+    paths.forEach((p) => {
+      const name = basename(p)
+      const ext = name.includes('.') ? `.${name.split('.').pop()!.toLowerCase()}` : ''
+      const isImage = IMAGE_EXTENSIONS.has(ext)
+      addAttachment({
+        id: crypto.randomUUID(),
+        kind: isImage ? 'image' : 'file',
+        path: p,
+        name,
+        thumbnailUrl: isImage ? `file://${p}` : undefined,
+      })
+    })
   }
 
   async function handleScreenshot() {
@@ -285,6 +384,14 @@ export default function Composer() {
           {composerAttachments.map((a) => (
             <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
           ))}
+        </div>
+      )}
+
+      {/* Inline attachment error */}
+      {attachError && (
+        <div className="mx-3 mt-1.5 flex items-center gap-1.5 rounded-md bg-red-950/40 px-2.5 py-1.5 text-xs text-red-400">
+          <X className="h-3 w-3 flex-shrink-0" />
+          {attachError}
         </div>
       )}
 

@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import Store from 'electron-store'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
-import type { ChatMessage, ModelName } from '../../shared/types'
+import type { ChatMessage, ModelName, ChatAttachment } from '../../shared/types'
 import * as sessionStore from '../services/session-store'
 import { startTurn, isChatTurnInFlight, type TurnMetrics } from '../services/agent-session'
 import { pushAgentEvent } from './agent'
@@ -11,6 +11,18 @@ import { getSkillPrompt } from '../services/skills-loader'
 import { composeSystemPromptAddendum } from '../services/system-prompt-composer'
 
 const store = new Store()
+
+/**
+ * Prepend @<path> references for image/screenshot attachments so claude -p
+ * receives them as vision context.  Text-only messages pass through unchanged.
+ */
+function buildPromptWithAttachments(text: string, attachments: ChatAttachment[]): string {
+  const refs = attachments
+    .filter((a) => a.kind === 'image' || a.kind === 'screenshot')
+    .map((a) => `@${a.path}`)
+  if (refs.length === 0) return text
+  return `${refs.join('\n')}\n\n${text}`
+}
 
 // Learnings injected on the first turn of each session (sessionId → status)
 const sessionLearningsMap = new Map<string, { sourceReflections: string[]; wordCount: number }>()
@@ -245,7 +257,7 @@ export function registerChatHandlers(): void {
           projectId,
           sneeblySessionId: sessionId,
           claudeCodeSessionId,
-          prompt: userMessage.text,
+          prompt: buildPromptWithAttachments(userMessage.text, userMessage.attachments ?? []),
           model: model || 'claude-sonnet-4-6',
           appendSystemPrompt,
           recordEvents,
