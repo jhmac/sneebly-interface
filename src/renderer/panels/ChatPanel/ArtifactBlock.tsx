@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Copy, Download, Check } from 'lucide-react'
 import SandboxedArtifact from './SandboxedArtifact'
 import type { ArtifactKind } from '../../../shared/types'
@@ -28,18 +28,30 @@ export default function ArtifactBlock({ kind, code }: Props) {
   const [copied, setCopied] = useState(false)
   const [saved,  setSaved]  = useState(false)
 
+  // Track timers so we can cancel them on unmount and avoid setState on a
+  // component that has already been removed from the tree.
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (copiedTimer.current) clearTimeout(copiedTimer.current)
+    if (savedTimer.current)  clearTimeout(savedTimer.current)
+  }, [])
+
   function handleCopy() {
     navigator.clipboard.writeText(code).then(() => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      copiedTimer.current = setTimeout(() => setCopied(false), 1500)
     })
   }
 
   async function handleSave() {
     try {
       await window.api.chatSaveArtifact({ content: code, defaultExt: KIND_EXT[kind] })
+      if (savedTimer.current) clearTimeout(savedTimer.current)
       setSaved(true)
-      setTimeout(() => setSaved(false), 1500)
+      savedTimer.current = setTimeout(() => setSaved(false), 1500)
     } catch {
       // User cancelled the save dialog — nothing to do
     }
@@ -57,7 +69,7 @@ export default function ArtifactBlock({ kind, code }: Props) {
             label={copied ? 'Copied' : 'Copy'}
           />
           <ToolbarButton
-            onClick={() => void handleSave()}
+            onClick={handleSave}
             icon={saved ? <Check className="h-3 w-3 text-green-400" /> : <Download className="h-3 w-3" />}
             label={saved ? 'Saved' : 'Save'}
           />
@@ -77,7 +89,7 @@ function ToolbarButton({
   icon,
   label,
 }: {
-  onClick: () => void
+  onClick: () => void | Promise<void>
   icon: ReactNode
   label: string
 }) {

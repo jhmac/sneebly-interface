@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArtifactKind } from '../../../shared/types'
-
-export type { ArtifactKind }
 
 interface Props {
   kind: ArtifactKind
@@ -11,21 +9,24 @@ interface Props {
 const IFRAME_MIN_HEIGHT = 120
 const IFRAME_MAX_HEIGHT = 600
 
-// ─── Source doc builders ────────────────────────────────────────────────────
+// ─── React code processing ───────────────────────────────────────────────────
 
-// Strip ESM import statements (handles multi-line imports) and export keywords
+// Strip ESM imports (including multi-line) and export keywords so the code
+// runs in the Babel CDN context where React/ReactDOM are global.
 function processReactCode(code: string): string {
-  // Collapse multi-line imports onto one line so the single-pass regex works
-  let s = code.replace(/import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?/g, '')
-  // Strip bare `import 'foo'` side-effect imports
-  s = s.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
-  // Strip `export default` and `export { ... }`
-  s = s.replace(/^\s*export\s+default\s+/gm, '')
-  s = s.replace(/^\s*export\s+\{[^}]*\}\s*;?/gm, '')
+  let s = code
+    // Multi-line named imports: import { A, B } from '...'
+    .replace(/import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?/g, '')
+    // Side-effect imports: import 'foo'
+    .replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
+  // Strip export modifiers that aren't valid at top-level in this context
+  s = s
+    .replace(/^\s*export\s+default\s+/gm, '')
+    .replace(/^\s*export\s+\{[^}]*\}\s*;?/gm, '')
   return s.trim()
 }
 
-// Extract the PascalCase component name from `function Foo` or `const Foo =`
+// Finds the first PascalCase identifier from `function Foo` or `const Foo =`
 function findComponentName(code: string): string {
   const fnMatch = /function\s+([A-Z][a-zA-Z0-9_]*)/.exec(code)
   if (fnMatch) return fnMatch[1]!
@@ -34,9 +35,12 @@ function findComponentName(code: string): string {
   return 'App'
 }
 
-function reportHeightScript(id: string): string {
-  return `
-<script>
+// ─── Shared height reporter ──────────────────────────────────────────────────
+
+// Plain <script> (not type="text/babel") — runs immediately on parse so the
+// ResizeObserver is in place before any async renderer (Babel, Mermaid) fires.
+function resizeScript(id: string): string {
+  return `<script>
 (function () {
   var id = '${id}';
   function report() {
@@ -45,10 +49,11 @@ function reportHeightScript(id: string): string {
   if (window.ResizeObserver) {
     new ResizeObserver(report).observe(document.body);
   }
-  report();
 })();
 </script>`
 }
+
+// ─── Source doc builders ─────────────────────────────────────────────────────
 
 function buildHtmlSrcDoc(code: string, id: string): string {
   return `<!DOCTYPE html>
@@ -56,11 +61,11 @@ function buildHtmlSrcDoc(code: string, id: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>* { box-sizing: border-box; } body { margin: 0; font-family: system-ui, sans-serif; }</style>
+<style>* { box-sizing: border-box; } body { margin: 0; background: #fff; font-family: system-ui, sans-serif; }</style>
 </head>
 <body>
 ${code}
-${reportHeightScript(id)}
+${resizeScript(id)}
 </body>
 </html>`
 }
@@ -68,12 +73,16 @@ ${reportHeightScript(id)}
 function buildReactSrcDoc(code: string, id: string): string {
   const cleaned = processReactCode(code)
   const componentName = findComponentName(cleaned)
-  // Babel renders async — poll height a few times after load to catch late layouts
+  // Height strategy:
+  //   1. queueMicrotask inside the babel block fires right after React's sync
+  //      scheduling step — catches the initial render.
+  //   2. A 300 ms follow-up catches async content (images, deferred effects).
+  //   3. The resizeScript ResizeObserver catches any subsequent layout changes.
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<style>* { box-sizing: border-box; } body { margin: 0; font-family: system-ui, sans-serif; }</style>
+<style>* { box-sizing: border-box; } body { margin: 0; background: #fff; font-family: system-ui, sans-serif; }</style>
 <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -84,21 +93,14 @@ function buildReactSrcDoc(code: string, id: string): string {
 ${cleaned}
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${componentName}));
+queueMicrotask(function () {
+  parent.postMessage({ type: 'sneebly-iframe-height', id: '${id}', height: document.documentElement.scrollHeight }, '*');
+  setTimeout(function () {
+    parent.postMessage({ type: 'sneebly-iframe-height', id: '${id}', height: document.documentElement.scrollHeight }, '*');
+  }, 300);
+});
 </script>
-<script>
-(function () {
-  var id = '${id}';
-  function report() {
-    parent.postMessage({ type: 'sneebly-iframe-height', id: id, height: document.documentElement.scrollHeight }, '*');
-  }
-  // Babel is async — poll for ~2 s after load to catch post-render height
-  var attempts = 0;
-  var iv = setInterval(function () {
-    report();
-    if (++attempts >= 10) clearInterval(iv);
-  }, 200);
-})();
-</script>
+${resizeScript(id)}
 </body>
 </html>`
 }
@@ -108,23 +110,25 @@ function buildSvgSrcDoc(code: string, id: string): string {
 <html>
 <head>
 <meta charset="utf-8">
-<style>* { box-sizing: border-box; } body { margin: 0; display: flex; justify-content: center; }</style>
+<style>* { box-sizing: border-box; } body { margin: 0; background: #fff; display: flex; justify-content: center; }</style>
 </head>
 <body>
 ${code}
-${reportHeightScript(id)}
+${resizeScript(id)}
 </body>
 </html>`
 }
 
 function buildMermaidSrcDoc(code: string, id: string): string {
+  // Use startOnLoad: false + explicit mermaid.run() so rendering is
+  // predictable regardless of when the script tag executes.
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
   * { box-sizing: border-box; }
-  body { margin: 8px; }
+  body { margin: 8px; background: #09090b; }
   .mermaid { display: flex; justify-content: center; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -139,10 +143,13 @@ ${code}
   function report() {
     parent.postMessage({ type: 'sneebly-iframe-height', id: id, height: document.documentElement.scrollHeight }, '*');
   }
-  mermaid.initialize({ startOnLoad: true, theme: 'dark' });
-  // Mermaid renders async — report after a short delay and again after longer
-  setTimeout(report, 300);
-  setTimeout(report, 800);
+  mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+  mermaid.run({ nodes: document.querySelectorAll('.mermaid') }).then(function () {
+    report();
+    if (window.ResizeObserver) {
+      new ResizeObserver(report).observe(document.body);
+    }
+  });
 })();
 </script>
 </body>
@@ -161,12 +168,16 @@ function buildSrcDoc(kind: ArtifactKind, code: string, id: string): string {
 // ─── SandboxedArtifact ───────────────────────────────────────────────────────
 
 export default function SandboxedArtifact({ kind, code }: Props) {
-  // Stable per-instance ID so multiple iframes don't cross-talk on postMessage
+  // Stable per-instance ID prevents postMessage cross-talk when multiple
+  // artifacts are rendered in the same chat window.
   const instanceId = useRef(`sba-${Math.random().toString(36).slice(2)}`)
   const [height, setHeight] = useState(IFRAME_MIN_HEIGHT)
 
-  // srcDoc is stable as long as kind + code don't change
-  const srcDoc = buildSrcDoc(kind, code, instanceId.current)
+  // Memoize so large template strings don't rebuild on every parent re-render.
+  const srcDoc = useMemo(
+    () => buildSrcDoc(kind, code, instanceId.current),
+    [kind, code]
+  )
 
   useEffect(() => {
     const id = instanceId.current
@@ -176,7 +187,7 @@ export default function SandboxedArtifact({ kind, code }: Props) {
         e.data.id === id &&
         typeof e.data.height === 'number'
       ) {
-        setHeight(Math.min(Math.max(e.data.height, IFRAME_MIN_HEIGHT), IFRAME_MAX_HEIGHT))
+        setHeight(Math.min(Math.max(e.data.height as number, IFRAME_MIN_HEIGHT), IFRAME_MAX_HEIGHT))
       }
     }
     window.addEventListener('message', onMessage)
@@ -188,7 +199,9 @@ export default function SandboxedArtifact({ kind, code }: Props) {
       srcDoc={srcDoc}
       sandbox="allow-scripts"
       style={{ height }}
-      className="w-full rounded-b-xl bg-white"
+      // bg-transparent: let each srcDoc's body background govern;
+      // avoids a white flash for dark-themed artifacts (Mermaid).
+      className="w-full bg-transparent"
       title={`${kind} artifact`}
     />
   )
