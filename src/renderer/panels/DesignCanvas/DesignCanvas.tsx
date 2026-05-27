@@ -37,6 +37,24 @@ export default function DesignCanvas({ projectId, onIterateRequest, onImplementR
   const { currentDesign, seedFrame, moveFrame } = useDesignStore()
   const prevFrameIds = useRef<Set<string>>(new Set())
 
+  // ── User-panning guard ─────────────────────────────────────────────────────
+  // If the user has manually panned or zoomed the canvas, suppress auto-refit
+  // until 30 s of inactivity has elapsed.
+  const userPanningRef = useRef(false)
+  const panResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleMoveStart = useCallback(() => {
+    userPanningRef.current = true
+    if (panResetTimerRef.current) clearTimeout(panResetTimerRef.current)
+    panResetTimerRef.current = setTimeout(() => {
+      userPanningRef.current = false
+    }, 30_000)
+  }, [])
+
+  useEffect(() => () => {
+    if (panResetTimerRef.current) clearTimeout(panResetTimerRef.current)
+  }, [])
+
   // ── Derive nodes and edges from store ──────────────────────────────────────
 
   // Seed node (if present) is prepended to the node list so it always renders
@@ -195,6 +213,7 @@ export default function DesignCanvas({ projectId, onIterateRequest, onImplementR
         nodes={rfNodes}
         edges={rfEdges}
         onNodesChange={handleNodesChange}
+        onMoveStart={handleMoveStart}
         nodeTypes={nodeTypes}
         minZoom={0.1}
         maxZoom={2}
@@ -220,30 +239,61 @@ export default function DesignCanvas({ projectId, onIterateRequest, onImplementR
 
         {isEmpty && <EmptyState />}
 
-        {/* Fits the viewport to the first batch of nodes (frames + seed) when they arrive */}
-        <FitViewOnFirstFrames nodeCount={rfNodes.length} />
+        {/* Re-fits the viewport whenever the node set or any loading→resolved state changes */}
+        <FitViewOnNodeChange nodes={rfNodes} userPanningRef={userPanningRef} />
       </ReactFlow>
     </div>
   )
 }
 
-// ─── FitViewOnFirstFrames ─────────────────────────────────────────────────────
-// useReactFlow() must be called inside the ReactFlow provider tree.
-// This component watches frame count and fits the viewport once when the first
-// frame finishes loading — giving the user a good initial view.
+// ─── FitViewOnNodeChange ──────────────────────────────────────────────────────
+// Must render inside the ReactFlow provider tree (useReactFlow() requirement).
+//
+// Fits the viewport whenever either:
+//   (a) the set of node IDs changes (frame added / removed), or
+//   (b) any frame transitions from loading → resolved (content becomes visible).
+//
+// Debounced 150 ms so a batch of variants arriving together triggers one fit,
+// not one per resolved frame. rAF inside the timer defers until react-flow has
+// measured the updated node sizes.
+//
+// Respects explicit user navigation: if the user has panned or zoomed since the
+// last auto-fit, the next auto-fit is skipped until 30 s of inactivity elapses
+// (tracked via userPanningRef, set by the parent's onMoveStart handler).
 
-function FitViewOnFirstFrames({ nodeCount }: { nodeCount: number }) {
+interface FitViewProps {
+  nodes: Node<DesignFrameData>[]
+  userPanningRef: { current: boolean }
+}
+
+function FitViewOnNodeChange({ nodes, userPanningRef }: FitViewProps) {
   const { fitView } = useReactFlow()
-  const prevCount = useRef(0)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Key covers both node-set changes (IDs) and loading→resolved transitions.
+  // Sort makes it order-independent so array reordering doesn't trigger spurious fits.
+  const stateKey = nodes
+    .map((n) => {
+      const loading = (n.data as { loading?: boolean }).loading === true
+      return `${n.id}:${loading ? 'L' : 'R'}`
+    })
+    .sort()
+    .join(',')
 
   useEffect(() => {
-    // Only trigger on the transition from 0 nodes → first node(s) (seed or frame)
-    if (prevCount.current === 0 && nodeCount > 0) {
-      // rAF defers until after react-flow has measured the new nodes
+    if (userPanningRef.current) return
+
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      // rAF defers until after react-flow has measured the updated nodes
       requestAnimationFrame(() => fitView({ padding: 0.2, duration: 300 }))
+    }, 150)
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
-    prevCount.current = nodeCount
-  }, [nodeCount, fitView])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stateKey, fitView])
 
   return null
 }
