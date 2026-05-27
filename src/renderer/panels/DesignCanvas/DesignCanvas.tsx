@@ -281,6 +281,8 @@ function FitViewOnNodeChange({ nodes, userPanningRef }: FitViewProps) {
     .join(',')
 
   useEffect(() => {
+    // Nothing to fit to yet — skip to avoid a spurious rAF on the empty canvas.
+    if (nodes.length === 0) return
     if (userPanningRef.current) return
 
     if (timerRef.current) clearTimeout(timerRef.current)

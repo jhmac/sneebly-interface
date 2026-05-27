@@ -165,7 +165,7 @@ export default function DesignView({ projectId }: Props) {
   function handleManualSave() {
     if (!currentDesign) return
     const file = toDesignFile({ ...currentDesign, updatedAt: Date.now() })
-    window.api.designSave(projectId, file)
+    void window.api.designSave(projectId, file)
       .then(() => window.api.designList(projectId))
       .then(setDesigns)
       .then(() => {
@@ -352,7 +352,8 @@ export default function DesignView({ projectId }: Props) {
 
   function commitNameEdit() {
     const trimmed = nameDraft.trim()
-    if (trimmed) renameCurrentDesign(trimmed)
+    // Only rename if the name actually changed — avoids a spurious isDirty + auto-save
+    if (trimmed && trimmed !== currentDesign?.name) renameCurrentDesign(trimmed)
     setNameEditing(false)
   }
 
