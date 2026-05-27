@@ -151,7 +151,7 @@ export default function DesignCanvas({ projectId, onIterateRequest, onImplementR
           }
         })
         // Inject seed node if it just appeared (wasn't in prev)
-        if (castSeed && !prev.some((n) => n.id === SEED_FRAME_ID)) {
+        if (seedNode && !prev.some((n) => n.id === SEED_FRAME_ID)) {
           return [castSeed, ...patched]
         }
         // Remove seed node if it was cleared
@@ -171,8 +171,14 @@ export default function DesignCanvas({ projectId, onIterateRequest, onImplementR
     (changes: NodeChange<Node<DesignFrameData>>[]) => {
       setRfNodes((prev) => applyNodeChanges(changes, prev))
       for (const change of changes) {
-        // Write position to store on drag end (dragging === false means drop)
-        if (change.type === 'position' && change.dragging === false && change.position) {
+        // Write position to store on drag end (dragging === false means drop).
+        // Skip the seed node — it is not in DesignState.frames.
+        if (
+          change.type === 'position' &&
+          change.dragging === false &&
+          change.position &&
+          change.id !== SEED_FRAME_ID
+        ) {
           moveFrame(change.id, change.position)
         }
       }
@@ -214,8 +220,8 @@ export default function DesignCanvas({ projectId, onIterateRequest, onImplementR
 
         {isEmpty && <EmptyState />}
 
-        {/* Fits the viewport to the first batch of frames when they arrive */}
-        <FitViewOnFirstFrames frameCount={currentDesign?.frames.length ?? 0} />
+        {/* Fits the viewport to the first batch of nodes (frames + seed) when they arrive */}
+        <FitViewOnFirstFrames nodeCount={rfNodes.length} />
       </ReactFlow>
     </div>
   )
@@ -226,18 +232,18 @@ export default function DesignCanvas({ projectId, onIterateRequest, onImplementR
 // This component watches frame count and fits the viewport once when the first
 // frame finishes loading — giving the user a good initial view.
 
-function FitViewOnFirstFrames({ frameCount }: { frameCount: number }) {
+function FitViewOnFirstFrames({ nodeCount }: { nodeCount: number }) {
   const { fitView } = useReactFlow()
   const prevCount = useRef(0)
 
   useEffect(() => {
-    // Only trigger on the transition from 0 frames → first completed frame(s)
-    if (prevCount.current === 0 && frameCount > 0) {
+    // Only trigger on the transition from 0 nodes → first node(s) (seed or frame)
+    if (prevCount.current === 0 && nodeCount > 0) {
       // rAF defers until after react-flow has measured the new nodes
       requestAnimationFrame(() => fitView({ padding: 0.2, duration: 300 }))
     }
-    prevCount.current = frameCount
-  }, [frameCount, fitView])
+    prevCount.current = nodeCount
+  }, [nodeCount, fitView])
 
   return null
 }

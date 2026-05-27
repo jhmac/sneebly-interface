@@ -9,7 +9,7 @@ import { useProjectStore } from '../state/projectStore'
 import { useDesignImplementStore } from '../state/designImplementStore'
 import { SEED_FRAME_ID } from '../panels/DesignCanvas/SeedFrame'
 import type { DesignFile } from '../../shared/types'
-import type { DesignState, DesignFrameState } from '../state/designStore'
+import type { DesignState } from '../state/designStore'
 
 interface Props {
   projectId: string
@@ -86,8 +86,9 @@ export default function DesignView({ projectId }: Props) {
   }, [projectId])
 
   // ── Seed from current preview ──────────────────────────────────────────────
-  // On mount: if canvas is empty (no frames, no seed) and the preview is running,
-  // capture the current webview and plant it as the seed frame.
+  // Fires whenever previewStatus or webContentsId changes (and on mount).
+  // Captures once the canvas is empty and a live preview is available —
+  // handles the race where the dev server was still starting when Design tab opened.
 
   useEffect(() => {
     const hasFrames = (currentDesign?.frames.length ?? 0) > 0
@@ -102,7 +103,7 @@ export default function DesignView({ projectId }: Props) {
       })
       .catch(console.error)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // mount only — the conditions checked inside are from the store at mount time
+  }, [previewStatus, webContentsId])
 
   // ── Auto-save (debounced 500ms after any change) ───────────────────────────
 
@@ -274,12 +275,14 @@ export default function DesignView({ projectId }: Props) {
   // ── Implement ─────────────────────────────────────────────────────────────
 
   const handleImplementRequest = useCallback((frameId: string) => {
+    // Prevent a second implementation from starting while one is in-flight
+    if (useDesignImplementStore.getState().current.status === 'running') return
     setConfirmingFrameId(frameId)
   }, [])
 
   async function handleImplementConfirm() {
     if (!confirmingFrameId) return
-    const frame = currentDesign?.frames.find((f) => f.id === confirmingFrameId) as DesignFrameState | undefined
+    const frame = currentDesign?.frames.find((f) => f.id === confirmingFrameId)
     if (!frame || frame.loading || !frame.code) return
 
     setConfirmingFrameId(null)
@@ -450,10 +453,7 @@ export default function DesignView({ projectId }: Props) {
 
       {/* Implement progress panel (shown while implementation is in-flight or done) */}
       {implementState.status !== 'idle' && implementState.implementId && (
-        <ImplementProgressPanel
-          implementId={implementState.implementId}
-          onClose={resetImplement}
-        />
+        <ImplementProgressPanel onClose={resetImplement} />
       )}
 
       {/* Bottom command bar */}

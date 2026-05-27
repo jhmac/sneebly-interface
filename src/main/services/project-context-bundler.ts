@@ -9,9 +9,13 @@ interface ProjectContext {
   tailwindConfig?: string
 }
 
-// ─── Loader ───────────────────────────────────────────────────────────────────
+// Cap tailwind config at 4 KB — large generated configs would consume too much
+// of the context budget without adding proportional value to generation quality.
+const TAILWIND_MAX_CHARS = 4_000
 
-export function loadProjectContext(projectPath: string): ProjectContext {
+// ─── Loader (internal) ────────────────────────────────────────────────────────
+
+function loadProjectContext(projectPath: string): ProjectContext {
   const ctx: ProjectContext = {}
 
   // CONTEXT.md
@@ -36,12 +40,15 @@ export function loadProjectContext(projectPath: string): ProjectContext {
     } catch { /* skip */ }
   }
 
-  // Tailwind config (ts preferred, js fallback)
+  // Tailwind config (ts preferred, js fallback) — capped to avoid large theme objects
   for (const filename of ['tailwind.config.ts', 'tailwind.config.js']) {
     const twPath = join(projectPath, filename)
     if (existsSync(twPath)) {
       try {
-        ctx.tailwindConfig = readFileSync(twPath, 'utf-8').trim()
+        const raw = readFileSync(twPath, 'utf-8').trim()
+        ctx.tailwindConfig = raw.length > TAILWIND_MAX_CHARS
+          ? raw.slice(0, TAILWIND_MAX_CHARS) + '\n// ... (truncated)'
+          : raw
         break
       } catch { /* skip */ }
     }

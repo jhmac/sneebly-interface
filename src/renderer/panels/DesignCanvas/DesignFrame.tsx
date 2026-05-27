@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
 import { MoreHorizontal, Copy, Trash2, GitBranch, Loader2, AlertCircle, Download, Hammer } from 'lucide-react'
 import SandboxedArtifact from '../ChatPanel/SandboxedArtifact'
 import { useDesignStore, FRAME_WIDTH, FRAME_HEIGHT } from '../../state/designStore'
+import { BODY_H, formatTimeAgo } from './frameUtils'
 import type { ArtifactKind } from '../../../shared/types'
 
 // ─── Data shape ───────────────────────────────────────────────────────────────
@@ -24,10 +25,7 @@ export interface DesignFrameData extends Record<string, unknown> {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Body height = frame total minus header (40px), footer (28px), and 2px borders
-const HEADER_H = 40
-const FOOTER_H = 28
-const BODY_H = FRAME_HEIGHT - HEADER_H - FOOTER_H - 2
+// BODY_H imported from frameUtils (shared with SeedFrame)
 
 const KIND_COLORS: Record<ArtifactKind, string> = {
   html:    'bg-orange-900/40 text-orange-300',
@@ -218,15 +216,3 @@ function MenuButton({
   )
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatTimeAgo(ts: number): string {
-  if (!ts) return ''
-  const diffSec = Math.floor((Date.now() - ts) / 1000)
-  if (diffSec < 60) return 'just now'
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffH = Math.floor(diffMin / 60)
-  if (diffH < 24) return `${diffH}h ago`
-  return `${Math.floor(diffH / 24)}d ago`
-}

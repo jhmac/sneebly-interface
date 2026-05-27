@@ -5,11 +5,10 @@ import { useViewStore } from '../../state/viewStore'
 import type { AgentEvent, AgentContentToolUse } from '../../../shared/types'
 
 interface Props {
-  implementId: string
   onClose: () => void
 }
 
-export default function ImplementProgressPanel({ implementId, onClose }: Props) {
+export default function ImplementProgressPanel({ onClose }: Props) {
   const { current, reset } = useDesignImplementStore()
   const { setView } = useViewStore()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -22,8 +21,8 @@ export default function ImplementProgressPanel({ implementId, onClose }: Props) 
 
   function handleClose() {
     // Cancel in-flight work if still running
-    if (current.status === 'running') {
-      window.api.designImplementCancel(implementId).catch(console.error)
+    if (current.status === 'running' && current.implementId) {
+      window.api.designImplementCancel(current.implementId).catch(console.error)
     }
     reset()
     onClose()

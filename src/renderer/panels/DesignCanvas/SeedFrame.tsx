@@ -1,6 +1,7 @@
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react'
 import { Camera, GitBranch } from 'lucide-react'
 import { FRAME_WIDTH, FRAME_HEIGHT } from '../../state/designStore'
+import { BODY_H, formatTimeAgo } from './frameUtils'
 
 // ─── Data shape ───────────────────────────────────────────────────────────────
 
@@ -11,12 +12,6 @@ export interface SeedFrameData extends Record<string, unknown> {
 }
 
 export const SEED_FRAME_ID = 'seed-frame'
-
-// ─── Constants (match DesignFrame layout) ─────────────────────────────────────
-
-const HEADER_H = 40
-const FOOTER_H = 28
-const BODY_H = FRAME_HEIGHT - HEADER_H - FOOTER_H - 2
 
 // ─── SeedFrame ────────────────────────────────────────────────────────────────
 
@@ -73,15 +68,3 @@ export default function SeedFrame({ data }: NodeProps<Node<SeedFrameData>>) {
   )
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatTimeAgo(ts: number): string {
-  if (!ts) return ''
-  const diffSec = Math.floor((Date.now() - ts) / 1000)
-  if (diffSec < 60) return 'just now'
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffH = Math.floor(diffMin / 60)
-  if (diffH < 24) return `${diffH}h ago`
-  return `${Math.floor(diffH / 24)}d ago`
-}
