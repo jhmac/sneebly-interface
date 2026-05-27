@@ -54,9 +54,6 @@ export default function PreviewPanel() {
       return
     }
     webviewRef.current = el
-    // Store the webContentsId so DesignView can request a preview capture via IPC.
-    // getWebContentsId() is synchronous and stable for the lifetime of this webview.
-    setWebContentsId(el.getWebContentsId())
 
     const onNavigate = (e: Event & { url?: string }) => {
       const navUrl = (e as unknown as { url: string }).url
@@ -74,6 +71,9 @@ export default function PreviewPanel() {
     })
     el.addEventListener('dom-ready', () => {
       el.setZoomFactor(1.0)
+      // getWebContentsId() may only be called after dom-ready; calling it earlier
+      // (e.g. in the ref callback on mount) throws and crashes the React tree.
+      setWebContentsId(el.getWebContentsId())
     })
   }, [])
 
