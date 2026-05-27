@@ -6,7 +6,7 @@ import {
   useGroupRef,
   type Layout,
 } from 'react-resizable-panels'
-import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X, Sparkles, ListChecks, MessagesSquare } from 'lucide-react'
+import { GitBranch, ChevronDown, ChevronUp, KeyRound, Settings, FolderTree, FileCode, X, Sparkles, ListChecks, MessagesSquare, Layout as LayoutIcon } from 'lucide-react'
 import type { LayoutSizes, UsageSummary, ShortcutAction } from '../../shared/types'
 import { fmtTokens, fmtDuration } from '../../shared/utils'
 import { useProjectStore } from '../state/projectStore'
@@ -34,6 +34,7 @@ import PhasePanel from '../panels/PhasePanel/PhasePanel'
 import AskSneeblyPanel from '../panels/AskSneebly/AskSneeblyPanel'
 import { useAskSneeblyStore } from '../panels/AskSneebly/useAskSneeblyStore'
 import ReviewPanel from '../panels/ReviewAgent/ReviewPanel'
+import { useViewStore } from '../state/viewStore'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -76,6 +77,7 @@ export default function Workspace() {
   const askVisible = askEnabled && askSidebarVisible
   const setActiveSkill = useChatStore((s) => s.setActiveSkill)
   const editorOpenFile = useEditorStore((s) => s.openFile)
+  const { currentView, setView } = useViewStore()
 
   useEffect(() => {
     if (activeProjectId) refreshLearningsBadge(activeProjectId)
@@ -203,6 +205,8 @@ export default function Workspace() {
         askEnabled={askEnabled}
         askActive={askVisible}
         onToggleAsk={toggleAsk}
+        currentView={currentView}
+        onOpenDesign={() => setView('design')}
       />
 
       {activeProjectId && (
@@ -335,6 +339,8 @@ function WorkspaceHeader({
   askEnabled,
   askActive,
   onToggleAsk,
+  currentView,
+  onOpenDesign,
 }: {
   projectName: string | null
   activeProjectId: string | null
@@ -357,6 +363,8 @@ function WorkspaceHeader({
   askEnabled: boolean
   askActive: boolean
   onToggleAsk: () => void
+  currentView: string
+  onOpenDesign: () => void
 }) {
   const hasChanges = gitChangedFiles > 0
   const hasSyncInfo = gitAhead > 0 || gitBehind > 0
@@ -438,6 +446,21 @@ function WorkspaceHeader({
           Secrets
         </button>
 
+        {activeProjectId && (
+          <button
+            onClick={onOpenDesign}
+            title="Design canvas"
+            className={[
+              'flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
+              currentView === 'design'
+                ? 'bg-zinc-800 text-zinc-100'
+                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300',
+            ].join(' ')}
+          >
+            <LayoutIcon className="h-3 w-3" />
+            Design
+          </button>
+        )}
         <button
           onClick={onOpenPhases}
           title="Phase tracker"
