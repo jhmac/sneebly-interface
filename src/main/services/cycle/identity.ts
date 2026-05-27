@@ -264,11 +264,23 @@ export function parseGoalsFile(projectPath: string): GoalsMd | null {
   try { return parseGoals(readFileSync(goalsPath, 'utf8')) } catch { return null }
 }
 
+// Matches "(skipped)" or "(skipped: reason text)" anywhere in a milestone line.
+// Case-insensitive. Group 1 is the optional reason.
+const SKIP_ANNOTATION_RE = /\s*\(skipped(?::\s*([^)]*))?\)/i
+
+function parseMilestoneText(rawText: string, checked: boolean): GoalsMilestone {
+  const skipMatch = rawText.match(SKIP_ANNOTATION_RE)
+  const skipped = skipMatch !== null
+  const skipReason = skipMatch?.[1]?.trim() || undefined
+  const text = rawText.replace(SKIP_ANNOTATION_RE, '').trim()
+  return { text, checked, skipped, skipReason }
+}
+
 function parseMilestone(bullet: string): GoalsMilestone | null {
   const checked = bullet.match(/^\[x\]\s+(.+)$/i)
-  if (checked) return { text: checked[1]!.trim(), checked: true }
+  if (checked) return parseMilestoneText(checked[1]!.trim(), true)
   const unchecked = bullet.match(/^\[ \]\s+(.+)$/)
-  if (unchecked) return { text: unchecked[1]!.trim(), checked: false }
+  if (unchecked) return parseMilestoneText(unchecked[1]!.trim(), false)
   return null
 }
 

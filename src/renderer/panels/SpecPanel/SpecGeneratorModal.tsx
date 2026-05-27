@@ -166,20 +166,39 @@ function SpecGeneratorModalInner({
 
   // ── Generate handlers ─────────────────────────────────────────────────────────
 
+  // A row is eligible for the active generate stage's selection set.
+  function eligibleForStage(r: MilestoneRow, target: 'generate-missing' | 'regenerate-all'): boolean {
+    return target === 'regenerate-all' ? true : !r.hasExistingSpec
+  }
+
+  // Default selection per stage: only milestones still to build (done rows start
+  // unchecked). The "Include already-done milestones" checkbox flips them on.
   function enterGenerateMissing() {
-    setRows((prev) => prev.map((r) => ({ ...r, checked: !r.hasExistingSpec })))
+    setRows((prev) => prev.map((r) => ({ ...r, checked: !r.hasExistingSpec && !r.ref.checked })))
     setStage('generate-missing')
   }
 
   function enterRegenerateAll() {
-    setRows((prev) => prev.map((r) => ({ ...r, checked: true })))
+    setRows((prev) => prev.map((r) => ({ ...r, checked: !r.ref.checked })))
     setStage('regenerate-all')
+  }
+
+  // Bulk (un)check the done rows in the active stage's eligible set. The checkbox
+  // that drives this is derived from row state, so it can't desync from "Select all"
+  // or per-row toggles.
+  function setDoneRowsChecked(check: boolean) {
+    const target = stage === 'regenerate-all' ? 'regenerate-all' : 'generate-missing'
+    setRows((prev) => prev.map((r) =>
+      r.ref.checked && eligibleForStage(r, target) ? { ...r, checked: check } : r
+    ))
   }
 
   async function handleGenerate(overwriteExisting: boolean) {
     if (!activeProjectId || running) return
     const selected = rows.filter((r) => r.checked).map((r) => r.ref.id)
     if (selected.length === 0) return
+
+    const includeDone = rows.some((r) => r.ref.checked && r.checked)
 
     setFlowType('generate')
     setRunning(true)
@@ -190,6 +209,7 @@ function SpecGeneratorModalInner({
       await window.api.specGenerate(activeProjectId, {
         depth,
         milestoneIds: selected,
+        includeDone,
         overwriteExisting,
       })
     } finally {
@@ -287,12 +307,12 @@ function SpecGeneratorModalInner({
           ) : stage === 'generate-missing' ? (
             <MilestoneListStage
               rows={rows.filter((r) => !r.hasExistingSpec)}
-
               depth={depth}
               setDepth={(v) => {
                 setDepth(v)
                 try { localStorage.setItem('spec.depth', v) } catch { /* ignore */ }
               }}
+              onSetDoneChecked={setDoneRowsChecked}
               onToggle={(id) => setRows((prev) => prev.map((r) =>
                 r.ref.id === id ? { ...r, checked: !r.checked } : r
               ))}
@@ -307,12 +327,12 @@ function SpecGeneratorModalInner({
           ) : stage === 'regenerate-all' ? (
             <MilestoneListStage
               rows={rows}
-
               depth={depth}
               setDepth={(v) => {
                 setDepth(v)
                 try { localStorage.setItem('spec.depth', v) } catch { /* ignore */ }
               }}
+              onSetDoneChecked={setDoneRowsChecked}
               onToggle={(id) => setRows((prev) => prev.map((r) =>
                 r.ref.id === id ? { ...r, checked: !r.checked } : r
               ))}
@@ -495,17 +515,23 @@ function MilestoneListStage({
   rows,
   depth,
   setDepth,
+  onSetDoneChecked,
   onToggle,
   onToggleAll,
 }: {
   rows: MilestoneRow[]
   depth: ResearchDepth
   setDepth: (d: ResearchDepth) => void
+  onSetDoneChecked: (check: boolean) => void
   onToggle: (id: string) => void
   onToggleAll: () => void
 }) {
   const displayedChecked = rows.filter((r) => r.checked).length
   const allChecked = rows.every((r) => r.checked)
+  const doneRows = rows.filter((r) => r.ref.checked)
+  const hasDoneRows = doneRows.length > 0
+  // Derived from row state so it can't drift from "Select all" or per-row toggles.
+  const includeDoneChecked = hasDoneRows && doneRows.every((r) => r.checked)
 
   const phaseGroups = rows.reduce<Record<string, MilestoneRow[]>>((acc, row) => {
     const key = row.ref.phase
@@ -552,6 +578,25 @@ function MilestoneListStage({
           </div>
         ))}
       </div>
+
+      {/* Include already-done milestones */}
+      {hasDoneRows && (
+        <label className="flex cursor-pointer items-start gap-2.5 border-t border-zinc-800 pt-4">
+          <input
+            type="checkbox"
+            checked={includeDoneChecked}
+            onChange={(e) => onSetDoneChecked(e.target.checked)}
+            className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 accent-purple-500"
+          />
+          <span className="flex flex-col">
+            <span className="text-xs text-zinc-200">Include already-done milestones</span>
+            <span className="mt-0.5 text-[10px] text-zinc-600">
+              By default, specs are only written for milestones still to build. Check this to also
+              write descriptive specs for completed milestones (useful for documentation).
+            </span>
+          </span>
+        </label>
+      )}
 
       {/* Depth */}
       <div className="flex flex-col gap-1 border-t border-zinc-800 pt-4">

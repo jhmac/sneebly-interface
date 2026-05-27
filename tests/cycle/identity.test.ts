@@ -64,6 +64,45 @@ Build a simple todo app.
     expect(goals.phases).toHaveLength(0)
     expect(goals.techStack).toEqual({})
   })
+
+  it('marks normal milestones as not skipped', () => {
+    const content = `## Roadmap\n\n### Phase 1: Setup\n\n**Milestones**:\n- [ ] Create basic UI\n- [x] Set up project\n`
+    const goals = parseGoals(content)
+    for (const m of goals.phases[0]!.milestones) {
+      expect(m.skipped).toBe(false)
+      expect(m.skipReason).toBeUndefined()
+    }
+  })
+
+  it('detects (skipped) annotation on an unchecked milestone', () => {
+    const content = `## Roadmap\n\n### Phase 1: Setup\n\n**Milestones**:\n- [ ] Create basic UI (skipped)\n- [x] Set up project\n`
+    const goals = parseGoals(content)
+    const ui = goals.phases[0]!.milestones[0]!
+    expect(ui.skipped).toBe(true)
+    expect(ui.skipReason).toBeUndefined()
+    expect(ui.text).toBe('Create basic UI')
+    expect(ui.checked).toBe(false)
+  })
+
+  it('detects (skipped: reason) annotation and captures reason', () => {
+    const content = `## Roadmap\n\n### Phase 1: Setup\n\n**Milestones**:\n- [ ] Create basic UI (skipped: not ready yet)\n`
+    const goals = parseGoals(content)
+    const ui = goals.phases[0]!.milestones[0]!
+    expect(ui.skipped).toBe(true)
+    expect(ui.skipReason).toBe('not ready yet')
+    expect(ui.text).toBe('Create basic UI')
+  })
+
+  it('strips skip annotation from text but preserves the rest of the line', () => {
+    const content = `## Roadmap\n\n### Phase 1: Setup\n\n**Milestones**:\n- [ ] Auth system (skipped: no designs) → [spec](./specs/SPEC_AUTH.md)\n`
+    const goals = parseGoals(content)
+    const m = goals.phases[0]!.milestones[0]!
+    // parseMilestone extracts text BEFORE milestone-parser strips the spec link,
+    // so the text here still includes the spec link arrow (identity.ts doesn't strip it)
+    expect(m.skipped).toBe(true)
+    expect(m.skipReason).toBe('no designs')
+    expect(m.text).not.toContain('skipped')
+  })
 })
 
 describe('identity — parseHeartbeat', () => {

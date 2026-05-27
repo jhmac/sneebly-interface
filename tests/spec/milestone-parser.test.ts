@@ -114,4 +114,74 @@ describe('parseMilestones', () => {
     const refs = parseMilestones('# Mission\n\nNo phases here.\n')
     expect(refs).toHaveLength(0)
   })
+
+  it('skipped is false for normal milestones', () => {
+    const refs = parseMilestones(SAMPLE_GOALS)
+    for (const ref of refs) {
+      expect(ref.skipped).toBe(false)
+      expect(ref.skipReason).toBeUndefined()
+    }
+  })
+})
+
+const SKIPPED_GOALS = `# Mission
+
+Build a great product.
+
+## Roadmap
+
+### Phase 1: Foundation
+
+- [ ] Set up database schema (skipped)
+- [ ] Create user authentication (skipped: waiting on design handoff)
+- [x] Bootstrap project structure
+- [ ] Wire up REST API
+`
+
+describe('parseMilestones — skipped annotation', () => {
+  it('detects bare (skipped) annotation', () => {
+    const refs = parseMilestones(SKIPPED_GOALS)
+    const db = refs.find((r) => r.id === 'set-up-database-schema')
+    expect(db).toBeDefined()
+    expect(db!.skipped).toBe(true)
+    expect(db!.skipReason).toBeUndefined()
+    expect(db!.checked).toBe(false)
+  })
+
+  it('detects (skipped: reason) annotation and captures reason', () => {
+    const refs = parseMilestones(SKIPPED_GOALS)
+    const auth = refs.find((r) => r.id === 'create-user-authentication')
+    expect(auth).toBeDefined()
+    expect(auth!.skipped).toBe(true)
+    expect(auth!.skipReason).toBe('waiting on design handoff')
+    expect(auth!.checked).toBe(false)
+  })
+
+  it('strips the (skipped) annotation from the milestone text', () => {
+    const refs = parseMilestones(SKIPPED_GOALS)
+    const db = refs.find((r) => r.id === 'set-up-database-schema')
+    expect(db!.text).toBe('Set up database schema')
+    expect(db!.text).not.toContain('skipped')
+  })
+
+  it('strips the (skipped: reason) annotation from the text', () => {
+    const refs = parseMilestones(SKIPPED_GOALS)
+    const auth = refs.find((r) => r.id === 'create-user-authentication')
+    expect(auth!.text).toBe('Create user authentication')
+    expect(auth!.text).not.toContain('skipped')
+  })
+
+  it('does not mark checked milestones as skipped', () => {
+    const refs = parseMilestones(SKIPPED_GOALS)
+    const bootstrap = refs.find((r) => r.id === 'bootstrap-project-structure')
+    expect(bootstrap!.checked).toBe(true)
+    expect(bootstrap!.skipped).toBe(false)
+  })
+
+  it('does not mark normal unchecked milestones as skipped', () => {
+    const refs = parseMilestones(SKIPPED_GOALS)
+    const api = refs.find((r) => r.id === 'wire-up-rest-api')
+    expect(api!.skipped).toBe(false)
+    expect(api!.checked).toBe(false)
+  })
 })

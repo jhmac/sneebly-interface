@@ -138,6 +138,8 @@ export async function generatePhasePlan(
       phaseNumber: src.phaseNum,
       specPath: src.specPath,
       checked: src.checked,
+      skipped: src.skipped,
+      skipReason: src.skipReason,
       buildOrder: idx,
       complexity: entry.complexity ?? 'medium',
       suggestedCheckpoint: entry.suggestedCheckpoint ?? false,

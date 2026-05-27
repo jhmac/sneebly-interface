@@ -50,6 +50,8 @@ function parseMilestonesStandard(goalsMd: string): MilestoneRef[] {
         text: cleanText,
         phase: phaseLabel,
         checked: m.checked,
+        skipped: m.skipped,
+        skipReason: m.skipReason,
         specPath,
         specSlug: toUpperSnakeSlug(cleanText),
       })
@@ -71,7 +73,16 @@ function parseMilestonesFlexible(goalsMd: string): MilestoneRef[] {
   let inPhaseSection = false
   let currentPhaseLabel = ''
 
-  function push(rawText: string, checked = false, specPath: string | null = null) {
+  // Matches "(skipped)" or "(skipped: reason)" — same regex as identity.ts
+  const FLEX_SKIP_RE = /\s*\(skipped(?::\s*([^)]*))?\)/i
+
+  function push(
+    rawText: string,
+    checked = false,
+    specPath: string | null = null,
+    skipped = false,
+    skipReason: string | undefined = undefined,
+  ) {
     // Strip bold markers and short parenthetical asides; normalize whitespace
     const clean = rawText
       .replace(/\*\*/g, '')
@@ -95,6 +106,8 @@ function parseMilestonesFlexible(goalsMd: string): MilestoneRef[] {
       text: cleanText,
       phase: currentPhaseLabel,
       checked,
+      skipped,
+      skipReason,
       specPath: specPath ?? sp,
       specSlug: toUpperSnakeSlug(cleanText),
     })
@@ -173,8 +186,13 @@ function parseMilestonesFlexible(goalsMd: string): MilestoneRef[] {
     const chk = trimmed.match(/^-\s+\[([x ])\]\s+(.+)$/i)
     if (chk) {
       const isChecked = chk[1]!.toLowerCase() === 'x'
-      const { cleanText, specPath } = extractSpecLink(chk[2]!)
-      push(cleanText, isChecked, specPath)
+      const rawChkText = chk[2]!
+      const skipMatch = rawChkText.match(FLEX_SKIP_RE)
+      const isSkipped = skipMatch !== null
+      const skipReason = skipMatch?.[1]?.trim() || undefined
+      const cleanRaw = rawChkText.replace(FLEX_SKIP_RE, '').trim()
+      const { cleanText, specPath } = extractSpecLink(cleanRaw)
+      push(cleanText, isChecked, specPath, isSkipped, skipReason)
       continue
     }
 

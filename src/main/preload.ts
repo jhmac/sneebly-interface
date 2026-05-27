@@ -316,6 +316,12 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.PHASE_PLAN_GENERATE, projectId),
   phaseMilestoneComplete: (projectId: string, milestoneId: string): Promise<PhasePlan> =>
     ipcRenderer.invoke(IPC_CHANNELS.PHASE_MILESTONE_COMPLETE, projectId, milestoneId),
+  phaseMilestoneSkip: (projectId: string, milestoneId: string, reason?: string): Promise<PhasePlan | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_MILESTONE_SKIP, projectId, milestoneId, reason),
+  phaseMilestoneUnskip: (projectId: string, milestoneId: string): Promise<PhasePlan | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_MILESTONE_UNSKIP, projectId, milestoneId),
+  phaseSkipCurrentMilestone: (projectId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PHASE_SKIP_CURRENT, projectId),
   phaseRunStart: (projectId: string, config: PhaseRunConfig): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.PHASE_RUN_START, projectId, config),
   phaseRunStop: (projectId: string): Promise<void> =>
@@ -353,6 +359,7 @@ const api: ElectronAPI = {
   specGenerate: (projectId: string, opts: {
     depth: 'light' | 'standard' | 'deep'
     milestoneIds?: string[]
+    includeDone?: boolean
     overwriteExisting: boolean
   }) => ipcRenderer.invoke(IPC_CHANNELS.SPEC_GENERATE, projectId, opts),
 

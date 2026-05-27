@@ -10,6 +10,8 @@ interface PhaseState {
   load: (projectId: string) => Promise<void>
   generate: (projectId: string) => Promise<void>
   completeMilestone: (projectId: string, milestoneId: string) => Promise<void>
+  skipMilestone: (projectId: string, milestoneId: string, reason?: string) => Promise<void>
+  unskipMilestone: (projectId: string, milestoneId: string) => Promise<void>
   startRun: (projectId: string, config: PhaseRunConfig) => Promise<void>
   stopRun: (projectId: string) => Promise<void>
   refreshRunState: (projectId: string) => Promise<void>
@@ -54,6 +56,24 @@ export const usePhaseStore = create<PhaseState>((set, get) => ({
   completeMilestone: async (projectId, milestoneId) => {
     try {
       const plan = await window.api.phaseMilestoneComplete(projectId, milestoneId)
+      if (plan) set({ plan })
+    } catch (e) {
+      set({ loadError: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  skipMilestone: async (projectId, milestoneId, reason) => {
+    try {
+      const plan = await window.api.phaseMilestoneSkip(projectId, milestoneId, reason)
+      if (plan) set({ plan })
+    } catch (e) {
+      set({ loadError: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  unskipMilestone: async (projectId, milestoneId) => {
+    try {
+      const plan = await window.api.phaseMilestoneUnskip(projectId, milestoneId)
       if (plan) set({ plan })
     } catch (e) {
       set({ loadError: e instanceof Error ? e.message : String(e) })

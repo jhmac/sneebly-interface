@@ -164,6 +164,9 @@ export interface ProjectRemixResult {
 export interface GoalsMilestone {
   text: string
   checked: boolean
+  // User explicitly deferred this milestone; persisted as "(skipped)" in GOALS.md
+  skipped: boolean
+  skipReason?: string
 }
 
 export interface GoalsPhase {
@@ -419,6 +422,9 @@ export interface OrderedMilestone {
   phaseNumber: number
   specPath: string | null
   checked: boolean
+  // User explicitly deferred this milestone; persisted as "(skipped)" in GOALS.md
+  skipped: boolean
+  skipReason?: string
   buildOrder: number
   complexity: MilestoneComplexity
   suggestedCheckpoint: boolean
@@ -666,6 +672,9 @@ export interface ElectronAPI {
   phasePlanGet: (projectId: string) => Promise<PhasePlan | null>
   phasePlanGenerate: (projectId: string) => Promise<PhasePlan>
   phaseMilestoneComplete: (projectId: string, milestoneId: string) => Promise<PhasePlan>
+  phaseMilestoneSkip: (projectId: string, milestoneId: string, reason?: string) => Promise<PhasePlan | null>
+  phaseMilestoneUnskip: (projectId: string, milestoneId: string) => Promise<PhasePlan | null>
+  phaseSkipCurrentMilestone: (projectId: string) => Promise<void>
   phaseRunStart: (projectId: string, config: PhaseRunConfig) => Promise<void>
   phaseRunStop: (projectId: string) => Promise<void>
   phaseRunState: (projectId: string) => Promise<PhaseRunState>
@@ -684,6 +693,7 @@ export interface ElectronAPI {
   specGenerate: (projectId: string, opts: {
     depth: ResearchDepth
     milestoneIds?: string[]
+    includeDone?: boolean
     overwriteExisting: boolean
   }) => Promise<{ generatedCount: number; skippedCount: number; errors: Array<{ milestoneId: string; error: string }> }>
   specRefine: (projectId: string, opts: {
@@ -787,6 +797,9 @@ export interface MilestoneRef {
   text: string
   phase: string
   checked: boolean
+  // User explicitly deferred this milestone; persisted as "(skipped)" in GOALS.md
+  skipped: boolean
+  skipReason?: string
   specPath: string | null
   specSlug: string
 }

@@ -23,6 +23,7 @@ export function registerSpecHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.SPEC_GENERATE, async (_e, projectId: string, opts: {
     depth: ResearchDepth
     milestoneIds?: string[]
+    includeDone?: boolean
     overwriteExisting: boolean
   }) => {
     if (activeGenerations.has(projectId)) {
@@ -42,6 +43,7 @@ export function registerSpecHandlers(): void {
         projectId,
         depth: opts.depth,
         milestoneIds: opts.milestoneIds,
+        includeDone: opts.includeDone,
         overwriteExisting: opts.overwriteExisting,
         onProgress: (event) => pushSpecProgress(event, projectId),
       })

@@ -8,9 +8,11 @@ import {
   savePhasePlan,
   syncCheckedState,
   markMilestoneComplete,
+  markMilestoneSkipped,
+  unmarkMilestoneSkipped,
   getMilestoneById,
 } from '../services/phase-tracker'
-import { startRun, stopRun, getRunState } from '../services/phase-runner'
+import { startRun, stopRun, getRunState, skipCurrentMilestone } from '../services/phase-runner'
 import { auditPhasePlan, stopAudit } from '../services/phase-auditor'
 import { fireReview } from '../services/review-agent'
 
@@ -47,6 +49,29 @@ export function registerPhaseHandlers(): void {
       try { fireReview(projectId, milestoneId, true) } catch { /* never block mark-complete */ }
       return plan
     }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.PHASE_MILESTONE_SKIP,
+    (_e, projectId: string, milestoneId: string, reason?: string) => {
+      const path = projectPath(projectId)
+      if (!path) throw new Error(`Project ${projectId} not found`)
+      return markMilestoneSkipped(path, milestoneId, reason)
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.PHASE_MILESTONE_UNSKIP,
+    (_e, projectId: string, milestoneId: string) => {
+      const path = projectPath(projectId)
+      if (!path) throw new Error(`Project ${projectId} not found`)
+      return unmarkMilestoneSkipped(path, milestoneId)
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.PHASE_SKIP_CURRENT,
+    (_e, projectId: string) => skipCurrentMilestone(projectId)
   )
 
   ipcMain.handle(

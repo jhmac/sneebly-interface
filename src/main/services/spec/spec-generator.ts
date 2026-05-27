@@ -3,7 +3,6 @@ import { join, basename } from 'node:path'
 import type { RefineMode, ResearchDepth, SpecProgressEvent } from '../../../shared/types'
 import { runStandaloneTurn } from '../standalone-turn'
 import { parseMilestones, injectSpecLinks } from './milestone-parser'
-import { SPEC_TEMPLATE } from './spec-template'
 import { detectProjectName } from '../project-registry'
 
 export type { RefineMode, ResearchDepth }
@@ -13,6 +12,10 @@ export interface SpecGenerationOptions {
   projectId: string
   depth: ResearchDepth
   milestoneIds?: string[]
+  // When no explicit milestoneIds are given, default to speccing only unchecked
+  // milestones (the ones still to build). Set true to also spec done ones —
+  // useful for backfilling descriptive docs of existing code.
+  includeDone?: boolean
   overwriteExisting: boolean
   onProgress: (event: SpecProgressEvent) => void
 }
@@ -52,54 +55,136 @@ function getFileTree(projectPath: string, maxDepth = 2): string {
   return walk(projectPath, 0, '').join('\n')
 }
 
-function buildResearchPrompt(opts: {
+function buildSpecPrompt(opts: {
   projectName: string
   detectedStack: string
   goalsMdContent: string
   milestoneText: string
   phase: string
+  goalsMarker: boolean
   projectFileTree: string
-  specTemplate: string
 }): string {
-  return `You are the Sneebly Spec Architect. Generate a comprehensive implementation spec for ONE feature.
+  return `You are the Sneebly Spec Architect. For ONE milestone, run a verdict-first, code-aware pass: DISCOVER the related code, ASSESS its actual state from that code, then WRITE a spec whose shape matches the assessed state.
 
 CONTEXT:
 - Project: ${opts.projectName}
 - Stack: ${opts.detectedStack}
-- Full GOALS.md content:
-${opts.goalsMdContent}
-
 - This specific milestone:
   "${opts.milestoneText}" (under ${opts.phase})
+- GOALS.md marks this milestone as: ${opts.goalsMarker ? 'DONE [x]' : 'NOT DONE [ ]'} — treat this as a CLAIM to verify against the code, NOT as ground truth.
+- Full GOALS.md content:
+${opts.goalsMdContent}
 
 - Existing project structure:
 ${opts.projectFileTree}
 
-YOUR PROCESS:
-1. Read existing relevant code (use Read/Grep/Glob tools). If similar features exist, study their conventions.
-2. Do 15-25 web searches for best-in-class examples of this feature type. Focus on:
-   - UI patterns (design systems, real product references)
-   - Data models (how Stripe/Linear/Shopify/etc. handle similar features)
-   - Edge cases and gotchas (Stack Overflow, GitHub issues, blog posts)
-   - Modern best practices (recent documentation, API references)
-3. Use WebFetch on 2-3 reference URLs to study the actual content.
-4. Synthesize EVERYTHING you learned into a single comprehensive SPEC document.
+APPROACH — three phases, in order:
 
-OUTPUT FORMAT:
-Output a single markdown document following exactly this template:
+1. DISCOVERY — find the code related to this milestone using Glob, Grep, Read, LS.
+   - Start with /docs, /specs, README, CLAUDE.md if they exist — they often name the relevant files directly.
+   - Then obvious locations: src/, app/, server/, lib/, components/, routes/, pages/.
+   - Glob broad, then narrow: e.g. milestone "Authentication and RBAC" -> glob **/auth*, **/users*, **/session*, **/roles* first; if a directory matches, read its index/entry file to find related modules.
+   - Grep for symbols named in the milestone (function names, exported types, route paths, table names). If a grep returns >20 hits, narrow with a more specific term rather than reading all of them.
+   - Tests that exist are STRONG evidence of implementation. Tests that don't exist are WEAK evidence (the code could simply be untested).
+   - BUDGET: read about 8 files (~30k tokens). Prioritize by relevance: direct symbol matches > directory matches > README mentions. If 8 files clearly aren't enough, say so in the rationale rather than reading 20.
 
-${opts.specTemplate}
+2. ASSESSMENT — from the CODE (not the GOALS.md marker), assign exactly one state:
+   - done: end-to-end implementation present; the code path is traceable from the entry point (UI/route/CLI) through to persistence or whatever the boundary is; no critical TODOs or \`throw new Error("not implemented")\` in that path. You MUST point to the specific files/symbols that ARE the implementation.
+   - partial: started but incomplete. Common shapes: UI exists but backend stubbed, backend exists but UI not wired, happy path works but key error/edge paths missing, or a function exists but its body is a placeholder. You MUST name what exists vs what is missing.
+   - not_started: no meaningful code for this milestone. Confirm via grep that the expected symbols/files don't exist.
+   Bias toward \`partial\` when uncertain. NEVER silently default to \`done\`.
 
-RULES:
-- Be specific. "User can log in" is not a spec. "User enters email + password, clicks Sign in, server validates against bcrypt hash, sets HttpOnly secure cookie, redirects to /dashboard" is a spec.
-- Database schemas must be COMPLETE with all fields, types, indexes, and foreign keys.
-- Endpoint specs must include exact request/response JSON shapes and all error codes.
-- UI states must list every possible state: empty, loading, success, validation error, network error.
-- Include ASCII wireframes for non-trivial UI layouts.
-- Reference at least 5 URLs in the References section with one-line annotations.
-- If the feature is infrastructure with no UI, set "UI Specification" to "N/A — infrastructure feature" and expand the Backend and Data Model sections.
-- Generate the COMPLETE spec in one response — do not split or truncate.
-- Output ONLY the spec markdown — no preamble, no explanation, just the document starting with "# SPEC:".
+3. SPEC WRITING — output a single markdown document. Its shape depends on the assessed state.
+
+   If \`done\` — a DESCRIPTIVE doc (NOT a build spec):
+   ----------------------------------------
+   # SPEC: <feature name>
+
+   **Milestone**: ${opts.milestoneText}
+   **Assessed state**: done
+   **Assessment rationale**: <one paragraph naming the specific files/symbols that implement this feature>
+
+   ## What's implemented
+
+   - <bullet list of the implementation's notable parts, with file:line references>
+
+   ## Acceptance criteria (currently met)
+
+   - <bullet list of testable conditions that ARE met by the current implementation>
+
+   ## Files
+
+   - <list of files that comprise this feature>
+
+   ## Notes
+
+   - <caveats: known limitations, edge cases unhandled, places future work might touch>
+   ----------------------------------------
+
+   If \`partial\` — a GAP-CLOSURE spec:
+   ----------------------------------------
+   # SPEC: <feature name>
+
+   **Milestone**: ${opts.milestoneText}
+   **Assessed state**: partial
+   **Assessment rationale**: <one paragraph naming what exists in the code vs what is missing>
+
+   ## Current state (in code)
+
+   - <what exists, with file:line references>
+
+   ## Gap
+
+   - <what's missing, specifically>
+
+   ## Acceptance criteria to close the gap
+
+   - <bullet list of testable conditions; ONLY the ones not currently met>
+
+   ## Suggested implementation
+
+   - <files to add/modify, in suggested order>
+
+   ## Out of scope
+
+   - <anything explicitly NOT part of this milestone (deferred to later phases or other milestones)>
+   ----------------------------------------
+
+   If \`not_started\` — a BUILD-FROM-SCRATCH spec:
+   ----------------------------------------
+   # SPEC: <feature name>
+
+   **Milestone**: ${opts.milestoneText}
+   **Assessed state**: not_started
+   **Assessment rationale**: <one paragraph confirming via grep that no implementation exists>
+
+   ## Purpose
+
+   <2-3 sentence description of what this feature accomplishes and for which user role>
+
+   ## Acceptance criteria
+
+   - <testable conditions, all of which need to be met>
+
+   ## Suggested implementation
+
+   - <files/components/routes/schemas to add, in suggested order>
+   - <reference the project's existing conventions: stack, validation style, auth, etc. — discovered from code + CLAUDE.md>
+
+   ## Out of scope
+
+   - <anything explicitly NOT part of this milestone>
+   ----------------------------------------
+
+CRITICAL DISCIPLINE:
+- Every claim about what's implemented or missing MUST point to specific files/symbols (file:line where you can). No hand-waving.
+- "It compiles" is not "done." "There's a button" is not "done." Done means the feature works end-to-end and would survive a real user.
+- The spec reflects REALITY, not GOALS.md's claim. If GOALS.md says [x] but the code shows the feature is stubbed, you assess \`partial\` and write accordingly.
+- Use the project's existing conventions (stack, validation style, auth, error handling, naming) discovered from the code and CLAUDE.md. Don't invent new patterns when the project has an established one.
+- Be specific in build/gap specs. "User can log in" is not a spec; "User enters email + password, server validates against bcrypt hash, sets HttpOnly secure cookie, redirects to /dashboard" is.
+- For \`not_started\` and \`partial\` specs you MAY do a handful of targeted web searches (and optional WebFetch) for best-in-class patterns relevant to the gap — focused, not exhaustive. For \`done\` specs, skip web research: you are documenting what already exists.
+
+OUTPUT: only the spec markdown, starting with "# SPEC:". No preamble, no explanation.
 
 Begin.`
 }
@@ -145,10 +230,16 @@ export async function generateSpecs(opts: SpecGenerationOptions): Promise<SpecGe
   const goalsMdContent = readFileSync(goalsPath, 'utf-8')
   const allMilestones = parseMilestones(goalsMdContent)
 
-  // Filter to requested milestones
+  // Filter to requested milestones. Explicit IDs always win (one-click backfill
+  // of a specific spec stays one-click). Otherwise default to unchecked, non-skipped
+  // milestones — the ones still to build. Set includeDone to also spec done ones
+  // (useful for backfilling docs of existing code). Skipped milestones are always
+  // excluded from automatic generation; pass explicit milestoneIds to override.
   const targets = opts.milestoneIds
     ? allMilestones.filter((m) => opts.milestoneIds!.includes(m.id))
-    : allMilestones
+    : opts.includeDone
+      ? allMilestones.filter((m) => !m.skipped)
+      : allMilestones.filter((m) => !m.checked && !m.skipped)
 
   // Ensure specs/ directory exists
   const specsDir = join(projectPath, 'specs')
@@ -175,14 +266,14 @@ export async function generateSpecs(opts: SpecGenerationOptions): Promise<SpecGe
 
     onProgress({ type: 'milestone-start', milestoneId: milestone.id, milestoneText: milestone.text })
 
-    const prompt = buildResearchPrompt({
+    const prompt = buildSpecPrompt({
       projectName,
       detectedStack,
       goalsMdContent,
       milestoneText: milestone.text,
       phase: milestone.phase,
+      goalsMarker: milestone.checked,
       projectFileTree,
-      specTemplate: SPEC_TEMPLATE,
     })
 
     try {
@@ -194,7 +285,7 @@ export async function generateSpecs(opts: SpecGenerationOptions): Promise<SpecGe
         permissionMode: 'bypassPermissions',
         maxTurns: 30,
         allowedTools: ['Read', 'Glob', 'Grep', 'LS', 'WebSearch', 'WebFetch'],
-        appendSystemPrompt: `You are the Sneebly Spec Architect. Think deeply. Research broadly. Output the complete spec document — nothing else.`,
+        appendSystemPrompt: `You are the Sneebly Spec Architect. Discover the related code first, assess the milestone's ACTUAL state from that code (done/partial/not_started) — never trust the GOALS.md marker — then write a spec whose shape matches the assessed state. Back every claim with specific file:line evidence; bias toward "partial" when uncertain. Output the complete spec document starting with "# SPEC:" — nothing else.`,
         onEvent: (event) => {
           onProgress({ type: 'milestone-event', milestoneId: milestone.id, agentEvent: event })
         },

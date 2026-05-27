@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   X, RefreshCw, Play, Square, ChevronDown, ChevronRight,
   CheckCircle2, Circle, Loader2, AlertTriangle, Zap,
-  ClipboardList, FileCode, ArrowRight, ScanSearch
+  ClipboardList, FileCode, ArrowRight, ScanSearch, MinusCircle, SkipForward
 } from 'lucide-react'
 import { usePhaseStore } from '../../state/phaseStore'
 import { useReviewAgentStore } from '../ReviewAgent/useReviewAgentStore'
@@ -34,7 +34,7 @@ export default function PhasePanel({ open, onClose, projectId }: Props) {
 }
 
 function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectId: string }) {
-  const { plan, runState, generating, loadError, load, generate, completeMilestone, startRun, stopRun, setRunState } =
+  const { plan, runState, generating, loadError, load, generate, completeMilestone, skipMilestone, unskipMilestone, startRun, stopRun, setRunState } =
     usePhaseStore()
 
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set())
@@ -76,7 +76,7 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
   // Auto-expand the active phase on load
   useEffect(() => {
     if (!plan) return
-    const activePhaseNum = plan.milestones.find((m) => !m.checked)?.phaseNumber
+    const activePhaseNum = plan.milestones.find((m) => !m.checked && !m.skipped)?.phaseNumber
     if (activePhaseNum !== undefined) {
       setExpandedPhases(new Set([activePhaseNum]))
     }
@@ -104,6 +104,11 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
   const handleBuildMilestone = async (milestoneId: string) => {
     const milestone = plan?.milestones.find((m) => m.id === milestoneId)
     if (!milestone) return
+    // Implicit unskip: if the user clicks Build on a skipped milestone, remove the
+    // annotation first so the milestone re-enters the build queue normally.
+    if (milestone.skipped) {
+      await unskipMilestone(projectId, milestoneId)
+    }
     const fill = await window.api.phaseKickoffFill(projectId, milestoneId)
     if (!fill) return
     // Dispatch a custom event that the ChatPanel listens for — prefills the composer
@@ -113,9 +118,21 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
     onClose()
   }
 
+  const handleSkipMilestone = (milestoneId: string) => skipMilestone(projectId, milestoneId)
+
+  const handleUnskipMilestone = (milestoneId: string) => unskipMilestone(projectId, milestoneId)
+
+  const handleSkipCurrentMilestone = async () => {
+    try {
+      await window.api.phaseSkipCurrentMilestone(projectId)
+    } catch (e) {
+      console.error('[PhasePanel] skip current milestone failed:', e)
+    }
+  }
+
   const handleStartRun = async () => {
     setRunConfigOpen(false)
-    const nextMilestone = plan?.milestones.find((m) => !m.checked)
+    const nextMilestone = plan?.milestones.find((m) => !m.checked && !m.skipped)
     if (!nextMilestone) return
     const config: PhaseRunConfig = {
       batchSize,
@@ -162,9 +179,16 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
   const phases = buildPhaseGroups(plan)
   const totalMilestones = plan.milestones.length
   const completedMilestones = plan.milestones.filter((m) => m.checked).length
+  const skippedMilestones = plan.milestones.filter((m) => m.skipped).length
+  const effectiveTotal = totalMilestones - skippedMilestones
   const activeMilestone = plan.milestones.find(
     (m) => m.id === runState.currentMilestoneId
   )
+  // The current milestone is skippable if the run is paused on a specific unchecked milestone
+  const pausedMilestone = runState.status === 'paused' && runState.currentMilestoneId
+    ? plan.milestones.find((m) => m.id === runState.currentMilestoneId)
+    : undefined
+  const canSkipCurrent = pausedMilestone !== undefined && !pausedMilestone.checked
 
   return (
     <Overlay onClose={onClose}>
@@ -174,12 +198,15 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <div className="text-xs text-zinc-500">
-                {completedMilestones}/{totalMilestones} milestones
+                {completedMilestones}/{effectiveTotal} done
+                {skippedMilestones > 0 && (
+                  <span className="ml-1 text-amber-600">· {skippedMilestones} skipped</span>
+                )}
               </div>
               <div className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-800">
                 <div
                   className="h-full rounded-full bg-indigo-500 transition-all"
-                  style={{ width: `${totalMilestones > 0 ? (completedMilestones / totalMilestones) * 100 : 0}%` }}
+                  style={{ width: `${effectiveTotal > 0 ? (completedMilestones / effectiveTotal) * 100 : 0}%` }}
                 />
               </div>
             </div>
@@ -210,14 +237,36 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
               </button>
             )}
             {runState.status === 'idle' || runState.status === 'paused' || runState.status === 'complete' ? (
-              <button
-                onClick={() => setRunConfigOpen(true)}
-                disabled={auditing}
-                className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Play className="h-3 w-3" />
-                {runState.status === 'paused' ? 'Resume run' : 'Start run'}
-              </button>
+              <>
+                {canSkipCurrent && (
+                  <button
+                    onClick={handleSkipCurrentMilestone}
+                    title="Skip this milestone and continue to the next one"
+                    className="flex items-center gap-1.5 rounded-md bg-amber-900/40 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-900/60"
+                  >
+                    <SkipForward className="h-3 w-3" />
+                    Skip milestone
+                  </button>
+                )}
+                <button
+                  onClick={() => setRunConfigOpen(true)}
+                  disabled={auditing}
+                  className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Play className="h-3 w-3" />
+                  {runState.status === 'paused' ? 'Resume run' : 'Start run'}
+                </button>
+                {runState.status === 'paused' && (
+                  <button
+                    onClick={handleStopRun}
+                    title="Stop the autonomous run"
+                    className="flex items-center gap-1.5 rounded-md bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-600"
+                  >
+                    <Square className="h-3 w-3" />
+                    Stop
+                  </button>
+                )}
+              </>
             ) : (
               <button
                 onClick={handleStopRun}
@@ -287,6 +336,8 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
               }
               onBuild={handleBuildMilestone}
               onMarkComplete={handleMarkComplete}
+              onSkip={handleSkipMilestone}
+              onUnskip={handleUnskipMilestone}
               onReview={reviewEnabled ? handleReview : undefined}
               projectId={projectId}
             />
@@ -315,6 +366,7 @@ interface PhaseGroupData {
   phaseName: string
   milestones: OrderedMilestone[]
   completedCount: number
+  skippedCount: number
   isActive: boolean
   isComplete: boolean
 }
@@ -326,20 +378,22 @@ function buildPhaseGroups(plan: PhasePlan): PhaseGroupData[] {
     byPhase.get(m.phaseNumber)!.push(m)
   }
 
-  const firstIncompletePhase = plan.milestones.find((m) => !m.checked)?.phaseNumber
+  const firstIncompletePhase = plan.milestones.find((m) => !m.checked && !m.skipped)?.phaseNumber
 
   return Array.from(byPhase.entries())
     .sort(([a], [b]) => a - b)
     .map(([num, milestones]) => {
       const namePart = milestones[0]!.phase.replace(/^Phase\s+\d+:?\s*/i, '').trim()
       const completed = milestones.filter((m) => m.checked).length
+      const skipped = milestones.filter((m) => m.skipped).length
       return {
         phaseNumber: num,
         phaseName: namePart,
         milestones,
         completedCount: completed,
+        skippedCount: skipped,
         isActive: num === firstIncompletePhase,
-        isComplete: completed === milestones.length,
+        isComplete: completed === milestones.length - skipped && milestones.length > 0,
       }
     })
 }
@@ -351,6 +405,8 @@ function PhaseGroup({
   onToggle,
   onBuild,
   onMarkComplete,
+  onSkip,
+  onUnskip,
   onReview,
   projectId,
 }: {
@@ -360,11 +416,14 @@ function PhaseGroup({
   onToggle: () => void
   onBuild: (id: string) => void
   onMarkComplete: (id: string) => void
+  onSkip: (id: string) => void
+  onUnskip: (id: string) => void
   onReview?: (id: string) => void
   projectId: string
 }) {
-  const pct = phase.milestones.length > 0
-    ? Math.round((phase.completedCount / phase.milestones.length) * 100)
+  const effectiveTotal = phase.milestones.length - phase.skippedCount
+  const pct = effectiveTotal > 0
+    ? Math.round((phase.completedCount / effectiveTotal) * 100)
     : 0
 
   return (
@@ -393,7 +452,10 @@ function PhaseGroup({
               />
             </div>
             <span className="text-[10px] text-zinc-600">
-              {phase.completedCount}/{phase.milestones.length}
+              {phase.completedCount}/{effectiveTotal}
+              {phase.skippedCount > 0 && (
+                <span className="ml-1 text-amber-700">{phase.skippedCount} skipped</span>
+              )}
             </span>
           </div>
         </div>
@@ -413,6 +475,8 @@ function PhaseGroup({
               runState={runState}
               onBuild={onBuild}
               onMarkComplete={onMarkComplete}
+              onSkip={onSkip}
+              onUnskip={onUnskip}
               onReview={onReview}
               projectId={projectId}
             />
@@ -436,6 +500,8 @@ function MilestoneRow({
   runState,
   onBuild,
   onMarkComplete,
+  onSkip,
+  onUnskip,
   onReview,
   projectId,
 }: {
@@ -443,6 +509,8 @@ function MilestoneRow({
   runState: PhaseRunState
   onBuild: (id: string) => void
   onMarkComplete: (id: string) => void
+  onSkip: (id: string) => void
+  onUnskip: (id: string) => void
   onReview?: (id: string) => void
   projectId: string
 }) {
@@ -452,9 +520,15 @@ function MilestoneRow({
   const reviewing = useReviewAgentStore((s) => !!s.inFlightByMilestoneId[milestone.id])
   const fixState = useReviewAgentStore((s) => s.fixStateByMilestoneId[milestone.id])
 
+  const rowBg = milestone.skipped
+    ? 'bg-amber-950/10 hover:bg-amber-950/20'
+    : isRunning
+    ? 'bg-indigo-950/30'
+    : 'hover:bg-zinc-800/20'
+
   return (
     <div
-      className={`group flex items-start gap-3 px-6 py-2 ${isRunning ? 'bg-indigo-950/30' : 'hover:bg-zinc-800/20'}`}
+      className={`group flex items-start gap-3 px-6 py-2 ${rowBg}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -462,6 +536,8 @@ function MilestoneRow({
       <div className="mt-0.5 flex-shrink-0">
         {milestone.checked ? (
           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+        ) : milestone.skipped ? (
+          <MinusCircle className="h-3.5 w-3.5 text-amber-600/70" />
         ) : isRunning ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
         ) : (
@@ -472,16 +548,30 @@ function MilestoneRow({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-xs ${milestone.checked ? 'text-zinc-600 line-through' : 'text-zinc-300'}`}>
+          <span className={`text-xs ${
+            milestone.checked
+              ? 'text-zinc-600 line-through'
+              : milestone.skipped
+              ? 'text-amber-600/60 line-through'
+              : 'text-zinc-300'
+          }`}>
             {milestone.text}
           </span>
-          <ComplexityBadge complexity={milestone.complexity} />
-          {milestone.suggestedCheckpoint && (
+          {milestone.skipped && (
+            <span
+              title={milestone.skipReason ? `Skipped: ${milestone.skipReason}` : 'Skipped'}
+              className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-500/80"
+            >
+              skipped
+            </span>
+          )}
+          {!milestone.skipped && <ComplexityBadge complexity={milestone.complexity} />}
+          {milestone.suggestedCheckpoint && !milestone.skipped && (
             <span title={milestone.checkpointReason ?? ''} className="flex items-center gap-0.5 text-[9px] font-medium text-amber-400">
               <Zap className="h-2.5 w-2.5" /> checkpoint
             </span>
           )}
-          {onReview && (
+          {onReview && !milestone.skipped && (
             fixState === 'verifying' ? (
               <span className="flex items-center gap-1 rounded-full bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-medium text-indigo-400">
                 <Loader2 className="h-2.5 w-2.5 animate-spin" /> Verifying…
@@ -514,14 +604,14 @@ function MilestoneRow({
           )}
         </div>
 
-        {milestone.specPath && (
+        {milestone.specPath && !milestone.skipped && (
           <div className="mt-0.5 flex items-center gap-1 text-[10px] text-zinc-600">
             <FileCode className="h-2.5 w-2.5" />
             {milestone.specPath.split('/').pop()}
           </div>
         )}
 
-        {milestone.rationale && hovered && !milestone.checked && (
+        {milestone.rationale && hovered && !milestone.checked && !milestone.skipped && (
           <p className="mt-1 text-[10px] italic text-zinc-600">{milestone.rationale}</p>
         )}
       </div>
@@ -529,7 +619,7 @@ function MilestoneRow({
       {/* Actions */}
       {(hovered || isRunning) && (
         <div className="flex flex-shrink-0 items-center gap-1">
-          {onReview && !reviewing && (
+          {onReview && !reviewing && !milestone.skipped && (
             cachedReview ? (
               <button
                 onClick={() => useReviewAgentStore.getState().viewCached(projectId, milestone.id, milestone.text)}
@@ -550,20 +640,40 @@ function MilestoneRow({
           )}
           {!milestone.checked && (
             <>
+              {/* Build: always available on unchecked (implicitly unskips if skipped) */}
               <button
                 onClick={() => onBuild(milestone.id)}
-                title="Pre-fill chat with kickoff prompt"
+                title={milestone.skipped ? 'Unskip and pre-fill chat with kickoff prompt' : 'Pre-fill chat with kickoff prompt'}
                 className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-indigo-400 hover:bg-indigo-500/10"
               >
                 <ArrowRight className="h-3 w-3" /> Build
               </button>
-              <button
-                onClick={() => onMarkComplete(milestone.id)}
-                title="Mark as complete"
-                className="rounded px-2 py-1 text-[10px] text-zinc-600 hover:bg-zinc-700 hover:text-zinc-400"
-              >
-                Done
-              </button>
+              {milestone.skipped ? (
+                <button
+                  onClick={() => onUnskip(milestone.id)}
+                  title="Remove skip — return milestone to normal unchecked state"
+                  className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-amber-500 hover:bg-amber-500/10"
+                >
+                  <SkipForward className="h-3 w-3" /> Unskip
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onMarkComplete(milestone.id)}
+                    title="Mark as complete"
+                    className="rounded px-2 py-1 text-[10px] text-zinc-600 hover:bg-zinc-700 hover:text-zinc-400"
+                  >
+                    Done
+                  </button>
+                  <button
+                    onClick={() => onSkip(milestone.id)}
+                    title="Defer this milestone — it will be excluded from autonomous runs until unskipped"
+                    className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-zinc-600 hover:bg-amber-900/20 hover:text-amber-500"
+                  >
+                    <SkipForward className="h-3 w-3" /> Skip
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -600,8 +710,8 @@ function RunConfigModal({
   onConfirm: () => void
   onCancel: () => void
 }) {
-  const checkpoints = plan.milestones.filter((m) => !m.checked && m.suggestedCheckpoint)
-  const nextMilestone = plan.milestones.find((m) => !m.checked)
+  const checkpoints = plan.milestones.filter((m) => !m.checked && !m.skipped && m.suggestedCheckpoint)
+  const nextMilestone = plan.milestones.find((m) => !m.checked && !m.skipped)
   const options = [
     { value: 1, label: '1 milestone' },
     { value: 3, label: '3 milestones' },

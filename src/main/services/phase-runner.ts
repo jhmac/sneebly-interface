@@ -6,7 +6,14 @@ import { promisify } from 'util'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { PhaseRunConfig, PhaseRunState, ChatMessage, ModelName, OrderedMilestone } from '../../shared/types'
 import { isChatTurnInFlight, startTurn, turnEmitter, type TurnMetrics } from './agent-session'
-import { loadPhasePlan, getMilestoneById, getNextMilestone, syncCheckedState, markMilestoneComplete } from './phase-tracker'
+import {
+  loadPhasePlan,
+  getMilestoneById,
+  getNextMilestone,
+  syncCheckedState,
+  markMilestoneComplete,
+  markMilestoneSkipped,
+} from './phase-tracker'
 import { listProjects } from './project-registry'
 import { composeSystemPromptAddendum } from './system-prompt-composer'
 import { sendToProjectWindows } from './window-registry'
@@ -25,6 +32,10 @@ const store = new Store()
 
 // Per-project run state
 const runStates = new Map<string, PhaseRunState>()
+
+// Per-project last-used run config — retained so skipCurrentMilestone can continue
+// the run with the same batch settings the user configured.
+const lastRunConfigs = new Map<string, PhaseRunConfig>()
 
 const UI_FILE_EXTENSIONS = new Set([
   '.tsx', '.jsx', '.vue', '.svelte', '.html', '.htm', '.css', '.scss', '.sass', '.less',
@@ -261,6 +272,9 @@ export async function startRun(
   if (!plan) throw new Error('No phase plan found — generate one first')
 
   plan = syncCheckedState(project.path, plan)
+
+  // Persist config so skipCurrentMilestone can resume with the same settings
+  lastRunConfigs.set(projectId, config)
 
   const startMilestone = config.startFromMilestoneId
     ? getMilestoneById(plan, config.startFromMilestoneId)
@@ -576,10 +590,10 @@ async function driveRun(
     return
   }
 
-  // Find next unchecked milestone in build order
+  // Find next unchecked, non-skipped milestone in build order
   const syncedPlan = syncCheckedState(project.path, loadPhasePlan(project.path)!)
   const currentIdx = syncedPlan.milestones.findIndex((m) => m.id === milestoneId)
-  const nextMilestone = syncedPlan.milestones.slice(currentIdx + 1).find((m) => !m.checked)
+  const nextMilestone = syncedPlan.milestones.slice(currentIdx + 1).find((m) => !m.checked && !m.skipped)
 
   if (!nextMilestone) {
     setRunState(projectId, { ...getRunState(projectId), status: 'complete' })
@@ -617,4 +631,60 @@ function getOrCreateSessionId(projectId: string, projectPath: string): string {
   const sessionId = sessionStore.createSession(projectPath)
   store.set(`chat.activeSession.${projectId}`, sessionId)
   return sessionId
+}
+
+// Skip the currently-paused milestone and advance the run to the next buildable one.
+// Annotates GOALS.md with "(skipped: <reason>)" and resumes the autonomous loop.
+export async function skipCurrentMilestone(projectId: string): Promise<void> {
+  const state = getRunState(projectId)
+  if (state.status !== 'paused' || !state.currentMilestoneId) {
+    throw new Error('No paused milestone to skip')
+  }
+
+  const project = listProjects().find((p) => p.id === projectId)
+  if (!project) throw new Error(`Project ${projectId} not found`)
+
+  const milestoneId = state.currentMilestoneId
+
+  // Use the pause reason as the skip reason so the annotation is self-explanatory
+  const reason = state.lastError
+    ? state.lastError.slice(0, 120)
+    : 'deferred during autonomous run'
+
+  markMilestoneSkipped(project.path, milestoneId, reason)
+
+  // Re-sync and find the next buildable milestone
+  const plan = loadPhasePlan(project.path)
+  if (!plan) { stopRun(projectId); return }
+  const syncedPlan = syncCheckedState(project.path, plan)
+
+  const currentIdx = syncedPlan.milestones.findIndex((m) => m.id === milestoneId)
+  const nextMilestone = syncedPlan.milestones
+    .slice(currentIdx + 1)
+    .find((m) => !m.checked && !m.skipped)
+
+  if (!nextMilestone) {
+    setRunState(projectId, { ...getRunState(projectId), status: 'complete' })
+    return
+  }
+
+  const config = lastRunConfigs.get(projectId) ?? {
+    batchSize: 0,
+    startFromMilestoneId: nextMilestone.id,
+    autoReview: true,
+  }
+
+  setRunState(projectId, {
+    status: 'building',
+    currentMilestoneId: nextMilestone.id,
+    completedInBatch: state.completedInBatch,
+    batchSize: state.batchSize,
+    activeChecklist: nextMilestone.testChecklist,
+    lastError: null,
+  })
+
+  driveRun(projectId, config, nextMilestone.id).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err)
+    setRunState(projectId, { ...getRunState(projectId), status: 'paused', lastError: msg })
+  })
 }
