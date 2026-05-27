@@ -201,7 +201,10 @@ export default function DesignView({ projectId }: Props) {
 
   async function handleLoadDesign(name: string) {
     setLoadMenuOpen(false)
-    const file = await window.api.designLoad(projectId, name).catch(() => null)
+    const file = await window.api.designLoad(projectId, name).catch((err) => {
+      console.warn('[DesignView] Failed to load design:', err)
+      return null
+    })
     if (file) loadDesignData(file)
   }
 

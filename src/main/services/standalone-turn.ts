@@ -6,6 +6,9 @@ import { getMcpConfigPath } from './mcp-config'
 
 const CLAUDE_BIN = process.env['CLAUDE_BIN'] ?? '/Users/mister/.local/bin/claude'
 
+// Rolling cap on stderr buffering — keeps the tail (most recent, most useful).
+const STDERR_CAP = 8 * 1024
+
 export interface StandaloneTurnOpts {
   cwd: string
   projectId: string
@@ -132,9 +135,6 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
     })
     opts.onProcess?.(proc)
 
-    // Cap stderr at 8 KB — keep the tail so the most recent (most useful) output
-    // is preserved if the subprocess is unexpectedly chatty on stderr.
-    const STDERR_CAP = 8 * 1024
     let stderrBuf = ''
     proc.stderr?.on('data', (chunk: Buffer) => {
       stderrBuf += chunk.toString()

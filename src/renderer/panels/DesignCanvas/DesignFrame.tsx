@@ -33,7 +33,7 @@ function classifyError(error: string): string {
     return 'Not logged in'
   if (/rate limit|overloaded|too many requests|429/.test(lower))
     return 'Rate limit hit'
-  if (/context window|context.length|too (many|large)|maximum (context|length)|token.*(limit|exceed)/.test(lower))
+  if (/context window|context\.length|too (many|large)|maximum (context|length)|token.*(limit|exceed)/.test(lower))
     return 'Context too large'
   if (/enoent|spawn.*failed|command not found|no such file/.test(lower) && lower.includes('claude'))
     return 'claude CLI not found'
@@ -55,17 +55,19 @@ function FrameError({ error }: { error: string }) {
         <p className="max-w-full break-words text-[10px] text-zinc-500">{error}</p>
       )}
       {isLong && (
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="text-[10px] text-zinc-500 underline transition-colors hover:text-zinc-300"
-        >
-          {expanded ? 'Hide details' : 'Show details'}
-        </button>
-      )}
-      {isLong && expanded && (
-        <div className="w-full max-h-36 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-2 text-left">
-          <pre className="whitespace-pre-wrap break-all text-[9px] text-zinc-400">{error}</pre>
-        </div>
+        <>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="text-[10px] text-zinc-500 underline transition-colors hover:text-zinc-300"
+          >
+            {expanded ? 'Hide details' : 'Show details'}
+          </button>
+          {expanded && (
+            <div className="w-full max-h-36 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-2 text-left">
+              <pre className="whitespace-pre-wrap break-all text-[9px] text-zinc-400">{error}</pre>
+            </div>
+          )}
+        </>
       )}
       <button
         onClick={() => { void navigator.clipboard.writeText(error) }}
