@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Sidebar from './chrome/Sidebar'
 import Welcome from './screens/Welcome'
 import Workspace from './screens/Workspace'
+import DesignView from './screens/DesignView'
 import OnboardingOverlay from './panels/OnboardingOverlay/OnboardingOverlay'
 import DaemonSettingsModal from './panels/DaemonPanel/DaemonSettingsModal'
 import DaemonQueueModal from './panels/DaemonPanel/DaemonQueueModal'
@@ -19,11 +20,14 @@ import { loadSkills } from './skills'
 import { useSettingsStore } from './state/settingsStore'
 import { useAskSneeblyStore } from './panels/AskSneebly/useAskSneeblyStore'
 import { useReviewAgentStore } from './panels/ReviewAgent/useReviewAgentStore'
+import { useViewStore } from './state/viewStore'
+import { useDesignStore } from './state/designStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const { modalOpen, closeModal } = useDaemonStore()
+  const { currentView, setView } = useViewStore()
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -59,6 +63,12 @@ export default function App() {
   // Clear cached review verdicts when switching projects (in-memory, per-project).
   useEffect(() => {
     useReviewAgentStore.getState().clearForProject()
+  }, [activeProjectId])
+
+  // Reset to workspace view when switching projects (Design canvas is per-project).
+  useEffect(() => {
+    setView('workspace')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectId])
 
   // ── Daemon status polling ──────────────────────────────────────────────
@@ -169,6 +179,17 @@ export default function App() {
     return () => { offThinking(); offDone(); offFix() }
   }, [])
 
+  // ── Design canvas push channels ────────────────────────────────────────────
+  useEffect(() => {
+    const offResult = window.api.designOnVariantResult((generationId, code, kind) => {
+      useDesignStore.getState().resolveFrame(generationId, code, kind)
+    })
+    const offError = window.api.designOnGenerationError((generationId, error) => {
+      useDesignStore.getState().failFrame(generationId, error)
+    })
+    return () => { offResult(); offError() }
+  }, [])
+
   // ── File watcher push channel ──────────────────────────────────────────
   useEffect(() => {
     return window.api.fsOnFileChanged((event) => {
@@ -198,7 +219,13 @@ export default function App() {
       <GoalsWizardModal />
       <Sidebar />
       <div className="flex flex-1 overflow-hidden">
-        {activeProjectId ? <Workspace /> : <Welcome />}
+        {!activeProjectId ? (
+          <Welcome />
+        ) : currentView === 'design' ? (
+          <DesignView projectId={activeProjectId} />
+        ) : (
+          <Workspace />
+        )}
       </div>
     </div>
   )

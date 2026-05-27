@@ -198,6 +198,52 @@ export interface SaveArtifactOpts {
   defaultExt: string
 }
 
+// ── Design Canvas types ────────────────────────────────────────────────────
+
+export interface DesignFrame {
+  id: string
+  position: { x: number; y: number }
+  code: string
+  kind: ArtifactKind
+  prompt: string
+  parentFrameId?: string
+  generatedAt: number
+}
+
+export interface DesignFile {
+  name: string
+  createdAt: number
+  updatedAt: number
+  frames: DesignFrame[]
+}
+
+export interface DesignSummary {
+  name: string
+  updatedAt: number
+}
+
+export interface DesignGenerateOpts {
+  projectId: string
+  prompt: string
+  parentFrameId?: string
+  parentFrameCode?: string
+  parentFramePrompt?: string
+}
+
+export interface DesignGenerateVariantsOpts {
+  projectId: string
+  prompt: string
+  count: number
+}
+
+export interface DesignIterateOpts {
+  projectId: string
+  prompt: string
+  parentFrameId: string
+  parentFrameCode: string
+  parentFramePrompt: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -730,6 +776,19 @@ export interface ElectronAPI {
 
   // ── Artifacts ─────────────────────────────────────────────────────────────
   chatSaveArtifact: (opts: SaveArtifactOpts) => Promise<void>
+
+  // ── Design Canvas ──────────────────────────────────────────────────────────
+  designGenerate: (opts: DesignGenerateOpts) => Promise<{ generationId: string }>
+  designGenerateVariants: (opts: DesignGenerateVariantsOpts) => Promise<{ generationIds: string[] }>
+  designIterateFrame: (opts: DesignIterateOpts) => Promise<{ generationId: string }>
+  designCancel: (opts: { generationId: string }) => Promise<void>
+  designOnVariantResult: (cb: (generationId: string, code: string, kind: ArtifactKind) => void) => () => void
+  designOnGenerationError: (cb: (generationId: string, error: string) => void) => () => void
+  designList: (projectId: string) => Promise<DesignSummary[]>
+  designLoad: (projectId: string, name: string) => Promise<DesignFile | null>
+  designSave: (projectId: string, design: DesignFile) => Promise<void>
+  designDelete: (projectId: string, name: string) => Promise<void>
+  designRename: (projectId: string, oldName: string, newName: string) => Promise<void>
 }
 
 export interface AskSneeblyStartInput {

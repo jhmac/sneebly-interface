@@ -129,4 +129,17 @@ export const IPC_CHANNELS = {
   REVIEW_AGENT_ACTION: 'reviewAgent:action',
   REVIEW_AGENT_FIX_STATE_CHANGED: 'reviewAgent:fix-state-changed',
   CHAT_SAVE_ARTIFACT: 'chat:save-artifact',
+
+  // ── Design Canvas ──────────────────────────────────────────────────────────
+  DESIGN_GENERATE: 'design:generate',
+  DESIGN_GENERATE_VARIANTS: 'design:generate-variants',
+  DESIGN_ITERATE_FRAME: 'design:iterate-frame',
+  DESIGN_CANCEL: 'design:cancel',
+  DESIGN_VARIANT_RESULT: 'design:variant-result',
+  DESIGN_GENERATION_ERROR: 'design:generation-error',
+  DESIGN_LIST: 'design:list',
+  DESIGN_LOAD: 'design:load',
+  DESIGN_SAVE: 'design:save',
+  DESIGN_DELETE: 'design:delete',
+  DESIGN_RENAME: 'design:rename',
 } as const

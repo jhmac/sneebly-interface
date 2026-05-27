@@ -48,6 +48,12 @@ import type {
   ReviewOutput,
   ReviewFixState,
   SaveArtifactOpts,
+  ArtifactKind,
+  DesignFile,
+  DesignSummary,
+  DesignGenerateOpts,
+  DesignGenerateVariantsOpts,
+  DesignIterateOpts,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -435,6 +441,36 @@ const api: ElectronAPI = {
   // ── Artifacts ─────────────────────────────────────────────────────────────
   chatSaveArtifact: (opts: SaveArtifactOpts): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.CHAT_SAVE_ARTIFACT, opts),
+
+  // ── Design Canvas ─────────────────────────────────────────────────────────
+  designGenerate: (opts: DesignGenerateOpts): Promise<{ generationId: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_GENERATE, opts),
+  designGenerateVariants: (opts: DesignGenerateVariantsOpts): Promise<{ generationIds: string[] }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_GENERATE_VARIANTS, opts),
+  designIterateFrame: (opts: DesignIterateOpts): Promise<{ generationId: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_ITERATE_FRAME, opts),
+  designCancel: (opts: { generationId: string }): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_CANCEL, opts),
+  designOnVariantResult: (cb: (generationId: string, code: string, kind: ArtifactKind) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, gid: string, code: string, kind: ArtifactKind) => cb(gid, code, kind)
+    ipcRenderer.on(IPC_CHANNELS.DESIGN_VARIANT_RESULT, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.DESIGN_VARIANT_RESULT, h)
+  },
+  designOnGenerationError: (cb: (generationId: string, error: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, gid: string, error: string) => cb(gid, error)
+    ipcRenderer.on(IPC_CHANNELS.DESIGN_GENERATION_ERROR, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.DESIGN_GENERATION_ERROR, h)
+  },
+  designList: (projectId: string): Promise<DesignSummary[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_LIST, { projectId }),
+  designLoad: (projectId: string, name: string): Promise<DesignFile | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_LOAD, { projectId, name }),
+  designSave: (projectId: string, design: DesignFile): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_SAVE, { projectId, design }),
+  designDelete: (projectId: string, name: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_DELETE, { projectId, name }),
+  designRename: (projectId: string, oldName: string, newName: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_RENAME, { projectId, oldName, newName }),
 }
 
 contextBridge.exposeInMainWorld('api', api)

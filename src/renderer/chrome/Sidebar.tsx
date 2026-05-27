@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { FolderOpen, FolderCode, Settings, Sparkles, SquareArrowOutUpRight } from 'lucide-react'
+import { FolderOpen, FolderCode, Settings, Sparkles, SquareArrowOutUpRight, Layout } from 'lucide-react'
 import { useProjectStore } from '../state/projectStore'
 import { useDaemonStore } from '../state/daemonStore'
 import { useGoalsWizardStore } from '../state/goalsWizardStore'
+import { useViewStore } from '../state/viewStore'
 import EditProjectModal from '../panels/ProjectDetails/EditProjectModal'
 import type { Project } from '../../shared/types'
 
@@ -69,6 +70,7 @@ export default function Sidebar() {
     useProjectStore()
   const { status, questionCounts, queueCounts, openModal } = useDaemonStore()
   const { openWizard } = useGoalsWizardStore()
+  const { currentView, setView } = useViewStore()
 
   const [confirmDelete, setConfirmDelete] = useState<Project | null>(null)
   const [editProject, setEditProject] = useState<Project | null>(null)
@@ -148,7 +150,7 @@ export default function Sidebar() {
       </div>
 
       {/* New App button */}
-      <div className="px-2 pb-2">
+      <div className="px-2 pb-1">
         <button
           onClick={openWizard}
           className="flex w-full items-center gap-2 rounded-md border border-dashed border-purple-800/50 px-2 py-2 text-xs text-purple-400 hover:border-purple-600/70 hover:bg-purple-900/20 hover:text-purple-300 transition-colors"
@@ -157,6 +159,24 @@ export default function Sidebar() {
           <span>New App</span>
         </button>
       </div>
+
+      {/* Design tab — only shown when a project is active */}
+      {activeProjectId && (
+        <div className="px-2 pb-2">
+          <button
+            onClick={() => setView(currentView === 'design' ? 'workspace' : 'design')}
+            className={[
+              'flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs transition-colors',
+              currentView === 'design'
+                ? 'bg-zinc-800 text-zinc-100'
+                : 'text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-300',
+            ].join(' ')}
+          >
+            <Layout className="h-3 w-3 flex-shrink-0" />
+            <span>Design</span>
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {projects.length === 0 ? (

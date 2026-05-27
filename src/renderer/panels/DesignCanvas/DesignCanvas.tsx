@@ -1,0 +1,187 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ReactFlow,
+  Controls,
+  Background,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  type Node,
+  type Edge,
+  type NodeChange,
+  BackgroundVariant,
+  applyNodeChanges,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
+import DesignFrameNode, { type DesignFrameData } from './DesignFrame'
+import { useDesignStore, FRAME_WIDTH, FRAME_HEIGHT } from '../../state/designStore'
+
+const nodeTypes = { designFrame: DesignFrameNode }
+
+// ─── DesignCanvas ─────────────────────────────────────────────────────────────
+
+interface Props {
+  projectId: string
+  onIterateRequest: (frameId: string) => void
+}
+
+export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
+  const { currentDesign, moveFrame } = useDesignStore()
+  const prevFrameIds = useRef<Set<string>>(new Set())
+
+  // ── Derive nodes and edges from store ──────────────────────────────────────
+
+  const storeNodes: Node<DesignFrameData>[] = useMemo(() => {
+    if (!currentDesign) return []
+    return currentDesign.frames.map((frame) => ({
+      id: frame.id,
+      type: 'designFrame',
+      position: frame.position,
+      draggable: !frame.loading,
+      data: {
+        frameId: frame.id,
+        projectId,
+        code: frame.code,
+        kind: frame.kind,
+        prompt: frame.prompt,
+        parentFrameId: frame.parentFrameId,
+        generatedAt: frame.generatedAt,
+        loading: frame.loading,
+        error: frame.error,
+        generationId: frame.generationId,
+        onIterate: onIterateRequest,
+      } satisfies DesignFrameData,
+      style: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
+    }))
+  }, [currentDesign?.frames, projectId, onIterateRequest])
+
+  const storeEdges: Edge[] = useMemo(() => {
+    if (!currentDesign) return []
+    return currentDesign.frames
+      .filter((f) => f.parentFrameId)
+      .map((f) => ({
+        id: `e-${f.parentFrameId}-${f.id}`,
+        source: f.parentFrameId!,
+        target: f.id,
+        type: 'smoothstep',
+        style: { stroke: '#52525b', strokeWidth: 1.5 },
+        animated: false,
+        selectable: false,
+      }))
+  }, [currentDesign?.frames])
+
+  const [rfNodes, setRfNodes] = useNodesState(storeNodes)
+  const [rfEdges, setRfEdges] = useEdgesState(storeEdges)
+
+  // ── Sync store → react-flow ────────────────────────────────────────────────
+  // Full sync only when frame count changes (add/remove).
+  // For data-only changes (loading → resolved), update node data in-place
+  // to avoid resetting user-dragged positions.
+
+  useEffect(() => {
+    const currentIds = new Set(currentDesign?.frames.map((f) => f.id) ?? [])
+    const prevIds = prevFrameIds.current
+    const countChanged =
+      currentIds.size !== prevIds.size ||
+      [...currentIds].some((id) => !prevIds.has(id))
+
+    if (countChanged) {
+      setRfNodes(storeNodes)
+      setRfEdges(storeEdges)
+      prevFrameIds.current = currentIds
+    } else {
+      // Only update node data (code, loading state, error) — preserve positions
+      setRfNodes((prev) =>
+        prev.map((rfNode) => {
+          const frame = currentDesign?.frames.find((f) => f.id === rfNode.id)
+          if (!frame) return rfNode
+          return {
+            ...rfNode,
+            draggable: !frame.loading,
+            data: {
+              ...rfNode.data,
+              code: frame.code,
+              kind: frame.kind,
+              loading: frame.loading,
+              error: frame.error,
+              generationId: frame.generationId,
+              onIterate: onIterateRequest,
+            },
+          }
+        })
+      )
+      setRfEdges(storeEdges)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDesign?.frames])
+
+  // ── Node changes from react-flow (drag, select, etc.) ─────────────────────
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<Node<DesignFrameData>>[]) => {
+      setRfNodes((prev) => applyNodeChanges(changes, prev))
+      for (const change of changes) {
+        // Write position to store on drag end (dragging === false means drop)
+        if (change.type === 'position' && change.dragging === false && change.position) {
+          moveFrame(change.id, change.position)
+        }
+      }
+    },
+    [setRfNodes, moveFrame]
+  )
+
+  // ── Empty state ────────────────────────────────────────────────────────────
+
+  const isEmpty = !currentDesign || currentDesign.frames.length === 0
+
+  return (
+    <div className="h-full w-full">
+      <ReactFlow
+        nodes={rfNodes}
+        edges={rfEdges}
+        onNodesChange={handleNodesChange}
+        nodeTypes={nodeTypes}
+        fitView={!isEmpty}
+        fitViewOptions={{ padding: 0.2 }}
+        minZoom={0.1}
+        maxZoom={2}
+        // Disable default react-flow styles that conflict with dark theme
+        colorMode="dark"
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={20}
+          size={1}
+          color="#3f3f46"
+        />
+        <Controls
+          style={{ background: '#18181b', border: '1px solid #3f3f46' }}
+          showInteractive={false}
+        />
+        <MiniMap
+          style={{ background: '#18181b', border: '1px solid #3f3f46' }}
+          nodeColor="#3f3f46"
+          maskColor="rgba(9, 9, 11, 0.7)"
+          position="top-right"
+        />
+
+        {isEmpty && <EmptyState />}
+      </ReactFlow>
+    </div>
+  )
+}
+
+// ─── EmptyState ───────────────────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3"
+      style={{ zIndex: 10 }}
+    >
+      <p className="text-sm font-medium text-zinc-500">No frames yet</p>
+      <p className="text-xs text-zinc-600">Type a prompt below and click Generate</p>
+    </div>
+  )
+}
