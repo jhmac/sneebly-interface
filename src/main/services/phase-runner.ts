@@ -24,6 +24,7 @@ import { runBrowserCheck } from '../mcp-servers/browser-check/browser'
 import { appendEvent } from './event-stream'
 import { runPlaywrightVerification } from './phase-playwright-runner'
 import { fireReview } from './review-agent'
+import { runPreflightDecider } from './decider-orchestrator'
 
 const execFileAsync = promisify(execFile)
 const GIT_MAX_BUFFER = 16 * 1024 * 1024  // porcelain output can be large for codegen-heavy milestones
@@ -325,10 +326,30 @@ async function driveRun(
   // Snapshot dirty files before the build so auto-commit can exclude the user's pre-existing work.
   const preBuildDirtyFiles = await gitStatusBaseline(project.path)
 
+  // ── Autonomous Decider (pre-flight) ──────────────────────────────────────────
+  // Resolve spec ambiguities before the build. runPreflightDecider catches all
+  // internal errors and returns null on any failure, so the outer catch here only
+  // guards against the unlikely case of sendToProjectWindows throwing.
+  // In all failure modes we fall back to the original kickoff — the build is never blocked.
+  let effectiveKickoff = milestone.kickoffPrompt
+  try {
+    const deciderResult = await runPreflightDecider(projectId, milestoneId)
+    if (deciderResult?.clarifiedSpec) {
+      effectiveKickoff = deciderResult.clarifiedSpec
+      // Signal the renderer to refresh its badge count.
+      sendToProjectWindows(projectId, IPC_CHANNELS.DECIDER_DECISIONS_UPDATED, projectId)
+    }
+  } catch (err) {
+    console.warn('[phase-runner] unexpected error in Decider hook, using original kickoff:', err)
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Get or create a session
   const sessionId = getOrCreateSessionId(projectId, project.path)
 
-  // Build the user message (kickoff prompt)
+  // Build the user message (kickoff prompt).
+  // Chat display always shows the original kickoff prompt; the Decider-clarified
+  // version is passed only to CC (startTurn) so the user sees what they approved.
   const userMsg: ChatMessage = {
     id: crypto.randomUUID(),
     role: 'user',
@@ -363,7 +384,8 @@ async function driveRun(
         projectId,
         sneeblySessionId: sessionId,
         claudeCodeSessionId,
-        prompt: milestone.kickoffPrompt,
+        // Use the Decider-clarified kickoff if available; falls back to the original.
+        prompt: effectiveKickoff,
         model: primaryModel,
         appendSystemPrompt: systemPromptAddendum ?? undefined,
         recordEvents,

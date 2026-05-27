@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import {
   X, RefreshCw, Play, Square, ChevronDown, ChevronRight,
   CheckCircle2, Circle, Loader2, AlertTriangle, Zap,
-  ClipboardList, FileCode, ArrowRight, ScanSearch, MinusCircle, SkipForward
+  ClipboardList, FileCode, ArrowRight, ScanSearch, MinusCircle, SkipForward, Sparkles
 } from 'lucide-react'
 import { usePhaseStore } from '../../state/phaseStore'
 import { useReviewAgentStore } from '../ReviewAgent/useReviewAgentStore'
 import { useSettingsStore } from '../../state/settingsStore'
+import { useDeciderStore } from '../../state/deciderStore'
 import { timeAgo } from '../../../shared/utils'
 import type { OrderedMilestone, PhasePlan, PhaseRunConfig, PhaseRunState, PhaseAuditProgress, ReviewOutput } from '../../../shared/types'
 
@@ -152,6 +153,31 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
   const handleReview = (milestoneId: string) => {
     const m = plan?.milestones.find((x) => x.id === milestoneId)
     useReviewAgentStore.getState().startReview(projectId, milestoneId, m?.text ?? milestoneId)
+  }
+
+  const deciderEnabled = useSettingsStore((s) => s.settings?.deciderEnabled ?? true)
+  const refreshDeciderBadge = useDeciderStore((s) => s.refreshFlaggedCount)
+
+  const handlePreflightDecider = async (milestoneId: string) => {
+    try {
+      await window.api.deciderRunPreflight(projectId, milestoneId)
+      await refreshDeciderBadge(projectId)
+    } catch (e) {
+      console.error('[PhasePanel] Decider preflight failed:', e)
+    }
+  }
+
+  const handleResolveWithDecider = async (milestoneId: string) => {
+    try {
+      const result = await window.api.deciderResolveSkipped(projectId, milestoneId)
+      if (result) {
+        // Reload the plan so the newly-unskipped milestone is reflected in the UI
+        await load(projectId)
+        await refreshDeciderBadge(projectId)
+      }
+    } catch (e) {
+      console.error('[PhasePanel] Decider resolve-skipped failed:', e)
+    }
   }
 
   if (!plan && !generating) {
@@ -339,6 +365,8 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
               onSkip={handleSkipMilestone}
               onUnskip={handleUnskipMilestone}
               onReview={reviewEnabled ? handleReview : undefined}
+              onDecide={deciderEnabled ? handlePreflightDecider : undefined}
+              onResolveWithDecider={deciderEnabled ? handleResolveWithDecider : undefined}
               projectId={projectId}
             />
           ))}
@@ -408,6 +436,8 @@ function PhaseGroup({
   onSkip,
   onUnskip,
   onReview,
+  onDecide,
+  onResolveWithDecider,
   projectId,
 }: {
   phase: PhaseGroupData
@@ -419,6 +449,8 @@ function PhaseGroup({
   onSkip: (id: string) => void
   onUnskip: (id: string) => void
   onReview?: (id: string) => void
+  onDecide?: (id: string) => void
+  onResolveWithDecider?: (id: string) => void
   projectId: string
 }) {
   const effectiveTotal = phase.milestones.length - phase.skippedCount
@@ -478,6 +510,8 @@ function PhaseGroup({
               onSkip={onSkip}
               onUnskip={onUnskip}
               onReview={onReview}
+              onDecide={onDecide}
+              onResolveWithDecider={onResolveWithDecider}
               projectId={projectId}
             />
           ))}
@@ -503,6 +537,8 @@ function MilestoneRow({
   onSkip,
   onUnskip,
   onReview,
+  onDecide,
+  onResolveWithDecider,
   projectId,
 }: {
   milestone: OrderedMilestone
@@ -512,13 +548,28 @@ function MilestoneRow({
   onSkip: (id: string) => void
   onUnskip: (id: string) => void
   onReview?: (id: string) => void
+  onDecide?: (id: string) => void
+  onResolveWithDecider?: (id: string) => void
   projectId: string
 }) {
   const [hovered, setHovered] = useState(false)
+  const [deciding, setDeciding] = useState(false)
   const isRunning = runState.currentMilestoneId === milestone.id && runState.status === 'building'
   const cachedReview = useReviewAgentStore((s) => s.reviewsByMilestoneId[milestone.id])
   const reviewing = useReviewAgentStore((s) => !!s.inFlightByMilestoneId[milestone.id])
   const fixState = useReviewAgentStore((s) => s.fixStateByMilestoneId[milestone.id])
+
+  const handleDecide = async () => {
+    if (!onDecide) return
+    setDeciding(true)
+    try { await onDecide(milestone.id) } finally { setDeciding(false) }
+  }
+
+  const handleResolveWithDecider = async () => {
+    if (!onResolveWithDecider) return
+    setDeciding(true)
+    try { await onResolveWithDecider(milestone.id) } finally { setDeciding(false) }
+  }
 
   const rowBg = milestone.skipped
     ? 'bg-amber-950/10 hover:bg-amber-950/20'
@@ -640,6 +691,22 @@ function MilestoneRow({
           )}
           {!milestone.checked && (
             <>
+              {/* Decide: pre-flight Decider for unchecked milestones */}
+              {onDecide && !milestone.skipped && (
+                deciding ? (
+                  <span className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-violet-400">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Deciding…
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleDecide}
+                    title="Run Autonomous Decider — resolves spec ambiguities before the build"
+                    className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-violet-400 hover:bg-violet-500/10"
+                  >
+                    <Sparkles className="h-3 w-3" /> Decide
+                  </button>
+                )
+              )}
               {/* Build: always available on unchecked (implicitly unskips if skipped) */}
               <button
                 onClick={() => onBuild(milestone.id)}
@@ -649,13 +716,30 @@ function MilestoneRow({
                 <ArrowRight className="h-3 w-3" /> Build
               </button>
               {milestone.skipped ? (
-                <button
-                  onClick={() => onUnskip(milestone.id)}
-                  title="Remove skip — return milestone to normal unchecked state"
-                  className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-amber-500 hover:bg-amber-500/10"
-                >
-                  <SkipForward className="h-3 w-3" /> Unskip
-                </button>
+                <>
+                  {onResolveWithDecider && (
+                    deciding ? (
+                      <span className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-violet-400">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Resolving…
+                      </span>
+                    ) : (
+                      <button
+                        onClick={handleResolveWithDecider}
+                        title="Unskip and run Decider pre-flight in one step"
+                        className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-violet-400 hover:bg-violet-500/10"
+                      >
+                        <Sparkles className="h-3 w-3" /> Resolve
+                      </button>
+                    )
+                  )}
+                  <button
+                    onClick={() => onUnskip(milestone.id)}
+                    title="Remove skip — return milestone to normal unchecked state"
+                    className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-amber-500 hover:bg-amber-500/10"
+                  >
+                    <SkipForward className="h-3 w-3" /> Unskip
+                  </button>
+                </>
               ) : (
                 <>
                   <button

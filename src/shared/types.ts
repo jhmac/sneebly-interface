@@ -544,6 +544,36 @@ export type PhaseAuditProgress =
   | { stage: 'running'; checked: number; total: number; currentMilestone: string }
   | { stage: 'done'; results: MilestoneAuditResult[]; appliedCount: number; parseError?: boolean }
 
+// ── Autonomous Decider ────────────────────────────────────────────────────────
+
+export type RiskLevel = 'low' | 'medium' | 'high'
+
+export interface Decision {
+  id: string
+  question: string
+  answer: string
+  risk: RiskLevel
+  rationale: string
+}
+
+export interface DecisionsFile {
+  milestoneId: string
+  specPath: string
+  generatedAt: number
+  clarifiedSpec: string
+  decisions: Decision[]
+  /** true = audit pass (post-build), false = pre-flight (pre-build) */
+  isAudit: boolean
+}
+
+export interface DeciderRunResult {
+  clarifiedSpec: string
+  decisions: Decision[]
+  decisionFilePath: string
+}
+
+// ── AppSettings ───────────────────────────────────────────────────────────────
+
 export interface AppSettings {
   theme: 'dark' | 'light'
   defaultModel: ModelName
@@ -574,6 +604,9 @@ export interface AppSettings {
   reviewAgentModel: ModelName
   reviewAgentAutoFire: boolean
   reviewAgentBlocking: boolean
+  deciderEnabled: boolean
+  deciderModel: ModelName
+  deciderAutoFire: boolean
 }
 
 export interface SessionUsage {
@@ -758,6 +791,15 @@ export interface ElectronAPI {
   phaseAudit: (projectId: string) => Promise<MilestoneAuditResult[]>
   phaseAuditStop: (projectId: string) => Promise<void>
   phaseOnAuditProgress: (cb: (progress: PhaseAuditProgress) => void) => () => void
+
+  // ── Autonomous Decider ─────────────────────────────────────────────────────
+  deciderRunPreflight: (projectId: string, milestoneId: string) => Promise<DeciderRunResult | null>
+  deciderRunAudit: (projectId: string, milestoneId: string) => Promise<DeciderRunResult | null>
+  deciderGetDecisions: (projectId: string, milestoneId: string, isAudit?: boolean) => Promise<DecisionsFile | null>
+  deciderGetFlaggedCount: (projectId: string) => Promise<number>
+  deciderGetReviewPrompt: (projectId: string, milestoneId: string) => Promise<{ starterMessage: string; decisionFilePaths: string[] } | null>
+  deciderResolveSkipped: (projectId: string, milestoneId: string) => Promise<{ plan: PhasePlan; decisions: DecisionsFile } | null>
+  deciderOnDecisionsUpdated: (cb: (projectId: string) => void) => () => void
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────
   goalsGrillTurn: (messages: GrillMessage[], userMessage: string) => Promise<GrillTurnResult>

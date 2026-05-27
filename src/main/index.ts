@@ -41,6 +41,7 @@ import { registerAskSneeblyHandlers } from './ipc/ask-sneebly-handlers'
 import { registerReviewAgentHandlers } from './ipc/review-agent-handlers'
 import { registerDesignHandlers } from './ipc/design-handlers'
 import { registerDesignImplementHandlers } from './ipc/design-implement-handlers'
+import { registerDeciderHandlers } from './ipc/decider-handlers'
 
 // ── User data migration (sneebly-interface → Sneebly) ─────────────────────────
 function migrateUserData(): void {
@@ -121,6 +122,7 @@ function registerIpcHandlers(): void {
   registerReviewAgentHandlers()
   registerDesignHandlers()
   registerDesignImplementHandlers()
+  registerDeciderHandlers()
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
     createProjectWindow(projectId)

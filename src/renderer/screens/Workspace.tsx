@@ -31,6 +31,7 @@ import EditorPanel from '../panels/FilesPanel/EditorPanel'
 import LearningsPanel from '../panels/LearningsPanel/LearningsPanel'
 import ShortcutsBar from '../panels/ShortcutsBar/ShortcutsBar'
 import PhasePanel from '../panels/PhasePanel/PhasePanel'
+import DecisionsBadge from '../panels/PhasePanel/DecisionsBadge'
 import AskSneeblyPanel from '../panels/AskSneebly/AskSneeblyPanel'
 import { useAskSneeblyStore } from '../panels/AskSneebly/useAskSneeblyStore'
 import ReviewPanel from '../panels/ReviewAgent/ReviewPanel'
@@ -468,6 +469,7 @@ function WorkspaceHeader({
         >
           <ListChecks className="h-3 w-3" />
           Phases
+          <DecisionsBadge projectId={activeProjectId} />
         </button>
 
         <button

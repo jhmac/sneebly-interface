@@ -147,4 +147,13 @@ export const IPC_CHANNELS = {
   DESIGN_IMPLEMENT_START: 'design:implement-start',
   DESIGN_IMPLEMENT_CANCEL: 'design:implement-cancel',
   DESIGN_IMPLEMENT_STATUS: 'design:implement-status',
+
+  // ── Autonomous Decider ──────────────────────────────────────────────────────
+  DECIDER_RUN_PREFLIGHT: 'decider:run-preflight',
+  DECIDER_RUN_AUDIT: 'decider:run-audit',
+  DECIDER_GET_DECISIONS: 'decider:get-decisions',
+  DECIDER_GET_FLAGGED_COUNT: 'decider:get-flagged-count',
+  DECIDER_GET_REVIEW_PROMPT: 'decider:get-review-prompt',
+  DECIDER_RESOLVE_SKIPPED: 'decider:resolve-skipped',
+  DECIDER_DECISIONS_UPDATED: 'decider:decisions-updated',
 } as const

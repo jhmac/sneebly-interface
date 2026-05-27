@@ -37,6 +37,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   reviewAgentModel: 'claude-opus-4-7',
   reviewAgentAutoFire: false,
   reviewAgentBlocking: false,
+  deciderEnabled: true,
+  deciderModel: 'claude-sonnet-4-6',
+  deciderAutoFire: false,
 }
 
 export function registerSettingsHandlers(): void {

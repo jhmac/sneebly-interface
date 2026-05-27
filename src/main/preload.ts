@@ -56,6 +56,8 @@ import type {
   DesignIterateOpts,
   DesignImplementOpts,
   DesignImplementStatusEvent,
+  DeciderRunResult,
+  DecisionsFile,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -352,6 +354,25 @@ const api: ElectronAPI = {
     const h = (_: IpcRendererEvent, progress: PhaseAuditProgress) => cb(progress)
     ipcRenderer.on(IPC_CHANNELS.PHASE_AUDIT_PROGRESS, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.PHASE_AUDIT_PROGRESS, h)
+  },
+
+  // ── Autonomous Decider ─────────────────────────────────────────────────────
+  deciderRunPreflight: (projectId: string, milestoneId: string): Promise<DeciderRunResult | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DECIDER_RUN_PREFLIGHT, projectId, milestoneId),
+  deciderRunAudit: (projectId: string, milestoneId: string): Promise<DeciderRunResult | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DECIDER_RUN_AUDIT, projectId, milestoneId),
+  deciderGetDecisions: (projectId: string, milestoneId: string, isAudit?: boolean): Promise<DecisionsFile | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DECIDER_GET_DECISIONS, projectId, milestoneId, isAudit),
+  deciderGetFlaggedCount: (projectId: string): Promise<number> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DECIDER_GET_FLAGGED_COUNT, projectId),
+  deciderGetReviewPrompt: (projectId: string, milestoneId: string): Promise<{ starterMessage: string; decisionFilePaths: string[] } | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DECIDER_GET_REVIEW_PROMPT, projectId, milestoneId),
+  deciderResolveSkipped: (projectId: string, milestoneId: string): Promise<{ plan: PhasePlan; decisions: DecisionsFile } | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DECIDER_RESOLVE_SKIPPED, projectId, milestoneId),
+  deciderOnDecisionsUpdated: (cb: (projectId: string) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, projectId: string) => cb(projectId)
+    ipcRenderer.on(IPC_CHANNELS.DECIDER_DECISIONS_UPDATED, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.DECIDER_DECISIONS_UPDATED, h)
   },
 
   // ── Goals Wizard ──────────────────────────────────────────────────────────

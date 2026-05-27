@@ -12,6 +12,7 @@ import { readEventsForDateRange, appendEvent } from './event-stream'
 import { sendToProjectWindows } from './window-registry'
 import { turnEmitter } from './agent-session'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
+import { agentBus } from './agent-bus'
 import type {
   AgentEvent,
   AgentContentToolUse,
@@ -529,6 +530,9 @@ export async function handleReviewDoneForFix(
   error: string | undefined,
   deps: FixTrackingDeps = defaultFixDeps,
 ): Promise<void> {
+  // Signal the Decider review bridge — fire for every review completion.
+  agentBus.emit('review:done', projectId, milestoneId)
+
   const key = fixKey(projectId, milestoneId)
   const pendingFix = pendingFixByMilestone.get(key)
   if (!pendingFix) return // not a fix cycle — a normal first-time / auto-fire review

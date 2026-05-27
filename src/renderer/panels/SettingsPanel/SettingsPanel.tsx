@@ -262,6 +262,35 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
           </Row>
         </Section>
 
+        <Section title="Autonomous Decider">
+          <Row label="Decider enabled" description="Before each autonomous build, runs a fast Claude turn to resolve spec ambiguities and produce a clarified kickoff prompt. Failures degrade gracefully — the build always proceeds.">
+            <Toggle
+              value={settings.deciderEnabled ?? true}
+              onChange={(v) => handleSave({ deciderEnabled: v })}
+            />
+          </Row>
+          <Row label="Decider model" description="Model used for the pre-flight analysis pass. Sonnet is recommended — fast and accurate for spec interpretation.">
+            <div className="relative">
+              <select
+                value={settings.deciderModel ?? 'claude-sonnet-4-6'}
+                onChange={(e) => handleSave({ deciderModel: e.target.value as ModelName })}
+                className="appearance-none rounded-md bg-zinc-800 py-1.5 pl-3 pr-8 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
+              >
+                {REVIEW_MODEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-500" />
+            </div>
+          </Row>
+          <Row label="Auto-audit after review" description="When the Review Agent completes a milestone review, also run a Decider audit pass. Decisions appear in sidecar files and update the badge count. Off by default.">
+            <Toggle
+              value={settings.deciderAutoFire ?? false}
+              onChange={(v) => handleSave({ deciderAutoFire: v })}
+            />
+          </Row>
+        </Section>
+
         {/* Projects */}
         <Section title="Projects">
           <Row label="Default projects folder" description="Where cloned repos are placed by default">
