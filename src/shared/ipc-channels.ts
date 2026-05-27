@@ -142,4 +142,9 @@ export const IPC_CHANNELS = {
   DESIGN_SAVE: 'design:save',
   DESIGN_DELETE: 'design:delete',
   DESIGN_RENAME: 'design:rename',
+  // Phase 2B
+  DESIGN_CAPTURE_PREVIEW: 'design:capture-preview',
+  DESIGN_IMPLEMENT_START: 'design:implement-start',
+  DESIGN_IMPLEMENT_CANCEL: 'design:implement-cancel',
+  DESIGN_IMPLEMENT_STATUS: 'design:implement-status',
 } as const

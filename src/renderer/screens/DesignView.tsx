@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Layout, Plus, Save, ChevronDown, Loader2, Check } from 'lucide-react'
 import DesignCanvas from '../panels/DesignCanvas/DesignCanvas'
+import ImplementConfirmModal from '../panels/DesignCanvas/ImplementConfirmModal'
+import ImplementProgressPanel from '../panels/DesignCanvas/ImplementProgressPanel'
 import { useDesignStore } from '../state/designStore'
+import { usePreviewStore } from '../state/previewStore'
+import { useProjectStore } from '../state/projectStore'
+import { useDesignImplementStore } from '../state/designImplementStore'
+import { SEED_FRAME_ID } from '../panels/DesignCanvas/SeedFrame'
 import type { DesignFile } from '../../shared/types'
-import type { DesignState } from '../state/designStore'
+import type { DesignState, DesignFrameState } from '../state/designStore'
 
 interface Props {
   projectId: string
@@ -37,16 +43,22 @@ function toDesignFile(design: DesignState): DesignFile {
 export default function DesignView({ projectId }: Props) {
   const {
     currentDesign,
+    seedFrame,
     designs,
     setDesigns,
     newDesign,
     loadDesignData,
     renameCurrentDesign,
     addLoadingFrames,
+    setSeedFrame,
     prepareGenerate,
     prepareVariants,
     prepareIterate,
   } = useDesignStore()
+
+  const { status: previewStatus, webContentsId } = usePreviewStore()
+  const { projects } = useProjectStore()
+  const { current: implementState, startPending, reset: resetImplement } = useDesignImplementStore()
 
   const [prompt, setPrompt] = useState('')
   const [variantMode, setVariantMode] = useState(false)
@@ -60,26 +72,43 @@ export default function DesignView({ projectId }: Props) {
   const [nameDraft, setNameDraft] = useState('')
   const [loadMenuOpen, setLoadMenuOpen] = useState(false)
 
+  // frameId being confirmed for implementation (null = no modal)
+  const [confirmingFrameId, setConfirmingFrameId] = useState<string | null>(null)
+
+  const activeProject = projects.find((p) => p.id === projectId) ?? null
+
   // ── Bootstrap ──────────────────────────────────────────────────────────────
-  // Runs when projectId changes (i.e. on first mount for this project).
-  // App.tsx already calls newDesign() on project switch, so currentDesign is
-  // always fresh here — we just need to load the designs list.
 
   useEffect(() => {
     window.api.designList(projectId).then(setDesigns).catch(console.error)
-    // If no design has been created yet (first visit before App.tsx effect ran),
-    // create one now as a fallback.
     if (!currentDesign) newDesign()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
+  // ── Seed from current preview ──────────────────────────────────────────────
+  // On mount: if canvas is empty (no frames, no seed) and the preview is running,
+  // capture the current webview and plant it as the seed frame.
+
+  useEffect(() => {
+    const hasFrames = (currentDesign?.frames.length ?? 0) > 0
+    if (hasFrames || seedFrame) return                          // already have content
+    if (previewStatus !== 'running' || !webContentsId) return  // no live preview
+
+    window.api.designCapturePreview({ projectId, webContentsId })
+      .then((result) => {
+        if (result) {
+          setSeedFrame({ dataUrl: result.dataUrl, capturedAt: Date.now() })
+        }
+      })
+      .catch(console.error)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // mount only — the conditions checked inside are from the store at mount time
+
   // ── Auto-save (debounced 500ms after any change) ───────────────────────────
-  // Guard: skip if there are no completed frames to persist.
 
   useEffect(() => {
     if (!currentDesign) return
     const file = toDesignFile(currentDesign)
-    // Don't write an empty-frames file — only save once at least one frame is done
     if (file.frames.length === 0) return
 
     const timer = setTimeout(() => {
@@ -109,7 +138,6 @@ export default function DesignView({ projectId }: Props) {
   }
 
   // ── Cmd+S ──────────────────────────────────────────────────────────────────
-  // Re-registers whenever currentDesign changes so the closure captures the latest value.
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -189,13 +217,36 @@ export default function DesignView({ projectId }: Props) {
     const p = iteratePrompt.trim()
     if (!p || !iteratingFrameId) return
 
+    // Special case: iterating from the seed frame (no code — use text-only context)
+    if (iteratingFrameId === SEED_FRAME_ID) {
+      const slot = prepareGenerate()
+      const parentId = iteratingFrameId
+      setIteratingFrameId(null)
+      setIteratePrompt('')
+      try {
+        const { generationId } = await window.api.designGenerate({
+          projectId,
+          prompt: `This is an iteration on the current state of the project. ${p}`,
+        })
+        addLoadingFrames([{
+          id: slot.frameId,
+          generationId,
+          prompt: p,
+          position: slot.position,
+          parentFrameId: parentId,
+        }])
+      } catch (err) {
+        console.error('[DesignView] seed iterate error:', err)
+      }
+      return
+    }
+
     const parent = currentDesign?.frames.find((f) => f.id === iteratingFrameId)
     if (!parent || parent.loading || !parent.code) return
 
     const slot = prepareIterate(iteratingFrameId)
     if (!slot) return
 
-    // Capture before clearing state (React doesn't update synchronously)
     const parentId = iteratingFrameId
     setIteratingFrameId(null)
     setIteratePrompt('')
@@ -220,6 +271,33 @@ export default function DesignView({ projectId }: Props) {
     }
   }
 
+  // ── Implement ─────────────────────────────────────────────────────────────
+
+  const handleImplementRequest = useCallback((frameId: string) => {
+    setConfirmingFrameId(frameId)
+  }, [])
+
+  async function handleImplementConfirm() {
+    if (!confirmingFrameId) return
+    const frame = currentDesign?.frames.find((f) => f.id === confirmingFrameId) as DesignFrameState | undefined
+    if (!frame || frame.loading || !frame.code) return
+
+    setConfirmingFrameId(null)
+
+    try {
+      const { implementId } = await window.api.designImplementStart({
+        projectId,
+        frameId: frame.id,
+        frameCode: frame.code,
+        frameKind: frame.kind,
+        framePrompt: frame.prompt,
+      })
+      startPending(implementId)
+    } catch (err) {
+      console.error('[DesignView] implement error:', err)
+    }
+  }
+
   // ── Name editing ──────────────────────────────────────────────────────────
 
   function startNameEdit() {
@@ -232,6 +310,11 @@ export default function DesignView({ projectId }: Props) {
     if (trimmed) renameCurrentDesign(trimmed)
     setNameEditing(false)
   }
+
+  // Lookup frame for confirm modal
+  const confirmingFrame = confirmingFrameId
+    ? currentDesign?.frames.find((f) => f.id === confirmingFrameId) ?? null
+    : null
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -325,13 +408,19 @@ export default function DesignView({ projectId }: Props) {
 
       {/* Canvas — takes all remaining height */}
       <div className="relative min-h-0 flex-1">
-        <DesignCanvas projectId={projectId} onIterateRequest={handleIterateRequest} />
+        <DesignCanvas
+          projectId={projectId}
+          onIterateRequest={handleIterateRequest}
+          onImplementRequest={handleImplementRequest}
+        />
       </div>
 
-      {/* Iterate overlay — shown when the user picks "Iterate" from a frame's menu */}
+      {/* Iterate overlay */}
       {iteratingFrameId && (
         <div className="flex items-center gap-2 border-t border-amber-900/40 bg-amber-950/30 px-3 py-2">
-          <span className="flex-shrink-0 text-xs text-amber-400">Iterating on frame:</span>
+          <span className="flex-shrink-0 text-xs text-amber-400">
+            {iteratingFrameId === SEED_FRAME_ID ? 'Iterating from current state:' : 'Iterating on frame:'}
+          </span>
           <input
             autoFocus
             placeholder="Describe your changes…"
@@ -357,6 +446,14 @@ export default function DesignView({ projectId }: Props) {
             Cancel
           </button>
         </div>
+      )}
+
+      {/* Implement progress panel (shown while implementation is in-flight or done) */}
+      {implementState.status !== 'idle' && implementState.implementId && (
+        <ImplementProgressPanel
+          implementId={implementState.implementId}
+          onClose={resetImplement}
+        />
       )}
 
       {/* Bottom command bar */}
@@ -411,6 +508,17 @@ export default function DesignView({ projectId }: Props) {
           Generate
         </button>
       </div>
+
+      {/* Implement confirmation modal */}
+      {confirmingFrame && (
+        <ImplementConfirmModal
+          projectName={activeProject?.name ?? projectId}
+          framePrompt={confirmingFrame.prompt}
+          frameKind={confirmingFrame.kind}
+          onConfirm={() => void handleImplementConfirm()}
+          onCancel={() => setConfirmingFrameId(null)}
+        />
+      )}
     </div>
   )
 }

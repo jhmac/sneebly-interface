@@ -15,6 +15,7 @@ import {
   renameDesign,
 } from '../services/design-store'
 import { listProjects } from '../services/project-registry'
+import { formatProjectContext } from '../services/project-context-bundler'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ export function registerDesignHandlers(): void {
     const opts = GenerateDesignSchema.parse(raw)
     const projectPath = getProjectPath(opts.projectId)
 
+    const projectContext = formatProjectContext(projectPath)
     const generationId = startDesignGeneration(
       {
         projectId: opts.projectId,
@@ -90,6 +92,7 @@ export function registerDesignHandlers(): void {
         prompt: opts.prompt,
         parentFrameCode: opts.parentFrameCode,
         parentFramePrompt: opts.parentFramePrompt,
+        projectContext: projectContext || undefined,
       },
       {
         onResult: (r) =>
@@ -112,6 +115,7 @@ export function registerDesignHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.DESIGN_GENERATE_VARIANTS, (_e, raw: unknown) => {
     const opts = GenerateVariantsSchema.parse(raw)
     const projectPath = getProjectPath(opts.projectId)
+    const projectContext = formatProjectContext(projectPath)
 
     const generationIds = startVariantGeneration(
       {
@@ -119,6 +123,7 @@ export function registerDesignHandlers(): void {
         projectPath,
         prompt: opts.prompt,
         count: opts.count,
+        projectContext: projectContext || undefined,
       },
       {
         onResult: (r) =>
@@ -141,6 +146,7 @@ export function registerDesignHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.DESIGN_ITERATE_FRAME, (_e, raw: unknown) => {
     const opts = GenerateDesignSchema.parse(raw)
     const projectPath = getProjectPath(opts.projectId)
+    const projectContext = formatProjectContext(projectPath)
 
     const generationId = startDesignGeneration(
       {
@@ -149,6 +155,7 @@ export function registerDesignHandlers(): void {
         prompt: opts.prompt,
         parentFrameCode: opts.parentFrameCode,
         parentFramePrompt: opts.parentFramePrompt,
+        projectContext: projectContext || undefined,
       },
       {
         onResult: (r) =>

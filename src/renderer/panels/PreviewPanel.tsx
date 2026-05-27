@@ -36,6 +36,7 @@ export default function PreviewPanel() {
   const {
     status, url, stderrTail, deviceSize, logsExpanded, settingUp,
     setDeviceSize, setLogsExpanded, setAwaitingSetupComplete, setSettingUp,
+    setWebContentsId,
   } = usePreviewStore()
   const { activeProjectId, projects } = useProjectStore()
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
@@ -48,8 +49,14 @@ export default function PreviewPanel() {
 
   // Attach webview event listeners when it mounts
   const attachWebviewListeners = useCallback((el: ElectronWebviewElement | null) => {
-    if (!el) return
+    if (!el) {
+      setWebContentsId(null)
+      return
+    }
     webviewRef.current = el
+    // Store the webContentsId so DesignView can request a preview capture via IPC.
+    // getWebContentsId() is synchronous and stable for the lifetime of this webview.
+    setWebContentsId(el.getWebContentsId())
 
     const onNavigate = (e: Event & { url?: string }) => {
       const navUrl = (e as unknown as { url: string }).url

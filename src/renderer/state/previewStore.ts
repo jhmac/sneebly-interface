@@ -9,21 +9,25 @@ interface PreviewState {
   logsExpanded: boolean
   awaitingSetupComplete: boolean
   settingUp: boolean
+  /** The webContentsId of the currently-mounted webview (set by PreviewPanel). */
+  webContentsId: number | null
 
   handleStatusEvent: (event: PreviewStatusEvent, activeProjectId: string | null) => void
   setDeviceSize: (size: DeviceSize) => void
   setLogsExpanded: (v: boolean) => void
   setAwaitingSetupComplete: (v: boolean) => void
   setSettingUp: (v: boolean) => void
+  setWebContentsId: (id: number | null) => void
   reset: () => void
 }
 
-const INITIAL: Pick<PreviewState, 'status' | 'url' | 'stderrTail' | 'awaitingSetupComplete' | 'settingUp'> = {
+const INITIAL: Pick<PreviewState, 'status' | 'url' | 'stderrTail' | 'awaitingSetupComplete' | 'settingUp' | 'webContentsId'> = {
   status: 'idle',
   url: null,
   stderrTail: [],
   awaitingSetupComplete: false,
   settingUp: false,
+  webContentsId: null,
 }
 
 export const usePreviewStore = create<PreviewState>((set) => ({
@@ -44,6 +48,7 @@ export const usePreviewStore = create<PreviewState>((set) => ({
   setLogsExpanded: (v: boolean) => set({ logsExpanded: v }),
   setAwaitingSetupComplete: (v: boolean) => set({ awaitingSetupComplete: v }),
   setSettingUp: (v: boolean) => set({ settingUp: v }),
+  setWebContentsId: (id: number | null) => set({ webContentsId: id }),
 
   reset: () => set({ ...INITIAL }),
 }))

@@ -54,6 +54,8 @@ import type {
   DesignGenerateOpts,
   DesignGenerateVariantsOpts,
   DesignIterateOpts,
+  DesignImplementOpts,
+  DesignImplementStatusEvent,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -471,6 +473,18 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.DESIGN_DELETE, { projectId, name }),
   designRename: (projectId: string, oldName: string, newName: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.DESIGN_RENAME, { projectId, oldName, newName }),
+  // Phase 2B
+  designCapturePreview: (opts: { projectId: string; webContentsId: number }): Promise<{ dataUrl: string } | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_CAPTURE_PREVIEW, opts),
+  designImplementStart: (opts: DesignImplementOpts): Promise<{ implementId: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_IMPLEMENT_START, opts),
+  designImplementCancel: (implementId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DESIGN_IMPLEMENT_CANCEL, { implementId }),
+  designOnImplementStatus: (cb: (event: DesignImplementStatusEvent) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, event: DesignImplementStatusEvent) => cb(event)
+    ipcRenderer.on(IPC_CHANNELS.DESIGN_IMPLEMENT_STATUS, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.DESIGN_IMPLEMENT_STATUS, h)
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

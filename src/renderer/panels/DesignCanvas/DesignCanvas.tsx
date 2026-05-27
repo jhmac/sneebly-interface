@@ -15,24 +15,48 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import DesignFrameNode, { type DesignFrameData } from './DesignFrame'
+import SeedFrameNode, { type SeedFrameData, SEED_FRAME_ID } from './SeedFrame'
 import { useDesignStore, FRAME_WIDTH, FRAME_HEIGHT } from '../../state/designStore'
 
 // nodeTypes must be stable (module-level) — recreating it on every render
 // causes react-flow to unmount and remount all nodes.
-const nodeTypes = { designFrame: DesignFrameNode }
+const nodeTypes = {
+  designFrame: DesignFrameNode,
+  seedFrame: SeedFrameNode,
+}
 
 // ─── DesignCanvas ─────────────────────────────────────────────────────────────
 
 interface Props {
   projectId: string
   onIterateRequest: (frameId: string) => void
+  onImplementRequest: (frameId: string) => void
 }
 
-export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
-  const { currentDesign, moveFrame } = useDesignStore()
+export default function DesignCanvas({ projectId, onIterateRequest, onImplementRequest }: Props) {
+  const { currentDesign, seedFrame, moveFrame } = useDesignStore()
   const prevFrameIds = useRef<Set<string>>(new Set())
 
   // ── Derive nodes and edges from store ──────────────────────────────────────
+
+  // Seed node (if present) is prepended to the node list so it always renders
+  // at position {0,0} and is not draggable / selectable like a generated frame.
+  const seedNode: Node<SeedFrameData> | null = useMemo(() => {
+    if (!seedFrame) return null
+    return {
+      id: SEED_FRAME_ID,
+      type: 'seedFrame',
+      position: { x: 0, y: 0 },
+      draggable: true,
+      selectable: false,
+      data: {
+        dataUrl: seedFrame.dataUrl,
+        capturedAt: seedFrame.capturedAt,
+        onIterate: onIterateRequest,
+      } satisfies SeedFrameData,
+      style: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
+    }
+  }, [seedFrame, onIterateRequest])
 
   const storeNodes: Node<DesignFrameData>[] = useMemo(() => {
     if (!currentDesign) return []
@@ -53,10 +77,11 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
         error: frame.error,
         generationId: frame.generationId,
         onIterate: onIterateRequest,
+        onImplement: onImplementRequest,
       } satisfies DesignFrameData,
       style: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
     }))
-  }, [currentDesign?.frames, projectId, onIterateRequest])
+  }, [currentDesign?.frames, projectId, onIterateRequest, onImplementRequest])
 
   const storeEdges: Edge[] = useMemo(() => {
     if (!currentDesign) return []
@@ -73,7 +98,13 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
       }))
   }, [currentDesign?.frames])
 
-  const [rfNodes, setRfNodes] = useNodesState(storeNodes)
+  // rfNodes holds both DesignFrameData and SeedFrameData nodes.
+  // We keep the type as Node<DesignFrameData> for simplicity; the seed node is
+  // cast at insertion — react-flow only needs stable ids + positions + type string.
+  const castSeed = seedNode as unknown as Node<DesignFrameData>
+  const [rfNodes, setRfNodes] = useNodesState<Node<DesignFrameData>>(
+    seedNode ? [castSeed, ...storeNodes] : storeNodes
+  )
   const [rfEdges, setRfEdges] = useEdgesState(storeEdges)
 
   // ── Sync store → react-flow ────────────────────────────────────────────────
@@ -90,14 +121,18 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
 
     if (setChanged) {
       // Frame added or removed — full sync (positions come from the store)
-      setRfNodes(storeNodes)
+      setRfNodes(seedNode ? [castSeed, ...storeNodes] : storeNodes)
       setRfEdges(storeEdges)
       prevFrameIds.current = currentIds
     } else {
       // Only data changed (code resolved, loading toggled) — patch data in-place
       // so react-flow's internal dragged positions are preserved.
-      setRfNodes((prev) =>
-        prev.map((rfNode) => {
+      setRfNodes((prev) => {
+        const patched = prev.map((rfNode) => {
+          // Keep the seed node untouched (its data comes from seedFrame store field)
+          if (rfNode.id === SEED_FRAME_ID) {
+            return castSeed ?? rfNode
+          }
           const frame = currentDesign?.frames.find((f) => f.id === rfNode.id)
           if (!frame) return rfNode
           return {
@@ -111,14 +146,24 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
               error: frame.error,
               generationId: frame.generationId,
               onIterate: onIterateRequest,
+              onImplement: onImplementRequest,
             },
           }
         })
-      )
+        // Inject seed node if it just appeared (wasn't in prev)
+        if (castSeed && !prev.some((n) => n.id === SEED_FRAME_ID)) {
+          return [castSeed, ...patched]
+        }
+        // Remove seed node if it was cleared
+        if (!seedNode) {
+          return patched.filter((n) => n.id !== SEED_FRAME_ID)
+        }
+        return patched
+      })
       setRfEdges(storeEdges)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDesign?.frames])
+  }, [currentDesign?.frames, seedFrame])
 
   // ── Node changes from react-flow (drag, select, etc.) ─────────────────────
 
@@ -135,7 +180,8 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
     [setRfNodes, moveFrame]
   )
 
-  const isEmpty = !currentDesign || currentDesign.frames.length === 0
+  // Canvas is "empty" only when there are no frames AND no seed
+  const isEmpty = !currentDesign || (currentDesign.frames.length === 0 && !seedFrame)
 
   return (
     <div className="h-full w-full">

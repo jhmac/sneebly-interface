@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ArtifactKind, DesignFile, DesignSummary } from '../../shared/types'
+import type { ArtifactKind, DesignFile, DesignSummary, SeedFrameState } from '../../shared/types'
 
 // ─── Runtime frame state (renderer-only, not persisted) ───────────────────────
 
@@ -66,6 +66,12 @@ function iterationPosition(parent: DesignFrameState): { x: number; y: number } {
 interface DesignStore {
   currentDesign: DesignState | null
   designs: DesignSummary[]
+  /** Renderer-only screenshot seed. Not part of DesignState.frames, never persisted. */
+  seedFrame: SeedFrameState | null
+
+  // ── Seed frame ───────────────────────────────────────────────────────────
+  setSeedFrame: (seed: SeedFrameState) => void
+  clearSeedFrame: () => void
 
   // ── Design list ──────────────────────────────────────────────────────────
   setDesigns: (designs: DesignSummary[]) => void
@@ -121,6 +127,10 @@ interface DesignStore {
 export const useDesignStore = create<DesignStore>((set, get) => ({
   currentDesign: null,
   designs: [],
+  seedFrame: null,
+
+  setSeedFrame: (seed) => set({ seedFrame: seed }),
+  clearSeedFrame: () => set({ seedFrame: null }),
 
   setDesigns: (designs) => set({ designs }),
 
@@ -248,18 +258,24 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     }),
 
   prepareGenerate: () => {
-    const frames = get().currentDesign?.frames ?? []
-    return {
-      frameId: newFrameId(),
-      position: nextRow(frames),
-    }
+    const { currentDesign, seedFrame } = get()
+    const frames = currentDesign?.frames ?? []
+    // Place the first generated frame below the seed if no regular frames exist yet
+    const position = (frames.length === 0 && seedFrame)
+      ? { x: 0, y: FRAME_HEIGHT + FRAME_V_GAP }
+      : nextRow(frames)
+    return { frameId: newFrameId(), position }
   },
 
   prepareVariants: (count) => {
-    const frames = get().currentDesign?.frames ?? []
-    const { y } = nextRow(frames)
+    const { currentDesign, seedFrame } = get()
+    const frames = currentDesign?.frames ?? []
+    // Same seed-awareness for variant rows
+    const startY = (frames.length === 0 && seedFrame)
+      ? FRAME_HEIGHT + FRAME_V_GAP
+      : nextRow(frames).y
     // Use index in the ID so variants generated in the same millisecond are still unique
-    return variantPositions(count, y).map((position, i) => ({
+    return variantPositions(count, startY).map((position, i) => ({
       frameId: `f-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`,
       position,
     }))

@@ -18,8 +18,8 @@ For each milestone you must produce:
 - checkpointReason: one sentence explaining why (null if suggestedCheckpoint is false)
 - rationale: one sentence on why this milestone is ordered here
 - dependencies: array of milestone IDs (p<num>-m<idx> format) this milestone depends on
-- kickoffPrompt: a precise chat message to send Sneebly to start building this milestone. Include: the milestone name, the relevant spec file via @file if one exists, acceptance criteria from the spec, and any critical constraints
-- testChecklist: 3-6 items the developer should manually verify after the feature is built (things that can't easily be automated: real API calls, device hardware, visual polish, edge cases requiring live data)
+
+Keep checkpointReason and rationale to ONE short sentence each. Do not pad: the ordering for EVERY milestone must fit in a single response. Do NOT produce kickoff prompts or test checklists — those are generated separately, on demand.
 
 Respond with ONLY valid JSON in this exact shape:
 {
@@ -31,9 +31,7 @@ Respond with ONLY valid JSON in this exact shape:
       "suggestedCheckpoint": true|false,
       "checkpointReason": "<string or null>",
       "rationale": "<string>",
-      "dependencies": ["<id>", ...],
-      "kickoffPrompt": "<full chat message>",
-      "testChecklist": ["<item>", ...]
+      "dependencies": ["<id>", ...]
     },
     ...
   ]
@@ -48,8 +46,10 @@ interface RawOrderEntry {
   checkpointReason: string | null
   rationale: string | null
   dependencies: string[]
-  kickoffPrompt: string
-  testChecklist: string[]
+  // No longer requested in the bulk ordering call (kept optional for back-compat /
+  // future lazy generation); see defaultKickoff below.
+  kickoffPrompt?: string
+  testChecklist?: string[]
 }
 
 interface RawAgentOutput {
@@ -73,6 +73,14 @@ function readSpecFiles(projectPath: string): string {
 
 function stableId(phaseNumber: number, milestoneIndex: number): string {
   return `p${phaseNumber}-m${milestoneIndex}`
+}
+
+// Built-in kickoff prompt used now that the orderer no longer emits per-milestone
+// kickoff prompts (that output blew past the model's max-token ceiling). Includes
+// the spec as an @file reference so the linked spec is still pulled in on kickoff.
+function defaultKickoff(text: string, specPath: string | null): string {
+  const ref = specPath ? `\n\nRelevant spec: @${specPath.replace(/^\.\//, '')}` : ''
+  return `Build this milestone: ${text}.${ref}`
 }
 
 export async function generatePhasePlan(
@@ -145,7 +153,7 @@ export async function generatePhasePlan(
       checkpointReason: entry.checkpointReason ?? null,
       rationale: entry.rationale ?? null,
       dependencies: entry.dependencies ?? [],
-      kickoffPrompt: entry.kickoffPrompt ?? `Build: ${src.text}`,
+      kickoffPrompt: entry.kickoffPrompt ?? defaultKickoff(src.text, src.specPath),
       testChecklist: entry.testChecklist ?? [],
     }
   })

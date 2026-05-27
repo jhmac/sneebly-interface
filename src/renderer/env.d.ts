@@ -19,6 +19,8 @@ declare global {
     canGoForward(): boolean
     openDevTools(): void
     setZoomFactor(factor: number): void
+    /** Returns the webContents ID of this webview's guest content. */
+    getWebContentsId(): number
   }
 
   namespace JSX {

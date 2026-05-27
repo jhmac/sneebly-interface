@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
-import { MoreHorizontal, Copy, Trash2, GitBranch, Loader2, AlertCircle, Download } from 'lucide-react'
+import { MoreHorizontal, Copy, Trash2, GitBranch, Loader2, AlertCircle, Download, Hammer } from 'lucide-react'
 import SandboxedArtifact from '../ChatPanel/SandboxedArtifact'
 import { useDesignStore, FRAME_WIDTH, FRAME_HEIGHT } from '../../state/designStore'
 import type { ArtifactKind } from '../../../shared/types'
@@ -19,6 +19,7 @@ export interface DesignFrameData extends Record<string, unknown> {
   error?: string
   generationId?: string
   onIterate: (frameId: string) => void
+  onImplement: (frameId: string) => void
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -112,6 +113,11 @@ export default function DesignFrame({ data }: NodeProps<Node<DesignFrameData>>) 
               <div className="absolute right-0 top-6 z-[110] w-40 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl">
                 {!data.loading && !data.error && (
                   <>
+                    <MenuButton
+                      icon={<Hammer className="h-3 w-3" />}
+                      label="Implement"
+                      onClick={() => { setMenuOpen(false); data.onImplement(data.frameId) }}
+                    />
                     <MenuButton
                       icon={<GitBranch className="h-3 w-3" />}
                       label="Iterate"

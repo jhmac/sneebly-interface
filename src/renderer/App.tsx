@@ -22,6 +22,7 @@ import { useAskSneeblyStore } from './panels/AskSneebly/useAskSneeblyStore'
 import { useReviewAgentStore } from './panels/ReviewAgent/useReviewAgentStore'
 import { useViewStore } from './state/viewStore'
 import { useDesignStore } from './state/designStore'
+import { useDesignImplementStore } from './state/designImplementStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -65,12 +66,12 @@ export default function App() {
     useReviewAgentStore.getState().clearForProject()
   }, [activeProjectId])
 
-  // Reset to workspace view when switching projects; also clear the design store so the
-  // next time the user opens the Design tab they start fresh for the new project (not
-  // stale frames from the previous one — auto-save has already persisted completed work).
+  // Reset to workspace view when switching projects; clear design store (frames + seed)
+  // so the Design tab starts fresh for the new project.
   useEffect(() => {
     setView('workspace')
     useDesignStore.getState().newDesign()
+    useDesignStore.getState().clearSeedFrame()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectId])
 
@@ -190,7 +191,10 @@ export default function App() {
     const offError = window.api.designOnGenerationError((generationId, error) => {
       useDesignStore.getState().failFrame(generationId, error)
     })
-    return () => { offResult(); offError() }
+    const offImplement = window.api.designOnImplementStatus((event) => {
+      useDesignImplementStore.getState().handleStatusEvent(event)
+    })
+    return () => { offResult(); offError(); offImplement() }
   }, [])
 
   // ── File watcher push channel ──────────────────────────────────────────
@@ -224,10 +228,17 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         {!activeProjectId ? (
           <Welcome />
-        ) : currentView === 'design' ? (
-          <DesignView projectId={activeProjectId} />
         ) : (
-          <Workspace />
+          <>
+            {/* Keep Workspace mounted when in Design view so the webview stays alive
+                for preview capture. CSS-hidden, not unmounted. */}
+            <div className={currentView === 'design' ? 'hidden' : 'flex flex-1 overflow-hidden'}>
+              <Workspace />
+            </div>
+            {currentView === 'design' && (
+              <DesignView projectId={activeProjectId} />
+            )}
+          </>
         )}
       </div>
     </div>

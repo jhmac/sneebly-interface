@@ -244,6 +244,29 @@ export interface DesignIterateOpts {
   parentFramePrompt: string
 }
 
+// Phase 2B types
+
+/** Renderer-only. Never persisted to DesignFile. */
+export interface SeedFrameState {
+  dataUrl: string
+  capturedAt: number
+}
+
+export interface DesignImplementOpts {
+  projectId: string
+  frameId: string
+  frameCode: string
+  frameKind: ArtifactKind
+  framePrompt: string
+}
+
+export interface DesignImplementStatusEvent {
+  implementId: string
+  status: 'running' | 'success' | 'error'
+  event?: AgentEvent
+  error?: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -789,6 +812,11 @@ export interface ElectronAPI {
   designSave: (projectId: string, design: DesignFile) => Promise<void>
   designDelete: (projectId: string, name: string) => Promise<void>
   designRename: (projectId: string, oldName: string, newName: string) => Promise<void>
+  // Phase 2B
+  designCapturePreview: (opts: { projectId: string; webContentsId: number }) => Promise<{ dataUrl: string } | null>
+  designImplementStart: (opts: DesignImplementOpts) => Promise<{ implementId: string }>
+  designImplementCancel: (implementId: string) => Promise<void>
+  designOnImplementStatus: (cb: (event: DesignImplementStatusEvent) => void) => () => void
 }
 
 export interface AskSneeblyStartInput {

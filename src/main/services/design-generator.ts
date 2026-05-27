@@ -85,17 +85,19 @@ async function runGeneration(
     projectId: string
     projectPath: string
     prompt: string
+    projectContext?: string
   },
   callbacks: GenerateCallbacks
 ): Promise<void> {
   const skillPrompt = loadSkillPrompt(opts.projectPath)
+  const systemParts = [skillPrompt, opts.projectContext].filter(Boolean)
   try {
     const result = await runStandaloneTurn({
       cwd: opts.projectPath,
       projectId: opts.projectId,
       prompt: opts.prompt,
       model: 'claude-sonnet-4-6',
-      appendSystemPrompt: skillPrompt,
+      appendSystemPrompt: systemParts.join('\n\n---\n\n'),
       maxTurns: 1,
       onProcess: (proc) => { processes.set(generationId, proc) },
     })
@@ -130,6 +132,7 @@ export function startDesignGeneration(
     prompt: string
     parentFrameCode?: string
     parentFramePrompt?: string
+    projectContext?: string
   },
   callbacks: GenerateCallbacks
 ): string {
@@ -170,6 +173,7 @@ export function startVariantGeneration(
     projectPath: string
     prompt: string
     count: number
+    projectContext?: string
   },
   callbacks: GenerateCallbacks
 ): string[] {
@@ -185,7 +189,7 @@ export function startVariantGeneration(
     setImmediate(() => {
       runGeneration(
         generationId,
-        { projectId: opts.projectId, projectPath: opts.projectPath, prompt: variantPrompt },
+        { projectId: opts.projectId, projectPath: opts.projectPath, prompt: variantPrompt, projectContext: opts.projectContext },
         callbacks
       ).catch((err: unknown) => {
         callbacks.onError(generationId, err instanceof Error ? err.message : String(err))
