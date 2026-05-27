@@ -2,7 +2,7 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { readdirSync, statSync, existsSync, mkdirSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
 import { join, relative, resolve, sep, dirname } from 'path'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
-import type { TreeNode, FileViewerData } from '../../shared/types'
+import type { TreeNode, FileViewerData, SaveArtifactOpts } from '../../shared/types'
 
 const SKIP = new Set([
   'node_modules', '.git', 'dist', 'out', '.next', 'build',
@@ -132,6 +132,20 @@ export function registerFsHandlers(): void {
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
       writeFileSync(resolved, content, 'utf-8')
       return { mtime: statSync(resolved).mtimeMs }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.CHAT_SAVE_ARTIFACT,
+    async (_e, opts: SaveArtifactOpts): Promise<void> => {
+      const win = BrowserWindow.getFocusedWindow()
+      const result = await dialog.showSaveDialog(win ?? new BrowserWindow(), {
+        title: 'Save artifact',
+        defaultPath: `artifact.${opts.defaultExt}`,
+        filters: [{ name: 'All Files', extensions: ['*'] }],
+      })
+      if (result.canceled || !result.filePath) return
+      writeFileSync(result.filePath, opts.content, 'utf-8')
     }
   )
 }

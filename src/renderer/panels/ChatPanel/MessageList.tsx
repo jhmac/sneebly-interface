@@ -4,7 +4,9 @@ import remarkGfm from 'remark-gfm'
 import { FileText, Wrench, ChevronDown, ArrowDown, X } from 'lucide-react'
 import type { ChatMessage } from '../../../shared/types'
 import CodeBlock from './CodeBlock'
+import ArtifactBlock from './ArtifactBlock'
 import { useActivityStore } from '../../state/activityStore'
+import type { ArtifactKind } from '../../../shared/types'
 
 interface Props {
   messages: ChatMessage[]
@@ -13,6 +15,16 @@ interface Props {
 
 const NEAR_BOTTOM_PX = 80
 const PREVIEW_CHARS = 110
+
+// Artifact rendering — minimum source chars before we render a live preview
+const ARTIFACT_MIN_CHARS = 100
+const ARTIFACT_LANG_MAP: Record<string, ArtifactKind> = {
+  html:    'html',
+  jsx:     'react',
+  tsx:     'react',
+  svg:     'svg',
+  mermaid: 'mermaid',
+}
 
 type Attachment = NonNullable<ChatMessage['attachments']>[0]
 
@@ -335,6 +347,15 @@ function AssistantMessage({
             const match = /language-(\w+)/.exec(className ?? '')
             const isBlock = !props.ref // block code has no inline marker
             const code = String(children).replace(/\n$/, '')
+
+            // Live artifact rendering for HTML / React / SVG / Mermaid blocks
+            if (match && isBlock && code.length >= ARTIFACT_MIN_CHARS) {
+              const artifactKind = ARTIFACT_LANG_MAP[match[1].toLowerCase()]
+              if (artifactKind) {
+                return <ArtifactBlock kind={artifactKind} code={code} />
+              }
+            }
+
             if (match || (isBlock && code.includes('\n'))) {
               return <CodeBlock language={match?.[1] ?? 'text'} code={code} />
             }

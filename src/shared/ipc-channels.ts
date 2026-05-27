@@ -128,4 +128,5 @@ export const IPC_CHANNELS = {
   REVIEW_AGENT_DONE: 'reviewAgent:done',
   REVIEW_AGENT_ACTION: 'reviewAgent:action',
   REVIEW_AGENT_FIX_STATE_CHANGED: 'reviewAgent:fix-state-changed',
+  CHAT_SAVE_ARTIFACT: 'chat:save-artifact',
 } as const

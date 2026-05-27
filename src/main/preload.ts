@@ -47,6 +47,7 @@ import type {
   ReviewInput,
   ReviewOutput,
   ReviewFixState,
+  SaveArtifactOpts,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -430,6 +431,10 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.REVIEW_AGENT_FIX_STATE_CHANGED, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.REVIEW_AGENT_FIX_STATE_CHANGED, h)
   },
+
+  // ── Artifacts ─────────────────────────────────────────────────────────────
+  chatSaveArtifact: (opts: SaveArtifactOpts): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHAT_SAVE_ARTIFACT, opts),
 }
 
 contextBridge.exposeInMainWorld('api', api)

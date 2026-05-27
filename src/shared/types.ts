@@ -191,6 +191,13 @@ export interface ChatAttachment {
   name: string
 }
 
+export type ArtifactKind = 'html' | 'react' | 'svg' | 'mermaid'
+
+export interface SaveArtifactOpts {
+  content: string
+  defaultExt: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -720,6 +727,9 @@ export interface ElectronAPI {
   reviewAgentOnThinking: (cb: (turnId: string, milestoneId: string, status: string) => void) => () => void
   reviewAgentOnDone: (cb: (turnId: string, milestoneId: string, result?: ReviewOutput, error?: string) => void) => () => void
   reviewAgentOnFixStateChanged: (cb: (milestoneId: string, state: ReviewFixState) => void) => () => void
+
+  // ── Artifacts ─────────────────────────────────────────────────────────────
+  chatSaveArtifact: (opts: SaveArtifactOpts) => Promise<void>
 }
 
 export interface AskSneeblyStartInput {

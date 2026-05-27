@@ -7,6 +7,15 @@ const TOTAL_WORD_CAP = 2_500
 const CONVENTIONS_WORD_CAP = 600
 const PHASE_CONTEXT_WORD_CAP = 200
 
+// Injected once on the first turn of each session so Claude knows Sneebly renders artifacts live.
+const ARTIFACT_HINT = `## Live artifact rendering
+
+Sneebly renders standalone HTML, React (JSX/TSX), SVG, and Mermaid code blocks live in a sandboxed iframe directly in the chat. Use these formats whenever generating visual output, UI prototypes, or diagrams:
+- \`\`\`html — complete HTML page or self-contained fragment
+- \`\`\`jsx or \`\`\`tsx — React component (React and ReactDOM are pre-loaded; omit all imports)
+- \`\`\`svg — inline SVG markup
+- \`\`\`mermaid — diagram syntax`
+
 export interface ComposerResult {
   text: string | null
   learnings: LearningsResult | null
@@ -21,7 +30,7 @@ export function composeSystemPromptAddendum(
     maxWords: number
   }
 ): ComposerResult {
-  const parts: string[] = []
+  const parts: string[] = [ARTIFACT_HINT]
   let learnings: LearningsResult | null = null
 
   // Slot 0: current phase + next milestones (orientation for every session)
