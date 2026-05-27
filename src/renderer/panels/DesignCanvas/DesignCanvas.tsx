@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   ReactFlow,
   Controls,
@@ -6,6 +6,7 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type Node,
   type Edge,
   type NodeChange,
@@ -16,6 +17,8 @@ import '@xyflow/react/dist/style.css'
 import DesignFrameNode, { type DesignFrameData } from './DesignFrame'
 import { useDesignStore, FRAME_WIDTH, FRAME_HEIGHT } from '../../state/designStore'
 
+// nodeTypes must be stable (module-level) — recreating it on every render
+// causes react-flow to unmount and remount all nodes.
 const nodeTypes = { designFrame: DesignFrameNode }
 
 // ─── DesignCanvas ─────────────────────────────────────────────────────────────
@@ -74,29 +77,31 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
   const [rfEdges, setRfEdges] = useEdgesState(storeEdges)
 
   // ── Sync store → react-flow ────────────────────────────────────────────────
-  // Full sync only when frame count changes (add/remove).
-  // For data-only changes (loading → resolved), update node data in-place
-  // to avoid resetting user-dragged positions.
+  // Full sync only when frame set changes (add/remove frames).
+  // For data-only changes (loading → resolved), update node data in-place so
+  // user-dragged positions aren't reset by the incoming store state.
 
   useEffect(() => {
     const currentIds = new Set(currentDesign?.frames.map((f) => f.id) ?? [])
     const prevIds = prevFrameIds.current
-    const countChanged =
+    const setChanged =
       currentIds.size !== prevIds.size ||
       [...currentIds].some((id) => !prevIds.has(id))
 
-    if (countChanged) {
+    if (setChanged) {
+      // Frame added or removed — full sync (positions come from the store)
       setRfNodes(storeNodes)
       setRfEdges(storeEdges)
       prevFrameIds.current = currentIds
     } else {
-      // Only update node data (code, loading state, error) — preserve positions
+      // Only data changed (code resolved, loading toggled) — patch data in-place
+      // so react-flow's internal dragged positions are preserved.
       setRfNodes((prev) =>
         prev.map((rfNode) => {
           const frame = currentDesign?.frames.find((f) => f.id === rfNode.id)
           if (!frame) return rfNode
           return {
-            ...rfNode,
+            ...rfNode,   // ← preserves rfNode.position from any prior drag
             draggable: !frame.loading,
             data: {
               ...rfNode.data,
@@ -130,8 +135,6 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
     [setRfNodes, moveFrame]
   )
 
-  // ── Empty state ────────────────────────────────────────────────────────────
-
   const isEmpty = !currentDesign || currentDesign.frames.length === 0
 
   return (
@@ -141,11 +144,8 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
         edges={rfEdges}
         onNodesChange={handleNodesChange}
         nodeTypes={nodeTypes}
-        fitView={!isEmpty}
-        fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}
         maxZoom={2}
-        // Disable default react-flow styles that conflict with dark theme
         colorMode="dark"
         proOptions={{ hideAttribution: true }}
       >
@@ -167,9 +167,33 @@ export default function DesignCanvas({ projectId, onIterateRequest }: Props) {
         />
 
         {isEmpty && <EmptyState />}
+
+        {/* Fits the viewport to the first batch of frames when they arrive */}
+        <FitViewOnFirstFrames frameCount={currentDesign?.frames.length ?? 0} />
       </ReactFlow>
     </div>
   )
+}
+
+// ─── FitViewOnFirstFrames ─────────────────────────────────────────────────────
+// useReactFlow() must be called inside the ReactFlow provider tree.
+// This component watches frame count and fits the viewport once when the first
+// frame finishes loading — giving the user a good initial view.
+
+function FitViewOnFirstFrames({ frameCount }: { frameCount: number }) {
+  const { fitView } = useReactFlow()
+  const prevCount = useRef(0)
+
+  useEffect(() => {
+    // Only trigger on the transition from 0 frames → first completed frame(s)
+    if (prevCount.current === 0 && frameCount > 0) {
+      // rAF defers until after react-flow has measured the new nodes
+      requestAnimationFrame(() => fitView({ padding: 0.2, duration: 300 }))
+    }
+    prevCount.current = frameCount
+  }, [frameCount, fitView])
+
+  return null
 }
 
 // ─── EmptyState ───────────────────────────────────────────────────────────────

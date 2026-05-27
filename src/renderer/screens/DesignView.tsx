@@ -3,10 +3,36 @@ import { Layout, Plus, Save, ChevronDown, Loader2, Check } from 'lucide-react'
 import DesignCanvas from '../panels/DesignCanvas/DesignCanvas'
 import { useDesignStore } from '../state/designStore'
 import type { DesignFile } from '../../shared/types'
+import type { DesignState } from '../state/designStore'
 
 interface Props {
   projectId: string
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Convert runtime design state to the persisted DesignFile shape.
+ *  Only includes frames that have finished generating (no placeholders / errors). */
+function toDesignFile(design: DesignState): DesignFile {
+  return {
+    name: design.name,
+    createdAt: design.createdAt,
+    updatedAt: design.updatedAt,
+    frames: design.frames
+      .filter((f) => !f.loading && !f.error && f.code)
+      .map((f) => ({
+        id: f.id,
+        position: f.position,
+        code: f.code,
+        kind: f.kind,
+        prompt: f.prompt,
+        parentFrameId: f.parentFrameId,
+        generatedAt: f.generatedAt,
+      })),
+  }
+}
+
+// ─── DesignView ───────────────────────────────────────────────────────────────
 
 export default function DesignView({ projectId }: Props) {
   const {
@@ -35,34 +61,27 @@ export default function DesignView({ projectId }: Props) {
   const [loadMenuOpen, setLoadMenuOpen] = useState(false)
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
+  // Runs when projectId changes (i.e. on first mount for this project).
+  // App.tsx already calls newDesign() on project switch, so currentDesign is
+  // always fresh here — we just need to load the designs list.
 
   useEffect(() => {
     window.api.designList(projectId).then(setDesigns).catch(console.error)
+    // If no design has been created yet (first visit before App.tsx effect ran),
+    // create one now as a fallback.
     if (!currentDesign) newDesign()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   // ── Auto-save (debounced 500ms after any change) ───────────────────────────
+  // Guard: skip if there are no completed frames to persist.
 
   useEffect(() => {
     if (!currentDesign) return
-    // Only save frames that have finished generating (not loading placeholders)
-    const framesDone = currentDesign.frames.filter((f) => !f.loading && !f.error && f.code)
-    if (framesDone.length === 0 && currentDesign.frames.length > 0) return
-    const file: DesignFile = {
-      name: currentDesign.name,
-      createdAt: currentDesign.createdAt,
-      updatedAt: currentDesign.updatedAt,
-      frames: framesDone.map((f) => ({
-        id: f.id,
-        position: f.position,
-        code: f.code,
-        kind: f.kind,
-        prompt: f.prompt,
-        parentFrameId: f.parentFrameId,
-        generatedAt: f.generatedAt,
-      })),
-    }
+    const file = toDesignFile(currentDesign)
+    // Don't write an empty-frames file — only save once at least one frame is done
+    if (file.frames.length === 0) return
+
     const timer = setTimeout(() => {
       window.api.designSave(projectId, file)
         .then(() => window.api.designList(projectId))
@@ -77,22 +96,7 @@ export default function DesignView({ projectId }: Props) {
 
   function handleManualSave() {
     if (!currentDesign) return
-    const file: DesignFile = {
-      name: currentDesign.name,
-      createdAt: currentDesign.createdAt,
-      updatedAt: Date.now(),
-      frames: currentDesign.frames
-        .filter((f) => !f.loading && !f.error && f.code)
-        .map((f) => ({
-          id: f.id,
-          position: f.position,
-          code: f.code,
-          kind: f.kind,
-          prompt: f.prompt,
-          parentFrameId: f.parentFrameId,
-          generatedAt: f.generatedAt,
-        })),
-    }
+    const file = toDesignFile({ ...currentDesign, updatedAt: Date.now() })
     window.api.designSave(projectId, file)
       .then(() => window.api.designList(projectId))
       .then(setDesigns)
@@ -105,6 +109,7 @@ export default function DesignView({ projectId }: Props) {
   }
 
   // ── Cmd+S ──────────────────────────────────────────────────────────────────
+  // Re-registers whenever currentDesign changes so the closure captures the latest value.
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -118,7 +123,8 @@ export default function DesignView({ projectId }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDesign])
 
-  // ── Cleanup timer on unmount ───────────────────────────────────────────────
+  // ── Cleanup ────────────────────────────────────────────────────────────────
+
   useEffect(() => () => {
     if (savedTimer.current) clearTimeout(savedTimer.current)
   }, [])
@@ -141,7 +147,7 @@ export default function DesignView({ projectId }: Props) {
 
     try {
       if (variantMode) {
-        const slots = prepareVariants(p, variantCount)
+        const slots = prepareVariants(variantCount)
         const { generationIds } = await window.api.designGenerateVariants({
           projectId,
           prompt: p,
@@ -156,7 +162,7 @@ export default function DesignView({ projectId }: Props) {
           }))
         )
       } else {
-        const slot = prepareGenerate(p)
+        const slot = prepareGenerate()
         const { generationId } = await window.api.designGenerate({ projectId, prompt: p })
         addLoadingFrames([{
           id: slot.frameId,
@@ -186,9 +192,11 @@ export default function DesignView({ projectId }: Props) {
     const parent = currentDesign?.frames.find((f) => f.id === iteratingFrameId)
     if (!parent || parent.loading || !parent.code) return
 
-    const slot = prepareIterate(iteratingFrameId, p)
+    const slot = prepareIterate(iteratingFrameId)
     if (!slot) return
 
+    // Capture before clearing state (React doesn't update synchronously)
+    const parentId = iteratingFrameId
     setIteratingFrameId(null)
     setIteratePrompt('')
 
@@ -196,7 +204,7 @@ export default function DesignView({ projectId }: Props) {
       const { generationId } = await window.api.designIterateFrame({
         projectId,
         prompt: p,
-        parentFrameId: iteratingFrameId,
+        parentFrameId: parentId,
         parentFrameCode: parent.code,
         parentFramePrompt: parent.prompt,
       })
@@ -205,7 +213,7 @@ export default function DesignView({ projectId }: Props) {
         generationId,
         prompt: p,
         position: slot.position,
-        parentFrameId: iteratingFrameId,
+        parentFrameId: parentId,
       }])
     } catch (err) {
       console.error('[DesignView] iterate error:', err)
@@ -320,10 +328,10 @@ export default function DesignView({ projectId }: Props) {
         <DesignCanvas projectId={projectId} onIterateRequest={handleIterateRequest} />
       </div>
 
-      {/* Iterate overlay — shown when a frame is selected for iteration */}
+      {/* Iterate overlay — shown when the user picks "Iterate" from a frame's menu */}
       {iteratingFrameId && (
         <div className="flex items-center gap-2 border-t border-amber-900/40 bg-amber-950/30 px-3 py-2">
-          <span className="text-xs text-amber-400 flex-shrink-0">Iterating on frame:</span>
+          <span className="flex-shrink-0 text-xs text-amber-400">Iterating on frame:</span>
           <input
             autoFocus
             placeholder="Describe your changes…"
@@ -362,7 +370,7 @@ export default function DesignView({ projectId }: Props) {
           disabled={generating}
         />
 
-        {/* Variant toggle + count */}
+        {/* Variant toggle + count selector */}
         <div className="flex flex-shrink-0 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1">
           <button
             onClick={() => setVariantMode((v) => !v)}
@@ -399,9 +407,7 @@ export default function DesignView({ projectId }: Props) {
           disabled={!prompt.trim() || generating}
           className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 disabled:opacity-40"
         >
-          {generating ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : null}
+          {generating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Generate
         </button>
       </div>

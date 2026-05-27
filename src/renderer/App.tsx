@@ -65,9 +65,12 @@ export default function App() {
     useReviewAgentStore.getState().clearForProject()
   }, [activeProjectId])
 
-  // Reset to workspace view when switching projects (Design canvas is per-project).
+  // Reset to workspace view when switching projects; also clear the design store so the
+  // next time the user opens the Design tab they start fresh for the new project (not
+  // stale frames from the previous one — auto-save has already persisted completed work).
   useEffect(() => {
     setView('workspace')
+    useDesignStore.getState().newDesign()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectId])
 

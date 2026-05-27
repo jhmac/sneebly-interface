@@ -25,6 +25,12 @@ export interface DesignState {
   frames: DesignFrameState[]
 }
 
+// ─── ID helpers ───────────────────────────────────────────────────────────────
+
+function newFrameId(): string {
+  return `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+}
+
 // ─── Layout helpers ───────────────────────────────────────────────────────────
 
 export const FRAME_WIDTH = 440
@@ -96,26 +102,20 @@ interface DesignStore {
 
   // ── Generation helpers ───────────────────────────────────────────────────
   /**
-   * Generate a single frame at the bottom of the canvas.
-   * Returns the generationId so the component can register the IPC call.
+   * Allocate a frame slot at the bottom of the canvas for a single generation.
+   * Returns { frameId, position } to pair with the generationId from IPC.
    */
-  prepareGenerate: (prompt: string) => { frameId: string; position: { x: number; y: number } }
+  prepareGenerate: () => { frameId: string; position: { x: number; y: number } }
   /**
-   * Generate N variant frames in a horizontal row.
-   * Returns an array of { frameId, position } to pass alongside the IPC call.
+   * Allocate N frame slots in a horizontal row for variant generation.
+   * Returns array of { frameId, position } in the same order as generationIds from IPC.
    */
-  prepareVariants: (
-    prompt: string,
-    count: number
-  ) => Array<{ frameId: string; position: { x: number; y: number } }>
+  prepareVariants: (count: number) => Array<{ frameId: string; position: { x: number; y: number } }>
   /**
-   * Prepare an iteration frame next to the parent.
-   * Returns { frameId, position }.
+   * Allocate an iteration frame slot next to the parent.
+   * Returns { frameId, position }, or null if the parent frame doesn't exist.
    */
-  prepareIterate: (
-    parentFrameId: string,
-    prompt: string
-  ) => { frameId: string; position: { x: number; y: number } } | null
+  prepareIterate: (parentFrameId: string) => { frameId: string; position: { x: number; y: number } } | null
 }
 
 export const useDesignStore = create<DesignStore>((set, get) => ({
@@ -222,7 +222,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       if (!src) return {}
       const copy: DesignFrameState = {
         ...src,
-        id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: newFrameId(),
         position: { x: src.position.x + FRAME_WIDTH + FRAME_H_GAP * 2, y: src.position.y },
         generatedAt: Date.now(),
         loading: false,
@@ -247,31 +247,30 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       return { currentDesign: { ...s.currentDesign, frames, updatedAt: Date.now() } }
     }),
 
-  prepareGenerate: (prompt) => {
-    const { currentDesign } = get()
-    const frames = currentDesign?.frames ?? []
-    const position = nextRow(frames)
-    const frameId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    return { frameId, position }
+  prepareGenerate: () => {
+    const frames = get().currentDesign?.frames ?? []
+    return {
+      frameId: newFrameId(),
+      position: nextRow(frames),
+    }
   },
 
-  prepareVariants: (prompt, count) => {
-    const { currentDesign } = get()
-    const frames = currentDesign?.frames ?? []
+  prepareVariants: (count) => {
+    const frames = get().currentDesign?.frames ?? []
     const { y } = nextRow(frames)
-    const positions = variantPositions(count, y)
-    return positions.map((position) => ({
-      frameId: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    // Use index in the ID so variants generated in the same millisecond are still unique
+    return variantPositions(count, y).map((position, i) => ({
+      frameId: `f-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`,
       position,
     }))
   },
 
-  prepareIterate: (parentFrameId, _prompt) => {
-    const { currentDesign } = get()
-    const parent = currentDesign?.frames.find((f) => f.id === parentFrameId)
+  prepareIterate: (parentFrameId) => {
+    const parent = get().currentDesign?.frames.find((f) => f.id === parentFrameId)
     if (!parent) return null
-    const position = iterationPosition(parent)
-    const frameId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    return { frameId, position }
+    return {
+      frameId: newFrameId(),
+      position: iterationPosition(parent),
+    }
   },
 }))
