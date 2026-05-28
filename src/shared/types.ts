@@ -607,6 +607,8 @@ export interface AppSettings {
   deciderEnabled: boolean
   deciderModel: ModelName
   deciderAutoFire: boolean
+  specAcceptorEnabled: boolean
+  specAcceptorModel: ModelName
 }
 
 export interface SessionUsage {

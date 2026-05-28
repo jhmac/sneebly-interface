@@ -25,6 +25,7 @@ import { appendEvent } from './event-stream'
 import { runPlaywrightVerification } from './phase-playwright-runner'
 import { fireReview } from './review-agent'
 import { runPreflightDecider } from './decider-orchestrator'
+import { runSpecAcceptor } from './spec-acceptor-orchestrator'
 
 const execFileAsync = promisify(execFile)
 const GIT_MAX_BUFFER = 16 * 1024 * 1024  // porcelain output can be large for codegen-heavy milestones
@@ -261,6 +262,7 @@ export async function startRun(
   projectId: string,
   config: PhaseRunConfig
 ): Promise<void> {
+  console.log(`[phase-runner] startRun batchSize=${config.batchSize} startFrom=${config.startFromMilestoneId}`)
   const existing = runStates.get(projectId)
   if (existing && existing.status === 'building') {
     throw new Error('A phase run is already in progress for this project')
@@ -402,6 +404,7 @@ async function driveRun(
         buildError = error
         buildMetrics = metrics
         if (error) {
+          console.log(`[phase-runner] pausing — build error on ${milestoneId}: ${error}`)
           setRunState(projectId, { ...getRunState(projectId), status: 'paused', lastError: error })
         }
         resolve()
@@ -414,6 +417,7 @@ async function driveRun(
 
   // Detect silent failure: no error but Claude made no file changes
   if (!buildError && buildMetrics && buildMetrics.filesTouched.length === 0 && buildMetrics.linesChanged === 0 && !buildMetrics.wasAborted) {
+    console.log(`[phase-runner] pausing — silent failure on ${milestoneId} (no file changes)`)
     setRunState(projectId, {
       ...getRunState(projectId),
       status: 'paused',
@@ -488,6 +492,7 @@ async function driveRun(
     if (smokeResult === null) {
       console.warn('[phase-runner] smoke test skipped — dev server not running or browser check failed')
     } else if (!smokeResult.passed) {
+      console.log(`[phase-runner] pausing — smoke test failed on ${milestoneId}: ${smokeResult.reason}`)
       setRunState(projectId, {
         ...getRunState(projectId),
         status: 'paused',
@@ -497,7 +502,83 @@ async function driveRun(
     }
   }
 
-  // Mark the milestone complete after build, optional review, and smoke test succeed
+  // ── Spec Acceptor gate ──────────────────────────────────────────────────────
+  // Verify the implementation actually satisfies the spec before marking done.
+  // On any failure (disabled, no spec, agent error, parse error) we pass through —
+  // the original behaviour (mark complete) is always the graceful fallback.
+  //
+  // If the first check fails, one targeted fix turn runs (in the same Claude
+  // session so it has full build context), then we re-verify. Still failing
+  // after the fix → pause so the human can inspect; do NOT mark complete.
+  if ((appSettings['specAcceptorEnabled'] as boolean | undefined) ?? true) {
+    const changedFiles = buildMetrics?.filesTouched ?? []
+    let acceptorResult = await runSpecAcceptor(projectId, milestoneId, changedFiles)
+
+    if (acceptorResult && !acceptorResult.pass) {
+      console.log(`[phase-runner] spec acceptor FAIL for ${milestoneId} — running fix turn`)
+
+      // Targeted fix turn: same session, Opus model, spec-specific issues only.
+      const fixClaudeId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
+      const issueList = acceptorResult.issues.map((i) => `- ${i}`).join('\n')
+      const fixMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        text: [
+          `[Spec acceptor] Your implementation of "${milestone.text}" is missing these requirements:\n`,
+          issueList,
+          `\nFix each issue above. Focus only on what is listed — do not change anything else.`,
+        ].join('\n'),
+        ts: Date.now(),
+      }
+      sessionStore.appendMessage(project.path, sessionId, fixMsg)
+      sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, fixMsg)
+      sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: true })
+
+      await new Promise<void>((resolve) => {
+        startTurn(
+          {
+            cwd: project.path,
+            projectId,
+            sneeblySessionId: sessionId,
+            claudeCodeSessionId: fixClaudeId,
+            prompt: fixMsg.text,
+            model: escalationModel,
+            appendSystemPrompt: systemPromptAddendum ?? undefined,
+            recordEvents,
+            recordUsage,
+          },
+          (event) => { pushAgentEvent(event, projectId) },
+          (newClaudeId, _fixError) => {
+            sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: false })
+            if (newClaudeId) store.set(`claudeSessionIds.${sessionId}`, newClaudeId)
+            // Fix turn errors don't block re-verify — resolve regardless.
+            resolve()
+          }
+        )
+      })
+
+      if (getRunState(projectId).status !== 'building') return
+
+      // Re-verify after fix. null = acceptor degraded gracefully → pass through.
+      acceptorResult = await runSpecAcceptor(projectId, milestoneId, changedFiles)
+
+      if (acceptorResult && !acceptorResult.pass) {
+        const firstIssue = acceptorResult.issues[0] ?? ''
+        const errorMsg = `Spec acceptor: ${acceptorResult.summary}${firstIssue ? ` — ${firstIssue}` : ''}`
+        console.log(`[phase-runner] pausing — spec acceptor still failing after fix on ${milestoneId}: ${errorMsg}`)
+        setRunState(projectId, {
+          ...getRunState(projectId),
+          status: 'paused',
+          lastError: errorMsg,
+        })
+        return
+      }
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // Mark the milestone complete: build passed, review passed, smoke test passed,
+  // and the spec acceptor confirmed the implementation satisfies the spec.
   markMilestoneComplete(project.path, milestoneId)
 
   // Auto-commit the milestone's changes so the run is traceable in git history.
@@ -596,6 +677,8 @@ async function driveRun(
   const completedInBatch = stateAfterBuild.completedInBatch + 1
   const batchSize = stateAfterBuild.batchSize
 
+  console.log(`[phase-runner] milestone ${milestoneId} done — completedInBatch=${completedInBatch} batchSize=${batchSize}`)
+
   setRunState(projectId, {
     ...stateAfterBuild,
     completedInBatch,
@@ -603,11 +686,14 @@ async function driveRun(
   })
 
   // Pause if the batch limit is reached.
-  // Only treat checkpoints as stop points when batchSize === 0 ("Until next checkpoint" mode).
+  // batchSize -1 = all remaining (no limit); 0 = until next checkpoint; >0 = exact count.
   const hitBatchLimit = batchSize > 0 && completedInBatch >= batchSize
   const hitCheckpoint = batchSize === 0 && milestone.suggestedCheckpoint
 
+  console.log(`[phase-runner] batch check — hitBatchLimit=${hitBatchLimit} hitCheckpoint=${hitCheckpoint} checkpoint=${milestone.suggestedCheckpoint}`)
+
   if (hitBatchLimit || hitCheckpoint) {
+    console.log(`[phase-runner] pausing after ${milestoneId} (hitBatchLimit=${hitBatchLimit} hitCheckpoint=${hitCheckpoint})`)
     setRunState(projectId, {
       ...getRunState(projectId),
       status: 'paused',
