@@ -375,7 +375,7 @@ export default function DesignView({ projectId }: Props) {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full flex-col bg-zinc-950">
+    <div className="flex h-full flex-1 flex-col overflow-hidden bg-zinc-950">
       {/* Top bar */}
       <div className="flex h-10 flex-shrink-0 items-center gap-2 border-b border-zinc-800 px-3">
         <button

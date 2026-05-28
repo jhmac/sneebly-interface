@@ -187,7 +187,15 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
         const errorMessages: string[] = []
         for (const e of events) {
           if (e.type === 'error') {
+            // { type: "error", message: "..." } — CLI-level error
             const msg = (e as AgentEvent & { message?: string }).message
+            if (msg) errorMessages.push(msg)
+          } else if (e.type === 'result' && e.subtype === 'error') {
+            // { type: "result", subtype: "error", error: "..." } — API-level error
+            // (context window exceeded, rate limit, auth, etc.)
+            // This is the primary carrier of structured errors from claude -p;
+            // the type:"error" branch above only fires for CLI-layer failures.
+            const msg = (e as AgentEvent & { error?: string }).error
             if (msg) errorMessages.push(msg)
           }
         }

@@ -9,6 +9,10 @@ interface ProjectContext {
   tailwindConfig?: string
 }
 
+// Cap CONTEXT.md at 20 KB — files like Plumb's (30-60 KB) would otherwise push
+// the design-generation turn past the context window limit.
+const CONTEXT_MD_MAX_CHARS = 20_000
+
 // Cap tailwind config at 4 KB — large generated configs would consume too much
 // of the context budget without adding proportional value to generation quality.
 const TAILWIND_MAX_CHARS = 4_000
@@ -68,7 +72,10 @@ export function formatProjectContext(projectPath: string): string {
   const parts: string[] = []
 
   if (ctx.contextMd) {
-    parts.push(`## Project context\n${ctx.contextMd}`)
+    const contextMd = ctx.contextMd.length > CONTEXT_MD_MAX_CHARS
+      ? ctx.contextMd.slice(0, CONTEXT_MD_MAX_CHARS) + '\n_(truncated — CONTEXT.md exceeds 20 KB)_'
+      : ctx.contextMd
+    parts.push(`## Project context\n${contextMd}`)
   }
   if (ctx.dependencies) {
     parts.push(`## Installed packages\nUse only packages from this list where appropriate:\n${ctx.dependencies}`)
