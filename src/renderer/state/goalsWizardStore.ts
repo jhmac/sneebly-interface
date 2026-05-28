@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { GrillMessage } from '../../shared/types'
 
-export type WizardStage = 'path-pick' | 'import' | 'hook' | 'grill' | 'generating' | 'output' | 'stack-report'
+export type WizardStage = 'path-pick' | 'import' | 'hook' | 'grill' | 'generating' | 'output' | 'stack-report' | 'github-connect'
 
 interface GoalsWizardStore {
   open: boolean

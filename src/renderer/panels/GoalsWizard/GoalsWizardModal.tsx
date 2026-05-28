@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Copy, Check, Sparkles, ArrowRight, RotateCcw, FilePlus2, FolderInput, RefreshCw } from 'lucide-react'
+import { X, Copy, Check, Sparkles, ArrowRight, RotateCcw, FilePlus2, FolderInput, RefreshCw, GitBranch, CheckCircle, AlertCircle, Loader } from 'lucide-react'
 import { useGoalsWizardStore } from '../../state/goalsWizardStore'
 import { useProjectStore } from '../../state/projectStore'
+import { useGitHubStore } from '../../state/githubStore'
+import type { GitHubUser } from '../../../shared/types'
 
 // Pasted by the user into their existing AI coding tool (Replit Agent, Cursor,
 // Lovable, Claude Code). Emits GOALS.md in Sneebly's canonical format — the same
@@ -209,7 +211,7 @@ function PathPickStage() {
 // ── Stage: Import existing project ──────────────────────────────────────────────
 
 function ImportStage() {
-  const { setStage, closeWizard } = useGoalsWizardStore()
+  const { setStage } = useGoalsWizardStore()
   const { activeProjectId, projects } = useProjectStore()
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
   const [copied, copy] = useCopy(IMPORT_META_PROMPT)
@@ -233,7 +235,7 @@ function ImportStage() {
         } catch (e) {
           console.error('[GoalsWizard] skill seeding failed:', e)
         }
-        closeWizard()
+        setStage('github-connect')
       } else {
         setNote(
           pull.ok
@@ -775,6 +777,169 @@ Database: PostgreSQL via Supabase
   )
 }
 
+// ── Stage: GitHub connect ─────────────────────────────────────────────────────
+
+type GitHubPhase = 'idle' | 'waiting-user' | 'polling' | 'connected' | 'error'
+
+function GitHubConnectStage() {
+  const { closeWizard } = useGoalsWizardStore()
+  const { connected, user } = useGitHubStore()
+
+  const [phase, setPhase] = useState<GitHubPhase>(connected ? 'connected' : 'idle')
+  const [userCode, setUserCode] = useState<string | null>(null)
+  const [verificationUri, setVerificationUri] = useState<string | null>(null)
+  const [connectedUser, setConnectedUser] = useState<GitHubUser | null>(user)
+  const [error, setError] = useState<string | null>(null)
+
+  async function startAuth() {
+    setPhase('waiting-user')
+    setError(null)
+    const unsub = window.api.githubOnUserCode(({ code, verificationUri: uri }) => {
+      setUserCode(code)
+      setVerificationUri(uri)
+      setPhase('polling')
+    })
+    try {
+      const result = await window.api.githubStartOAuth()
+      unsub()
+      if (result.success && result.user) {
+        useGitHubStore.getState().setConnected(result.user)
+        setConnectedUser(result.user)
+        setPhase('connected')
+      } else {
+        setError(result.error ?? 'Authorization failed')
+        setPhase('error')
+      }
+    } catch (err) {
+      unsub()
+      setError(err instanceof Error ? err.message : String(err))
+      setPhase('error')
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-8">
+      <div className="w-full max-w-sm text-center">
+        <div className="mb-6">
+          <div className="mb-3 flex items-center justify-center gap-2">
+            <GitBranch className="h-5 w-5 text-indigo-400" />
+            <span className="text-sm font-medium uppercase tracking-widest text-indigo-400">GitHub</span>
+          </div>
+          <h1 className="text-2xl font-semibold text-zinc-100">Connect to GitHub</h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            So Sneebly can push, pull, and create PRs on your behalf.
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center gap-5">
+          {phase === 'idle' && (
+            <>
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800">
+                <GitBranch className="h-8 w-8 text-zinc-300" />
+              </div>
+              <div className="flex flex-col gap-2 w-full">
+                <button
+                  onClick={startAuth}
+                  className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
+                >
+                  Connect GitHub
+                </button>
+                <button
+                  onClick={closeWizard}
+                  className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                >
+                  Skip for now
+                </button>
+              </div>
+            </>
+          )}
+
+          {(phase === 'waiting-user' || phase === 'polling') && (
+            <>
+              <Loader className="h-8 w-8 animate-spin text-zinc-500" />
+              {userCode ? (
+                <div className="flex flex-col items-center gap-3">
+                  <p className="text-xs text-zinc-500">
+                    Enter this code at{' '}
+                    <button
+                      onClick={() => verificationUri && window.api.shellOpenExternal(verificationUri)}
+                      className="text-indigo-400 underline hover:text-indigo-300"
+                    >
+                      github.com/login/device
+                    </button>
+                  </p>
+                  <div className="rounded-lg bg-zinc-800 px-6 py-3">
+                    <p className="font-mono text-2xl font-bold tracking-[0.2em] text-zinc-100">{userCode}</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(userCode)
+                    }}
+                    className="text-xs text-zinc-500 underline hover:text-zinc-300 transition-colors"
+                  >
+                    Copy code
+                  </button>
+                  <p className="text-xs text-zinc-600">Waiting for you to authorize…</p>
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500">Opening GitHub…</p>
+              )}
+            </>
+          )}
+
+          {phase === 'connected' && connectedUser && (
+            <>
+              <CheckCircle className="h-10 w-10 text-green-500" />
+              <div className="flex flex-col items-center gap-2">
+                {connectedUser.avatarUrl && (
+                  <img
+                    src={connectedUser.avatarUrl}
+                    alt={connectedUser.login}
+                    className="h-12 w-12 rounded-full border border-zinc-700"
+                  />
+                )}
+                <p className="text-sm font-medium text-zinc-200">
+                  Connected as <span className="font-mono text-zinc-100">@{connectedUser.login}</span>
+                </p>
+              </div>
+              <button
+                onClick={closeWizard}
+                className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
+              >
+                Finish
+              </button>
+            </>
+          )}
+
+          {phase === 'error' && (
+            <>
+              <AlertCircle className="h-10 w-10 text-red-500" />
+              <div>
+                <p className="text-sm font-medium text-zinc-200">Authorization failed</p>
+                {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setPhase('idle'); setError(null) }}
+                  className="rounded-lg bg-zinc-700 px-4 py-2 text-xs font-medium text-zinc-100 transition-colors hover:bg-zinc-600"
+                >
+                  Try again
+                </button>
+                <button
+                  onClick={closeWizard}
+                  className="rounded-lg border border-zinc-700 px-4 py-2 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+                >
+                  Skip
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main modal ────────────────────────────────────────────────────────────────
 
 const STAGE_TITLES: Record<string, string> = {
@@ -785,6 +950,7 @@ const STAGE_TITLES: Record<string, string> = {
   generating: 'Generating',
   output: 'Your Documents',
   'stack-report': 'Stack Report',
+  'github-connect': 'Connect GitHub',
 }
 
 export default function GoalsWizardModal() {
@@ -800,7 +966,7 @@ export default function GoalsWizardModal() {
           <span className="text-sm font-medium text-zinc-300">{STAGE_TITLES[stage] ?? 'Goals Wizard'}</span>
         </div>
         <div className="flex items-center gap-2">
-          {stage !== 'path-pick' && stage !== 'generating' && (
+          {stage !== 'path-pick' && stage !== 'generating' && stage !== 'github-connect' && (
             <button
               onClick={reset}
               title="Start over"
@@ -829,6 +995,7 @@ export default function GoalsWizardModal() {
         {stage === 'generating' && <GeneratingStage />}
         {stage === 'output' && <OutputStage />}
         {stage === 'stack-report' && <StackReportStage />}
+        {stage === 'github-connect' && <GitHubConnectStage />}
       </div>
     </div>
   )
