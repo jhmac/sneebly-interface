@@ -352,13 +352,18 @@ export interface AgentUserEvent {
 
 export interface AgentResultEvent {
   type: 'result'
-  subtype: 'success' | 'error'
-  result?: string
+  // Wire format emits several error subtypes beyond 'error' — e.g. 'error_max_turns'
+  // when --max-turns is exceeded. Typed as a string union with known values so new
+  // subtypes don't cause TypeScript narrowing failures.
+  subtype: 'success' | 'error' | 'error_max_turns' | (string & {})
+  is_error?: boolean          // true for all error subtypes
+  result?: string             // present on success; absent on error subtypes
+  error?: string              // API-level error message (subtype 'error')
+  errors?: string[]           // error messages array (subtype 'error_max_turns' etc.)
   session_id?: string
   total_cost_usd?: number
   usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }
   duration_ms?: number
-  error?: string
 }
 
 export interface AgentErrorEvent {
@@ -609,6 +614,7 @@ export interface AppSettings {
   deciderAutoFire: boolean
   specAcceptorEnabled: boolean
   specAcceptorModel: ModelName
+  compileCheckEnabled: boolean
 }
 
 export interface SessionUsage {
