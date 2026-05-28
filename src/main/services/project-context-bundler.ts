@@ -72,8 +72,11 @@ export function formatProjectContext(projectPath: string): string {
   const parts: string[] = []
 
   if (ctx.contextMd) {
+    // Truncate at the last newline before the cap so the cut is never mid-line.
+    // Falls back to a hard character slice if the file has no newline before that point.
+    const cut = ctx.contextMd.lastIndexOf('\n', CONTEXT_MD_MAX_CHARS)
     const contextMd = ctx.contextMd.length > CONTEXT_MD_MAX_CHARS
-      ? ctx.contextMd.slice(0, CONTEXT_MD_MAX_CHARS) + '\n_(truncated — CONTEXT.md exceeds 20 KB)_'
+      ? ctx.contextMd.slice(0, cut > 0 ? cut : CONTEXT_MD_MAX_CHARS) + '\n_(truncated — CONTEXT.md exceeds 20 KB)_'
       : ctx.contextMd
     parts.push(`## Project context\n${contextMd}`)
   }

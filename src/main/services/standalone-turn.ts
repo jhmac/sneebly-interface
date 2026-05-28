@@ -136,7 +136,7 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
     opts.onProcess?.(proc)
 
     let stderrBuf = ''
-    proc.stderr?.on('data', (chunk: Buffer) => {
+    proc.stderr!.on('data', (chunk: Buffer) => {
       stderrBuf += chunk.toString()
       if (stderrBuf.length > STDERR_CAP) {
         stderrBuf = stderrBuf.slice(stderrBuf.length - STDERR_CAP)
