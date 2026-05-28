@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   deciderAutoFire: false,
   specAcceptorEnabled: true,
   specAcceptorModel: 'claude-sonnet-4-6',
+  compileCheckEnabled: true,
 }
 
 export function registerSettingsHandlers(): void {
