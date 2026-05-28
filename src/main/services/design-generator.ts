@@ -98,7 +98,11 @@ async function runGeneration(
       prompt: opts.prompt,
       model: 'claude-sonnet-4-6',
       appendSystemPrompt: systemParts.join('\n\n---\n\n'),
-      maxTurns: 1,
+      // Turn accounting: each assistant message (text OR tool_use) consumes one turn.
+      // maxTurns: 1 fails when the model takes any sequential thinking/output steps.
+      // maxTurns: 5 covers extended thinking + a follow-up text turn. Matches the
+      // fix applied to decider-agent.ts in pass 1 self-review.
+      maxTurns: 5,
       onProcess: (proc) => { processes.set(generationId, proc) },
     })
     processes.delete(generationId)
