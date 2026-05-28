@@ -182,8 +182,10 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
       const durationMs = Date.now() - start
       let error: string | undefined
       if (code !== 0 && !assistantText) {
-        // Prefer structured error messages from the JSON event stream — claude-code
-        // emits { type: "error", message: "..." } on stdout, not on stderr.
+        // Prefer structured error messages from the JSON event stream.
+        // Two shapes: { type: "error", message: "..." } (CLI-layer errors, emitted on stdout)
+        // and { type: "result", subtype: "error", error: "..." } (API-layer errors: context
+        // window exceeded, rate limit, auth failures — the primary carrier from claude -p).
         const errorMessages: string[] = []
         for (const e of events) {
           if (e.type === 'error') {

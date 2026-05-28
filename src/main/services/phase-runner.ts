@@ -26,6 +26,7 @@ import { runPlaywrightVerification } from './phase-playwright-runner'
 import { fireReview } from './review-agent'
 import { runPreflightDecider } from './decider-orchestrator'
 import { runSpecAcceptor } from './spec-acceptor-orchestrator'
+import { runCompileCheck, ERROR_LINE_RE } from './compile-checker'
 
 const execFileAsync = promisify(execFile)
 const GIT_MAX_BUFFER = 16 * 1024 * 1024  // porcelain output can be large for codegen-heavy milestones
@@ -425,6 +426,99 @@ async function driveRun(
     })
     return
   }
+
+  // ── TypeScript compile check ──────────────────────────────────────────────
+  // Run tsc --noEmit before the Opus review so Claude reviews clean code.
+  // ALL errors found — pre-existing or newly introduced — are handed to a
+  // targeted fix turn. This is the point: progressive TS cleanup across builds.
+  //
+  // Returns null → not a TS project, no local tsc, or timeout → pass-through.
+  // A fix turn runs in-session (same CC session, Opus) so Claude has full context.
+  // Re-verify always runs after the fix, regardless of what files were touched.
+  // Still failing after one fix attempt → pause; milestone is NOT marked complete.
+  if (appSettings['compileCheckEnabled'] !== false) {
+    const compileResult = await runCompileCheck(project.path)
+    if (getRunState(projectId).status !== 'building') return
+
+    if (compileResult !== null) {
+      console.log(
+        `[phase-runner] compile check for ${milestoneId}:`,
+        compileResult.success
+          ? `PASS (${compileResult.durationMs}ms)`
+          : `FAIL — ${compileResult.errorCount} error${compileResult.errorCount !== 1 ? 's' : ''} in ${compileResult.durationMs}ms`,
+      )
+
+      if (!compileResult.success) {
+        const fixClaudeId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
+        const noSuppressNote = `Do not suppress errors with \`any\`, \`@ts-ignore\`, or \`as unknown as X\` casts unless the type is genuinely unknowable (e.g. \`JSON.parse\` return, dynamic \`require\`). These errors may be pre-existing — fix them anyway.`
+        const fixMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'user',
+          text: [
+            `[TypeScript] The project has type errors:`,
+            ``,
+            compileResult.errorText,
+            ``,
+            compileResult.wasCapped
+              ? `Fix all visible errors above. The output was capped — additional errors may appear after these are resolved; the checker will re-run automatically. ${noSuppressNote}`
+              : `Fix each error above. ${noSuppressNote}`,
+          ].join('\n'),
+          ts: Date.now(),
+        }
+        sessionStore.appendMessage(project.path, sessionId, fixMsg)
+        sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, fixMsg)
+        sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: true })
+
+        await new Promise<void>((resolve) => {
+          startTurn(
+            {
+              cwd: project.path,
+              projectId,
+              sneeblySessionId: sessionId,
+              claudeCodeSessionId: fixClaudeId,
+              prompt: fixMsg.text,
+              model: escalationModel,
+              appendSystemPrompt: systemPromptAddendum ?? undefined,
+              recordEvents,
+              recordUsage,
+            },
+            (event) => { pushAgentEvent(event, projectId) },
+            (newClaudeId, _fixError) => {
+              sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: false })
+              if (newClaudeId) store.set(`claudeSessionIds.${sessionId}`, newClaudeId)
+              // Fix-turn errors don't block re-verify — resolve regardless.
+              resolve()
+            }
+          )
+        })
+
+        if (getRunState(projectId).status !== 'building') return
+
+        // Re-verify: read fresh state from disk, not from buildMetrics.
+        const reCheckResult = await runCompileCheck(project.path)
+        if (getRunState(projectId).status !== 'building') return
+
+        if (reCheckResult === null) {
+          console.warn(`[phase-runner] compile re-verify returned null for ${milestoneId} — treating as pass-through`)
+        } else if (reCheckResult.success) {
+          console.log(`[phase-runner] compile re-verify PASS for ${milestoneId} (${reCheckResult.durationMs}ms)`)
+        } else {
+          const firstErrorLine = reCheckResult.errorText.split('\n').find((l) => ERROR_LINE_RE.test(l)) ?? ''
+          const errorMsg =
+            `TypeScript: ${reCheckResult.errorCount} error${reCheckResult.errorCount !== 1 ? 's' : ''} after fix attempt` +
+            (firstErrorLine ? ` — ${firstErrorLine.slice(0, 120)}` : '')
+          console.log(`[phase-runner] pausing — compile check still failing after fix on ${milestoneId}: ${errorMsg}`)
+          setRunState(projectId, {
+            ...getRunState(projectId),
+            status: 'paused',
+            lastError: errorMsg,
+          })
+          return
+        }
+      }
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────────
 
   // Auto-review with Opus: re-read what was just built, fix critical issues
   if (config.autoReview) {
