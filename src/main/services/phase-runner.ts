@@ -503,76 +503,79 @@ async function driveRun(
   }
 
   // ── Spec Acceptor gate ──────────────────────────────────────────────────────
-  // Verify the implementation actually satisfies the spec before marking done.
-  // On any failure (disabled, no spec, agent error, parse error) we pass through —
-  // the original behaviour (mark complete) is always the graceful fallback.
+  // Verify the implementation satisfies the spec before marking done.
+  // runSpecAcceptor returns null when disabled, when there is no spec, or on any
+  // agent/parse failure — null is treated as pass-through in every branch below,
+  // so builds are never blocked by acceptor failures. The enabled/disabled check
+  // lives inside the orchestrator; no need to duplicate it here.
   //
-  // If the first check fails, one targeted fix turn runs (in the same Claude
-  // session so it has full build context), then we re-verify. Still failing
-  // after the fix → pause so the human can inspect; do NOT mark complete.
-  if ((appSettings['specAcceptorEnabled'] as boolean | undefined) ?? true) {
-    const changedFiles = buildMetrics?.filesTouched ?? []
-    let acceptorResult = await runSpecAcceptor(projectId, milestoneId, changedFiles)
+  // If the first check fails, one targeted fix turn runs (same CC session so
+  // Claude has full build context), then we re-verify. Still failing after the
+  // fix → pause; the milestone is NOT marked complete until a human resolves it.
+  const changedFiles = buildMetrics?.filesTouched ?? []
+  let acceptorResult = await runSpecAcceptor(projectId, milestoneId, changedFiles)
+
+  if (acceptorResult && !acceptorResult.pass) {
+    console.log(`[phase-runner] spec acceptor FAIL for ${milestoneId} — running fix turn`)
+
+    // Targeted fix turn: same session, Opus model, spec-specific issues only.
+    const fixClaudeId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
+    const issueList = acceptorResult.issues.map((i) => `- ${i}`).join('\n')
+    const fixMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      text: [
+        `[Spec acceptor] Your implementation of "${milestone.text}" is missing these requirements:`,
+        issueList,
+        `Fix each issue above. Focus only on what is listed — do not change anything else.`,
+      ].join('\n\n'),
+      ts: Date.now(),
+    }
+    sessionStore.appendMessage(project.path, sessionId, fixMsg)
+    sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, fixMsg)
+    sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: true })
+
+    await new Promise<void>((resolve) => {
+      startTurn(
+        {
+          cwd: project.path,
+          projectId,
+          sneeblySessionId: sessionId,
+          claudeCodeSessionId: fixClaudeId,
+          prompt: fixMsg.text,
+          model: escalationModel,
+          appendSystemPrompt: systemPromptAddendum ?? undefined,
+          recordEvents,
+          recordUsage,
+        },
+        (event) => { pushAgentEvent(event, projectId) },
+        (newClaudeId, _fixError) => {
+          sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: false })
+          if (newClaudeId) store.set(`claudeSessionIds.${sessionId}`, newClaudeId)
+          // Fix turn errors don't block re-verify — resolve regardless.
+          resolve()
+        }
+      )
+    })
+
+    if (getRunState(projectId).status !== 'building') return
+
+    // Re-verify with the same changedFiles hint list. This is correct: the agent
+    // reads files from disk via the Read tool, so it sees the post-fix state even
+    // though the hint list reflects the original build's touched files. Any new
+    // files written by the fix turn will be found by Grep if needed.
+    acceptorResult = await runSpecAcceptor(projectId, milestoneId, changedFiles)
 
     if (acceptorResult && !acceptorResult.pass) {
-      console.log(`[phase-runner] spec acceptor FAIL for ${milestoneId} — running fix turn`)
-
-      // Targeted fix turn: same session, Opus model, spec-specific issues only.
-      const fixClaudeId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
-      const issueList = acceptorResult.issues.map((i) => `- ${i}`).join('\n')
-      const fixMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        text: [
-          `[Spec acceptor] Your implementation of "${milestone.text}" is missing these requirements:\n`,
-          issueList,
-          `\nFix each issue above. Focus only on what is listed — do not change anything else.`,
-        ].join('\n'),
-        ts: Date.now(),
-      }
-      sessionStore.appendMessage(project.path, sessionId, fixMsg)
-      sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_MESSAGE_APPENDED, sessionId, fixMsg)
-      sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: true })
-
-      await new Promise<void>((resolve) => {
-        startTurn(
-          {
-            cwd: project.path,
-            projectId,
-            sneeblySessionId: sessionId,
-            claudeCodeSessionId: fixClaudeId,
-            prompt: fixMsg.text,
-            model: escalationModel,
-            appendSystemPrompt: systemPromptAddendum ?? undefined,
-            recordEvents,
-            recordUsage,
-          },
-          (event) => { pushAgentEvent(event, projectId) },
-          (newClaudeId, _fixError) => {
-            sendToProjectWindows(projectId, IPC_CHANNELS.CHAT_IN_FLIGHT_CHANGED, { projectId, inFlight: false })
-            if (newClaudeId) store.set(`claudeSessionIds.${sessionId}`, newClaudeId)
-            // Fix turn errors don't block re-verify — resolve regardless.
-            resolve()
-          }
-        )
+      const firstIssue = acceptorResult.issues[0] ?? ''
+      const errorMsg = `Spec acceptor: ${acceptorResult.summary}${firstIssue ? ` — ${firstIssue}` : ''}`
+      console.log(`[phase-runner] pausing — spec acceptor still failing after fix on ${milestoneId}: ${errorMsg}`)
+      setRunState(projectId, {
+        ...getRunState(projectId),
+        status: 'paused',
+        lastError: errorMsg,
       })
-
-      if (getRunState(projectId).status !== 'building') return
-
-      // Re-verify after fix. null = acceptor degraded gracefully → pass through.
-      acceptorResult = await runSpecAcceptor(projectId, milestoneId, changedFiles)
-
-      if (acceptorResult && !acceptorResult.pass) {
-        const firstIssue = acceptorResult.issues[0] ?? ''
-        const errorMsg = `Spec acceptor: ${acceptorResult.summary}${firstIssue ? ` — ${firstIssue}` : ''}`
-        console.log(`[phase-runner] pausing — spec acceptor still failing after fix on ${milestoneId}: ${errorMsg}`)
-        setRunState(projectId, {
-          ...getRunState(projectId),
-          status: 'paused',
-          lastError: errorMsg,
-        })
-        return
-      }
+      return
     }
   }
   // ────────────────────────────────────────────────────────────────────────────

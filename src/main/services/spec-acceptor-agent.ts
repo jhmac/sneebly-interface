@@ -141,6 +141,13 @@ export async function runSpecAcceptorAgent(opts: {
     .filter((i): i is string => typeof i === 'string' && i.trim().length > 0)
     .slice(0, 10)
 
+  // A fail verdict with no issues is unactionable — we can't tell the fix turn
+  // what to fix. Treat as pass-through rather than triggering a useless fix turn.
+  if (!parsed.pass && issues.length === 0) {
+    console.warn('[spec-acceptor-agent] agent returned pass=false with no issues — treating as pass-through')
+    return null
+  }
+
   const summary =
     typeof parsed.summary === 'string' && parsed.summary.trim()
       ? parsed.summary.trim()

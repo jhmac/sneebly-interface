@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import Store from 'electron-store'
 import { listProjects } from './project-registry'
 import { loadPhasePlan, getMilestoneById } from './phase-tracker'
@@ -22,24 +22,43 @@ function getAcceptorSettings(): { enabled: boolean; model: ModelName } {
 
 // ─── Spec loading ─────────────────────────────────────────────────────────────
 
-function loadSpecText(projectPath: string, milestoneId: string): string | null {
+interface SpecInfo {
+  specText: string
+  milestoneText: string
+}
+
+/**
+ * Load the spec text and milestone display name in a single plan read.
+ * Prefers the spec file on disk; falls back to kickoffPrompt.
+ * Returns null if the plan, milestone, or spec text cannot be resolved.
+ */
+function loadSpecInfo(projectPath: string, milestoneId: string): SpecInfo | null {
   const plan = loadPhasePlan(projectPath)
   if (!plan) return null
   const milestone = getMilestoneById(plan, milestoneId)
   if (!milestone) return null
 
+  const milestoneText = milestone.text
+
   if (milestone.specPath) {
+    // Resolve to an absolute path and enforce containment within the project root
+    // to prevent path traversal via crafted specPath values.
+    const resolvedRoot = resolve(projectPath)
     const absPath = milestone.specPath.startsWith('/')
       ? milestone.specPath
-      : join(projectPath, milestone.specPath)
-    if (existsSync(absPath)) {
+      : resolve(join(resolvedRoot, milestone.specPath))
+
+    const contained = absPath.startsWith(resolvedRoot + '/') || absPath === resolvedRoot
+    if (contained && existsSync(absPath)) {
       try {
-        return readFileSync(absPath, 'utf-8')
+        return { specText: readFileSync(absPath, 'utf-8'), milestoneText }
       } catch { /* fall through to kickoffPrompt */ }
     }
   }
 
-  return milestone.kickoffPrompt || null
+  return milestone.kickoffPrompt
+    ? { specText: milestone.kickoffPrompt, milestoneText }
+    : null
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -67,15 +86,12 @@ export async function runSpecAcceptor(
   const project = listProjects().find((p) => p.id === projectId)
   if (!project) return null
 
-  const specText = loadSpecText(project.path, milestoneId)
-  if (!specText) {
+  // Single plan load: get spec text + milestone display name together.
+  const specInfo = loadSpecInfo(project.path, milestoneId)
+  if (!specInfo) {
     console.warn(`[spec-acceptor-orchestrator] no spec text for ${milestoneId} — skipping`)
     return null
   }
-
-  const plan = loadPhasePlan(project.path)
-  const milestone = plan ? getMilestoneById(plan, milestoneId) : null
-  const milestoneText = milestone?.text ?? milestoneId
 
   // Convert to project-relative paths, drop anything outside the project root,
   // cap at 25 entries so the agent prompt stays manageable.
@@ -93,8 +109,8 @@ export async function runSpecAcceptor(
     return await runSpecAcceptorAgent({
       projectPath: project.path,
       projectId,
-      specText,
-      milestoneText,
+      specText: specInfo.specText,
+      milestoneText: specInfo.milestoneText,
       changedFiles: relFiles,
       model: settings.model,
     })
