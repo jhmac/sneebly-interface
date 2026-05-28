@@ -94,10 +94,13 @@ export async function runSpecAcceptor(
   }
 
   // Convert to project-relative paths, drop anything outside the project root,
-  // cap at 25 entries so the agent prompt stays manageable.
+  // strip Sneebly's internal metadata directory (event-stream JSON, decision
+  // files, etc. — irrelevant to spec conformance and wastes Read tool turns),
+  // and cap at 25 entries so the agent prompt stays manageable.
   const relFiles = changedFiles
     .filter((f) => f.startsWith(project.path + '/'))
     .map((f) => f.slice(project.path.length + 1))
+    .filter((f) => !f.startsWith('.sneebly-interface/'))
     .slice(0, 25)
 
   console.log(

@@ -84,10 +84,10 @@ export async function runSpecAcceptorAgent(opts: {
   const { projectPath, projectId, specText, milestoneText, changedFiles, model } = opts
 
   const fileHints = changedFiles.length > 0
-    ? `\n\n## Files changed during this build\n` +
+    ? `## Files changed during this build\n` +
       `Read the relevant ones to understand the implementation:\n` +
       changedFiles.map((f) => `- ${f}`).join('\n')
-    : '\n\n## Files changed during this build\nNone tracked — explore the project directory for relevant files.'
+    : `## Files changed during this build\nNone tracked — explore the project directory for relevant files.`
 
   const prompt = [
     `## Milestone`,
@@ -95,6 +95,7 @@ export async function runSpecAcceptorAgent(opts: {
     ``,
     `## Specification`,
     specText,
+    ``,       // blank line between spec and file hints section
     fileHints,
     ``,
     `Verify the implementation against the spec and output the JSON verdict.`,
@@ -139,6 +140,7 @@ export async function runSpecAcceptorAgent(opts: {
 
   const issues = parsed.issues
     .filter((i): i is string => typeof i === 'string' && i.trim().length > 0)
+    .map((i) => i.trim().replace(/\n+/g, ' '))  // collapse internal newlines — issues must be single-line
     .slice(0, 10)
 
   // A fail verdict with no issues is unactionable — we can't tell the fix turn
