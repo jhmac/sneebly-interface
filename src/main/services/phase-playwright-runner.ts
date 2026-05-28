@@ -54,7 +54,7 @@ Output ONLY the JSON object.`
     model: escalationModel,
     permissionMode: 'bypassPermissions',
     appendSystemPrompt: SPEC_GEN_SYSTEM_PROMPT,
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
   })
 
   const parsed = extractJson<{ spec: string }>(genResult.assistantText)

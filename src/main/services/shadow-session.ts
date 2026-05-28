@@ -26,7 +26,7 @@ export async function runShadowSession(
       model: 'claude-haiku-4-5',
       permissionMode: 'bypassPermissions',
       appendSystemPrompt: entry.proposedChange,
-      maxTurns: 1,
+      maxTurns: 5, // extended thinking or sequential output can consume >1 turn
     })
 
     appendShadowRun(projectPath, learningId, {

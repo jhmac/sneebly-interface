@@ -121,7 +121,7 @@ export async function generatePhasePlan(
     permissionMode: 'default',
     allowedTools: [],
     appendSystemPrompt: ORDERER_SYSTEM_PROMPT,
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
   })
 
   if (result.error) throw new Error(`Phase orderer agent failed: ${result.error}`)

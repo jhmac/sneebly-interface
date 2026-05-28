@@ -36,7 +36,7 @@ export async function proposeLearnings(
     model: 'claude-haiku-4-5',
     permissionMode: 'bypassPermissions',
     appendSystemPrompt: PROPOSER_SYSTEM_PROMPT,
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
   })
 
   if (result.error || !result.assistantText.trim()) return
@@ -107,7 +107,7 @@ export async function proposeOpenQuestion(
     model: 'claude-haiku-4-5',
     permissionMode: 'bypassPermissions',
     appendSystemPrompt: OPEN_QUESTION_SYSTEM_PROMPT,
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
   })
 
   if (result.error || !result.assistantText.trim()) return

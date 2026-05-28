@@ -116,7 +116,7 @@ export async function runReflection(
     permissionMode: 'default',
     allowedTools: ['Read'],
     appendSystemPrompt: REFLECTOR_SYSTEM_PROMPT,
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
   })
 
   const body = result.assistantText.trim() || '(No reflection generated.)'

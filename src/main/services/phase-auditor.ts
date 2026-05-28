@@ -179,11 +179,10 @@ export async function auditPhasePlan(
     prompt,
     model: 'claude-sonnet-4-6',
     permissionMode: 'bypassPermissions',
-    // Explicitly disable all tools — source is injected; tool calls would
-    // waste the single turn budget before Claude can output the JSON.
+    // Disable all tools — source is injected; tool calls would burn turns before JSON output.
     extraArgs: ['--tools', ''],
     appendSystemPrompt: AUDITOR_SYSTEM_PROMPT,
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
     onProcess: (proc) => { activeProcs.set(projectId, proc) },
   })
 

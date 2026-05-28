@@ -39,7 +39,7 @@ export async function grillTurn(
     prompt: fullPrompt,
     model: 'claude-sonnet-4-6',
     permissionMode: 'bypassPermissions',
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
     allowedTools: [],
     appendSystemPrompt: GRILL_SYSTEM,
   })
@@ -196,7 +196,7 @@ export async function generateGoalsAndPrompt(
     prompt,
     model: 'claude-opus-4-7',
     permissionMode: 'bypassPermissions',
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
     allowedTools: [],
     appendSystemPrompt: `You are the Sneebly App Strategist. Output only the three XML-tagged documents, no preamble. In GOALS.md, every Roadmap feature MUST be a "- [ ] " checkbox bullet under a "### Phase N: Title" heading inside the "## Roadmap" section — never "*", a bare "-", a numbered list, an em-dash phase heading, or prose. All features are unchecked "- [ ] " (new build).`,
   })
@@ -237,7 +237,7 @@ OUTPUT: The complete updated GOALS.md with the Tech Stack section filled in. Not
     prompt,
     model: 'claude-sonnet-4-6',
     permissionMode: 'bypassPermissions',
-    maxTurns: 1,
+    maxTurns: 5, // extended thinking or sequential output can consume >1 turn
     allowedTools: [],
     appendSystemPrompt: `Output only the updated GOALS.md content. No preamble, no explanation.`,
   })
