@@ -133,11 +133,16 @@ function PhasePanelInner({ onClose, projectId }: { onClose: () => void; projectI
 
   const handleStartRun = async () => {
     setRunConfigOpen(false)
-    const nextMilestone = plan?.milestones.find((m) => !m.checked && !m.skipped)
-    if (!nextMilestone) return
+    // When resuming a paused run, restart from the milestone that was in progress.
+    // When starting fresh (idle/complete), start from the first unchecked milestone.
+    const resumeMilestoneId =
+      runState.status === 'paused' && runState.currentMilestoneId
+        ? runState.currentMilestoneId
+        : plan?.milestones.find((m) => !m.checked && !m.skipped)?.id
+    if (!resumeMilestoneId) return
     const config: PhaseRunConfig = {
       batchSize,
-      startFromMilestoneId: nextMilestone.id,
+      startFromMilestoneId: resumeMilestoneId,
       autoReview: true,
     }
     await startRun(projectId, config)

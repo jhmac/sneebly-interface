@@ -262,8 +262,12 @@ export async function startRun(
   config: PhaseRunConfig
 ): Promise<void> {
   const existing = runStates.get(projectId)
-  if (existing && existing.status !== 'idle') {
+  if (existing && existing.status === 'building') {
     throw new Error('A phase run is already in progress for this project')
+  }
+  // A paused run is resumable — reset to idle so the guard above doesn't block.
+  if (existing?.status === 'paused') {
+    setRunState(projectId, { ...idleState(), status: 'idle' })
   }
 
   const project = listProjects().find((p) => p.id === projectId)
