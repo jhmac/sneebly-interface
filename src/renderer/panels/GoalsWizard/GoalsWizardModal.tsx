@@ -785,7 +785,7 @@ function GitHubConnectStage() {
   const { closeWizard } = useGoalsWizardStore()
   const { connected, user } = useGitHubStore()
 
-  const [phase, setPhase] = useState<GitHubPhase>(connected ? 'connected' : 'idle')
+  const [phase, setPhase] = useState<GitHubPhase>(connected && user ? 'connected' : 'idle')
   const [userCode, setUserCode] = useState<string | null>(null)
   const [verificationUri, setVerificationUri] = useState<string | null>(null)
   const [connectedUser, setConnectedUser] = useState<GitHubUser | null>(user)
