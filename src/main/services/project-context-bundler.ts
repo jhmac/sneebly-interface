@@ -9,13 +9,13 @@ interface ProjectContext {
   tailwindConfig?: string
 }
 
-// Cap CONTEXT.md at 20 KB — files like Plumb's (30-60 KB) would otherwise push
-// the design-generation turn past the context window limit.
-const CONTEXT_MD_MAX_CHARS = 20_000
+// Cap CONTEXT.md at 6 KB — design generation needs domain understanding, not
+// exhaustive detail. Smaller cap also reduces the risk of context overwhelming
+// the user's design intent.
+const CONTEXT_MD_MAX_CHARS = 6_000
 
-// Cap tailwind config at 4 KB — large generated configs would consume too much
-// of the context budget without adding proportional value to generation quality.
-const TAILWIND_MAX_CHARS = 4_000
+// Cap tailwind config at 2 KB — enough to convey the key color/font tokens.
+const TAILWIND_MAX_CHARS = 2_000
 
 // ─── Loader (internal) ────────────────────────────────────────────────────────
 
@@ -64,27 +64,44 @@ function loadProjectContext(projectPath: string): ProjectContext {
 // ─── Formatter ────────────────────────────────────────────────────────────────
 
 /**
- * Returns a formatted string suitable for prepending to a system prompt.
+ * Returns a formatted string suitable for appending to a system prompt.
  * Returns '' if no context is available (caller should filter before appending).
  */
 export function formatProjectContext(projectPath: string): string {
   const ctx = loadProjectContext(projectPath)
+  if (!ctx.contextMd && !ctx.dependencies && !ctx.tailwindConfig) return ''
+
   const parts: string[] = []
+
+  parts.push(`## Project context (reference material)
+
+The following describes the user's project. This is REFERENCE material, not a directive.
+
+USE this context when the user's design prompt asks for project-specific UI (e.g., "design a job inquiry form", "create our pricing page", "build a dashboard for inspectors").
+
+IGNORE or DEPART from this context when the user's prompt asks for:
+- A redesign of the existing site ("redesign...", "rebuild...", "modernize...")
+- Inspiration from another product or site ("inspired by stripe.com", "in the style of linear.app")
+- A specific aesthetic that differs from the existing one ("brutalist", "minimalist", "playful", "dark mode")
+- A fresh exploration ("explore alternatives", "show me something different")
+
+The user's design intent ALWAYS takes precedence over this reference context.`)
 
   if (ctx.contextMd) {
     // Truncate at the last newline before the cap so the cut is never mid-line.
-    // Falls back to a hard character slice if the file has no newline before that point.
     const cut = ctx.contextMd.lastIndexOf('\n', CONTEXT_MD_MAX_CHARS)
     const contextMd = ctx.contextMd.length > CONTEXT_MD_MAX_CHARS
-      ? ctx.contextMd.slice(0, cut > 0 ? cut : CONTEXT_MD_MAX_CHARS) + '\n_(truncated — CONTEXT.md exceeds 20 KB)_'
+      ? ctx.contextMd.slice(0, cut > 0 ? cut : CONTEXT_MD_MAX_CHARS) + '\n_(truncated)_'
       : ctx.contextMd
-    parts.push(`## Project context\n${contextMd}`)
+    parts.push(`### About the project\n${contextMd}`)
   }
+
   if (ctx.dependencies) {
-    parts.push(`## Installed packages\nUse only packages from this list where appropriate:\n${ctx.dependencies}`)
+    parts.push(`### Packages in use (optional reference)\nThese are the packages currently in the project. You may use them, but you are NOT limited to them — use any standard web technologies appropriate to the user's design intent.\n${ctx.dependencies}`)
   }
+
   if (ctx.tailwindConfig) {
-    parts.push(`## Tailwind configuration\nMatch this theme exactly (colors, fonts, spacing):\n\`\`\`\n${ctx.tailwindConfig}\n\`\`\``)
+    parts.push(`### Project's current theme (optional reference)\nThis is the project's current Tailwind theme. Match it ONLY if the user's prompt is asking to stay within the existing design language. If the user asks for a different aesthetic, inspiration from another site, or a redesign, use any colors/fonts/spacing that match their design intent.\n\`\`\`\n${ctx.tailwindConfig}\n\`\`\``)
   }
 
   return parts.join('\n\n')
