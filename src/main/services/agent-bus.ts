@@ -6,6 +6,8 @@ import { EventEmitter } from 'node:events'
 // Convention: 'subsystem:event-name', args tuple.
 type AgentBusEventMap = {
   'review:done': [projectId: string, milestoneId: string]
+  'audit:done': [projectId: string, auditId: string, status: string, findingCount: number]
+  'audit:started': [projectId: string, auditId: string]
 }
 
 // ─── Typed emitter ────────────────────────────────────────────────────────────

@@ -36,6 +36,12 @@ import AskSneeblyPanel from '../panels/AskSneebly/AskSneeblyPanel'
 import { useAskSneeblyStore } from '../panels/AskSneebly/useAskSneeblyStore'
 import ReviewPanel from '../panels/ReviewAgent/ReviewPanel'
 import { useViewStore } from '../state/viewStore'
+import AuditButton from '../panels/Auditor/AuditButton'
+import AuditConfigModal from '../panels/Auditor/AuditConfigModal'
+import AuditProgressPanel from '../panels/Auditor/AuditProgressPanel'
+import AuditFindingsBrowser from '../panels/Auditor/AuditFindingsBrowser'
+import AuditHistory from '../panels/Auditor/AuditHistory'
+import { useAuditorStore } from '../state/auditorStore'
 
 const DEFAULT_SIZES: LayoutSizes = {
   vertical: { preview: 55, bottom: 45 },
@@ -79,6 +85,14 @@ export default function Workspace() {
   const setActiveSkill = useChatStore((s) => s.setActiveSkill)
   const editorOpenFile = useEditorStore((s) => s.openFile)
   const { currentView, setView } = useViewStore()
+  const { handleProgress: auditProgress, handleDone: auditDone } = useAuditorStore()
+
+  // ── Audit push channels ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const offProgress = window.api.auditOnProgress((event) => auditProgress(event))
+    const offDone = window.api.auditOnDone((auditId, status) => auditDone(auditId, status))
+    return () => { offProgress(); offDone() }
+  }, [])
 
   useEffect(() => {
     if (activeProjectId) refreshLearningsBadge(activeProjectId)
@@ -183,6 +197,11 @@ export default function Workspace() {
         />
       )}
 
+      {/* Auditor modals */}
+      <AuditConfigModal />
+      <AuditFindingsBrowser />
+      <AuditHistory />
+
       {/* Workspace header */}
       <WorkspaceHeader
         projectName={activeProject?.name ?? null}
@@ -208,7 +227,10 @@ export default function Workspace() {
         onToggleAsk={toggleAsk}
         currentView={currentView}
         onOpenDesign={() => setView('design')}
+        auditProjectId={activeProjectId}
       />
+
+      <AuditProgressPanel />
 
       {activeProjectId && (
         <ShortcutsBar
@@ -342,6 +364,7 @@ function WorkspaceHeader({
   onToggleAsk,
   currentView,
   onOpenDesign,
+  auditProjectId,
 }: {
   projectName: string | null
   activeProjectId: string | null
@@ -366,6 +389,7 @@ function WorkspaceHeader({
   onToggleAsk: () => void
   currentView: string
   onOpenDesign: () => void
+  auditProjectId: string | null
 }) {
   const hasChanges = gitChangedFiles > 0
   const hasSyncInfo = gitAhead > 0 || gitBehind > 0
@@ -462,6 +486,7 @@ function WorkspaceHeader({
             Design
           </button>
         )}
+        <AuditButton projectId={auditProjectId} />
         <button
           onClick={onOpenPhases}
           title="Phase tracker"

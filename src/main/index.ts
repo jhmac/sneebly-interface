@@ -42,6 +42,8 @@ import { registerReviewAgentHandlers } from './ipc/review-agent-handlers'
 import { registerDesignHandlers } from './ipc/design-handlers'
 import { registerDesignImplementHandlers } from './ipc/design-implement-handlers'
 import { registerDeciderHandlers } from './ipc/decider-handlers'
+import { registerAuditorHandlers } from './ipc/auditor-handlers'
+import { recoverOrphanedAudits, enforceRetention } from './services/auditor/auditor-store'
 
 // ── User data migration (sneebly-interface → Sneebly) ─────────────────────────
 function migrateUserData(): void {
@@ -123,6 +125,21 @@ function registerIpcHandlers(): void {
   registerDesignHandlers()
   registerDesignImplementHandlers()
   registerDeciderHandlers()
+  registerAuditorHandlers(() => {
+    const saved = store.get('appSettings', {}) as Partial<import('../shared/types').AppSettings>
+    const defaults = {
+      auditorDefaultModel: 'claude-sonnet-4-6' as const,
+      auditorMaxConcurrency: 4,
+      auditorCostCeilingUsd: 50,
+      auditorExcerptContextLines: 3,
+      auditorNotifyOnCompletion: true,
+      auditorBounceDockOnCompletion: true,
+      auditorRetentionDays: 90,
+      auditorDefaultMode: 'full' as const,
+      auditorIncludeBusinessImpact: true,
+    }
+    return { ...defaults, ...saved } as import('../shared/types').AppSettings
+  })
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_OPEN_PROJECT, (_event, projectId: string) => {
     createProjectWindow(projectId)
@@ -224,6 +241,17 @@ app.whenReady().then(() => {
   }
 
   registerIpcHandlers()
+  // Recover audits interrupted by crashes; enforce retention
+  try {
+    const settings = store.get('appSettings', {}) as Partial<import('../shared/types').AppSettings>
+    const retentionDays = (settings.auditorRetentionDays as number | undefined) ?? 90
+    for (const project of listProjects()) {
+      recoverOrphanedAudits(project.path)
+      enforceRetention(project.path, retentionDays)
+    }
+  } catch (err) {
+    console.error('[Sneebly] Audit recovery failed:', err)
+  }
   generateMcpConfig()
   ensureChromiumInstalled()
   initAutoUpdater()

@@ -148,6 +148,22 @@ export const IPC_CHANNELS = {
   DESIGN_IMPLEMENT_CANCEL: 'design:implement-cancel',
   DESIGN_IMPLEMENT_STATUS: 'design:implement-status',
 
+  // ── Sentinel Auditor ───────────────────────────────────────────────────────
+  AUDIT_ESTIMATE: 'audit:estimate',
+  AUDIT_START: 'audit:start',
+  AUDIT_CANCEL: 'audit:cancel',
+  AUDIT_RESUME_FROM_COST_CAP: 'audit:resume-from-cost-cap',
+  AUDIT_LIST: 'audit:list',
+  AUDIT_GET: 'audit:get',
+  AUDIT_MARK_RESOLVED: 'audit:mark-resolved',
+  AUDIT_MARK_FALSE_POSITIVE: 'audit:mark-false-positive',
+  AUDIT_DELETE: 'audit:delete',
+  AUDIT_DRY_RUN: 'audit:dry-run',
+  AUDIT_GET_LAST: 'audit:get-last',
+  AUDIT_REVEAL_IN_FINDER: 'audit:reveal-in-finder',
+  AUDIT_PROGRESS: 'audit:progress',
+  AUDIT_DONE: 'audit:done',
+
   // ── Autonomous Decider ──────────────────────────────────────────────────────
   DECIDER_RUN_PREFLIGHT: 'decider:run-preflight',
   DECIDER_RUN_AUDIT: 'decider:run-audit',

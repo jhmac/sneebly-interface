@@ -43,6 +43,16 @@ const DEFAULT_SETTINGS: AppSettings = {
   specAcceptorEnabled: true,
   specAcceptorModel: 'claude-sonnet-4-6',
   compileCheckEnabled: true,
+  auditorEnabled: true,
+  auditorDefaultModel: 'claude-sonnet-4-6',
+  auditorMaxConcurrency: 4,
+  auditorCostCeilingUsd: 50,
+  auditorExcerptContextLines: 3,
+  auditorNotifyOnCompletion: true,
+  auditorBounceDockOnCompletion: true,
+  auditorRetentionDays: 90,
+  auditorDefaultMode: 'full',
+  auditorIncludeBusinessImpact: true,
 }
 
 export function registerSettingsHandlers(): void {

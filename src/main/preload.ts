@@ -3,6 +3,15 @@ import type { IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type {
   ElectronAPI,
+  AuditId,
+  AuditStatus,
+  AuditStartOpts,
+  AuditEstimate,
+  AuditListEntry,
+  AuditGetResult,
+  AuditMeta,
+  AuditProgressEvent,
+  AuditDryRunResult,
   LayoutSizes,
   PongPayload,
   Project,
@@ -505,6 +514,42 @@ const api: ElectronAPI = {
     const h = (_: IpcRendererEvent, event: DesignImplementStatusEvent) => cb(event)
     ipcRenderer.on(IPC_CHANNELS.DESIGN_IMPLEMENT_STATUS, h)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.DESIGN_IMPLEMENT_STATUS, h)
+  },
+
+  // ── Sentinel Auditor ──────────────────────────────────────────────────────
+  auditEstimate: (opts: AuditStartOpts): Promise<AuditEstimate> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_ESTIMATE, opts),
+  auditStart: (opts: AuditStartOpts): Promise<{ auditId: AuditId }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_START, opts),
+  auditCancel: (auditId: AuditId): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_CANCEL, { auditId }),
+  auditResumeFromCostCap: (auditId: AuditId): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_RESUME_FROM_COST_CAP, { auditId }),
+  auditList: (projectId: string): Promise<AuditListEntry[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_LIST, { projectId }),
+  auditGet: (auditId: AuditId, projectId: string): Promise<AuditGetResult | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_GET, { auditId, projectId }),
+  auditMarkResolved: (auditId: AuditId, projectId: string, findingId: string, resolved: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_MARK_RESOLVED, { auditId, projectId, findingId, resolved }),
+  auditMarkFalsePositive: (auditId: AuditId, projectId: string, findingId: string, falsePositive: boolean, reason?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_MARK_FALSE_POSITIVE, { auditId, projectId, findingId, falsePositive, reason }),
+  auditDelete: (auditId: AuditId, projectId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_DELETE, { auditId, projectId }),
+  auditDryRun: (opts: AuditStartOpts): Promise<AuditDryRunResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_DRY_RUN, opts),
+  auditGetLast: (projectId: string): Promise<AuditMeta | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_GET_LAST, { projectId }),
+  auditRevealInFinder: (auditId: AuditId, projectId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_REVEAL_IN_FINDER, { auditId, projectId }),
+  auditOnProgress: (cb: (event: AuditProgressEvent) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, event: AuditProgressEvent) => cb(event)
+    ipcRenderer.on(IPC_CHANNELS.AUDIT_PROGRESS, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.AUDIT_PROGRESS, h)
+  },
+  auditOnDone: (cb: (auditId: AuditId, status: AuditStatus) => void): (() => void) => {
+    const h = (_: IpcRendererEvent, auditId: AuditId, status: AuditStatus) => cb(auditId, status)
+    ipcRenderer.on(IPC_CHANNELS.AUDIT_DONE, h)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.AUDIT_DONE, h)
   },
 }
 

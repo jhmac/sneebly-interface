@@ -615,7 +615,187 @@ export interface AppSettings {
   specAcceptorEnabled: boolean
   specAcceptorModel: ModelName
   compileCheckEnabled: boolean
+  // ── Sentinel Auditor ──────────────────────────────────────────────────────
+  auditorEnabled: boolean
+  auditorDefaultModel: ModelName
+  auditorMaxConcurrency: number
+  auditorCostCeilingUsd: number
+  auditorExcerptContextLines: number
+  auditorNotifyOnCompletion: boolean
+  auditorBounceDockOnCompletion: boolean
+  auditorRetentionDays: number
+  auditorDefaultMode: 'full' | 'incremental' | 'subset' | 'dry-run'
+  auditorIncludeBusinessImpact: boolean
 }
+
+// ── Sentinel Auditor ──────────────────────────────────────────────────────────
+
+export type AuditId = string
+
+export type AuditStatus =
+  | 'pending'
+  | 'running'
+  | 'awaiting-budget-decision'
+  | 'paused-rate-limit'
+  | 'completed'
+  | 'canceled'
+  | 'failed'
+
+export type AuditMode = 'full' | 'incremental' | 'subset' | 'dry-run'
+
+export type AuditSeverity = 'critical' | 'high' | 'medium' | 'low'
+
+export type AuditCategory =
+  | 'security'
+  | 'correctness'
+  | 'convention'
+  | 'smell'
+  | 'schema'
+  | 'depsec'
+  | 'env'
+  | 'todo'
+
+export interface AuditScope {
+  codeReview: boolean
+  securityScan: boolean
+  schemaReview: boolean
+  conventionCheck: boolean
+  dependencySecurityCheck: boolean
+  envVarCheck: boolean
+  staleTodoCheck: boolean
+}
+
+export interface AuditMeta {
+  id: AuditId
+  spec: 'v1'
+  projectId: string
+  projectPath: string
+  startedAt: number
+  completedAt: number | null
+  status: AuditStatus
+  mode: AuditMode
+  scope: AuditScope
+  model: ModelName
+  costEstimateUsdMin: number
+  costEstimateUsdMax: number
+  costActualUsd: number
+  costCeilingUsd: number
+  tokensIn: number
+  tokensOut: number
+  totalFiles: number
+  processedFiles: number
+  failedFiles: number
+  concurrencyLimit: number
+  pid: number | null
+  error?: string
+  notificationSent: boolean
+  subsetPaths?: string[]
+  incrementalBaseAuditId?: AuditId
+  changedFiles?: string[]
+  carriedForwardCount?: number
+  newFindingsCount?: number
+}
+
+export interface AuditCodeExcerpt {
+  lines: string[]
+  startLine: number
+  highlightStart: number
+  highlightEnd: number
+  contextLinesBefore: number
+  contextLinesAfter: number
+}
+
+export interface AuditFinding {
+  id: string
+  title: string
+  description: string
+  businessImpact?: string
+  severity: AuditSeverity
+  category: AuditCategory
+  filePath: string
+  startLine: number
+  endLine: number
+  codeExcerpt: AuditCodeExcerpt
+  suggestedFix: string
+  detectedAt: number
+  detectedInPhase: 2 | 3 | 4 | 5 | 6 | 7
+  resolved: boolean
+  resolvedAt: number | null
+  falsePositive: boolean
+  falsePositiveReason: string | null
+  carriedFromAuditId?: AuditId
+}
+
+export interface AuditProgressEvent {
+  auditId: AuditId
+  phase: 1 | 2 | 3 | 4 | 5 | 6 | 7
+  phaseName: string
+  filesProcessedInPhase: number
+  totalFilesInPhase: number
+  totalProcessed: number
+  totalFiles: number
+  findingsAccumulated: number
+  bySeverity: { critical: number; high: number; medium: number; low: number }
+  lastFinding?: { title: string; severity: string; category: string }
+  message?: string
+  estimatedRemainingMs: number
+  currentSpendUsd: number
+  estimatedTotalUsd: number
+}
+
+export interface AuditEstimate {
+  fileCount: number
+  fileCountByImportance: { high: number; medium: number; low: number }
+  estimatedTokens: number
+  estimatedDurationMs: number
+  estimatedCostUsdMin: number
+  estimatedCostUsdMax: number
+  exceedsCostCeiling: boolean
+  incrementalSavingsPct?: number
+}
+
+export interface AuditableFile {
+  absolutePath: string
+  relativePath: string
+  sizeBytes: number
+  category: 'source' | 'schema' | 'config' | 'documentation' | 'environment'
+  language: string
+  importance: 'high' | 'medium' | 'low'
+  reasonHighPriority?: string
+  contentHash: string
+}
+
+export interface AuditListEntry {
+  id: AuditId
+  startedAt: number
+  completedAt: number | null
+  status: AuditStatus
+  mode: AuditMode
+  totalFiles: number
+  findingCount: number
+  bySeverity: { critical: number; high: number; medium: number; low: number }
+  costActualUsd: number
+}
+
+export interface AuditGetResult {
+  meta: AuditMeta
+  findings: AuditFinding[]
+}
+
+export interface AuditStartOpts {
+  projectId: string
+  scope: AuditScope
+  mode: AuditMode
+  subsetPaths?: string[]
+}
+
+export interface AuditDryRunResult {
+  files: Array<{ relativePath: string; category: string; importance: string; skipReason?: string }>
+  estimate: AuditEstimate
+  wouldRunPhases: string[]
+}
+
+// ── End Sentinel Auditor ──────────────────────────────────────────────────────
 
 export interface SessionUsage {
   sessionId: string
@@ -866,6 +1046,22 @@ export interface ElectronAPI {
   designImplementStart: (opts: DesignImplementOpts) => Promise<{ implementId: string }>
   designImplementCancel: (implementId: string) => Promise<void>
   designOnImplementStatus: (cb: (event: DesignImplementStatusEvent) => void) => () => void
+
+  // ── Sentinel Auditor ──────────────────────────────────────────────────────
+  auditEstimate: (opts: AuditStartOpts) => Promise<AuditEstimate>
+  auditStart: (opts: AuditStartOpts) => Promise<{ auditId: AuditId }>
+  auditCancel: (auditId: AuditId) => Promise<void>
+  auditResumeFromCostCap: (auditId: AuditId) => Promise<void>
+  auditList: (projectId: string) => Promise<AuditListEntry[]>
+  auditGet: (auditId: AuditId, projectId: string) => Promise<AuditGetResult | null>
+  auditMarkResolved: (auditId: AuditId, projectId: string, findingId: string, resolved: boolean) => Promise<void>
+  auditMarkFalsePositive: (auditId: AuditId, projectId: string, findingId: string, falsePositive: boolean, reason?: string) => Promise<void>
+  auditDelete: (auditId: AuditId, projectId: string) => Promise<void>
+  auditDryRun: (opts: AuditStartOpts) => Promise<AuditDryRunResult>
+  auditGetLast: (projectId: string) => Promise<AuditMeta | null>
+  auditRevealInFinder: (auditId: AuditId, projectId: string) => Promise<void>
+  auditOnProgress: (cb: (event: AuditProgressEvent) => void) => () => void
+  auditOnDone: (cb: (auditId: AuditId, status: AuditStatus) => void) => () => void
 }
 
 export interface AskSneeblyStartInput {
