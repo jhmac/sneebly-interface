@@ -1,4 +1,4 @@
-import { readdirSync, lstatSync, readFileSync, existsSync, openSync, readSync, closeSync } from 'node:fs'
+import { readdirSync, lstatSync, readFileSync, existsSync, openSync, readSync, closeSync, realpathSync } from 'node:fs'
 import { join, extname, relative } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { AuditableFile } from '../../../shared/types'
@@ -248,11 +248,35 @@ export function walkProjectFiles(
   const files: AuditableFile[] = []
   const skipped: Array<{ relativePath: string; reason: string }> = []
 
+  // Canonical paths already walked. Scoped to THIS call so it never leaks across
+  // audits. Catches cycles that lstat.isSymbolicLink() misses: a non-symlink dir
+  // reached through a symlinked ancestor (e.g. pnpm workspace links), hardlinks,
+  // bind mounts, and case-insensitive collisions on macOS.
+  const visitedRealPaths = new Set<string>()
+
   const extraIgnoreRegexes = extraIgnorePatterns.map((p) => {
     try { return new RegExp(p) } catch { return null }
   }).filter(Boolean) as RegExp[]
 
   function walk(dir: string, depth: number = 0): void {
+    // Resolve to the canonical path FIRST and bail if we've already walked it.
+    // This is the primary cycle guard — every directory descent funnels through
+    // here, so any path that resolves to a previously-visited real directory is
+    // caught regardless of how it was reached.
+    let realDir: string
+    try {
+      realDir = realpathSync(dir)
+    } catch {
+      // realpath threw — broken symlink (ENOENT), permission denied (EACCES),
+      // too many links (ELOOP), etc. Skip the subtree safely.
+      return
+    }
+    if (visitedRealPaths.has(realDir)) {
+      console.log(`[auditor-file-scope] Cycle prevented: ${dir} resolves to already-visited ${realDir}`)
+      return
+    }
+    visitedRealPaths.add(realDir)
+
     // Hard recursion-depth ceiling.
     if (depth > MAX_DEPTH) {
       console.warn(`[auditor-file-scope] Max depth ${MAX_DEPTH} exceeded at ${dir} — skipping subtree`)
@@ -296,6 +320,17 @@ export function walkProjectFiles(
         if (lstat.isSymbolicLink()) continue
 
         if (lstat.isDirectory()) {
+          // Pre-resolve before descending so an already-visited directory is
+          // skipped without even a walk() call. Only directories are tracked in
+          // visitedRealPaths, so this check is meaningless for file entries and is
+          // intentionally scoped to this branch to avoid a realpath syscall per file.
+          let realAbsPath: string
+          try {
+            realAbsPath = realpathSync(absPath)
+          } catch {
+            continue // broken link or no access
+          }
+          if (visitedRealPaths.has(realAbsPath)) continue
           walk(absPath, depth + 1)
           continue
         }
