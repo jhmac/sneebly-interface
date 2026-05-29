@@ -32,7 +32,12 @@ interface AuditorStore {
   estimating: boolean
 
   // ── Active audit ─────────────────────────────────────────────────────────
+  // activeAuditId = the audit currently *selected* for viewing (findings browser,
+  // history highlight, reveal-in-finder). It persists after completion.
+  // runningAuditId = the audit currently *running*; cleared on done/cancel. These
+  // are distinct: viewing a finished audit's findings must not look "still running".
   activeAuditId: AuditId | null
+  runningAuditId: AuditId | null
   activeProgress: AuditProgressEvent | null
   activeMeta: AuditMeta | null
 
@@ -93,6 +98,7 @@ export const useAuditorStore = create<AuditorStore>((set, get) => ({
   estimating: false,
 
   activeAuditId: null,
+  runningAuditId: null,
   activeProgress: null,
   activeMeta: null,
 
@@ -119,15 +125,20 @@ export const useAuditorStore = create<AuditorStore>((set, get) => ({
   setEstimate: (estimate) => set({ estimate }),
   setEstimating: (estimating) => set({ estimating }),
 
-  handleProgress: (event) => set({ activeAuditId: event.auditId, activeProgress: event }),
+  handleProgress: (event) =>
+    set({ activeAuditId: event.auditId, runningAuditId: event.auditId, activeProgress: event }),
   handleDone: (auditId, status) => {
+    void status
     set((s) => ({
-      activeProgress: s.activeAuditId === auditId ? null : s.activeProgress,
+      // Stop the "running" indicator for this audit. Keep activeAuditId so the
+      // findings browser / history selection for it survive completion.
+      runningAuditId: s.runningAuditId === auditId ? null : s.runningAuditId,
+      activeProgress: s.runningAuditId === auditId ? null : s.activeProgress,
       // Mark findings as needing refresh if browser is showing this audit
       findingsLoading: s.browserOpen && s.activeAuditId === auditId ? true : s.findingsLoading,
     }))
   },
-  clearActiveAudit: () => set({ activeAuditId: null, activeProgress: null, activeMeta: null }),
+  clearActiveAudit: () => set({ activeAuditId: null, runningAuditId: null, activeProgress: null, activeMeta: null }),
 
   openBrowser: (auditId) => set({ browserOpen: true, findingsLoading: true, activeAuditId: auditId }),
   closeBrowser: () => set({ browserOpen: false, selectedFindingId: null }),

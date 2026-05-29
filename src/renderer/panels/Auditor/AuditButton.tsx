@@ -6,11 +6,11 @@ interface Props {
 }
 
 export default function AuditButton({ projectId }: Props) {
-  const { activeAuditId, activeProgress, openConfig } = useAuditorStore()
+  const { runningAuditId, activeProgress, openConfig } = useAuditorStore()
 
   if (!projectId) return null
 
-  const isRunning = activeAuditId !== null
+  const isRunning = runningAuditId !== null
   const pct = activeProgress && activeProgress.totalFiles > 0
     ? Math.round((activeProgress.totalProcessed / activeProgress.totalFiles) * 100)
     : null
