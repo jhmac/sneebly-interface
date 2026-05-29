@@ -77,6 +77,10 @@ const GENERATED_FIRST_LINE = [
 
 const MAX_FILE_SIZE = 200 * 1024 // 200 KB
 
+// ─── Walk safeguards (prevent runaway memory/recursion) ─────────────────────────
+const MAX_DEPTH = 30 // deeper than any real project tree
+const MAX_FILES = 50_000 // above this is a config error (excluded dir leaking in)
+
 // Auth/security/billing high-importance path fragments
 const HIGH_IMPORTANCE_PATHS = [
   '/auth/', '/middleware/auth', '/security/', '/billing/', '/payments/', '/stripe/',
@@ -100,10 +104,6 @@ const ROUTE_PATTERNS = [
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function sha256(content: string): string {
-  return createHash('sha256').update(content, 'utf-8').digest('hex').slice(0, 16)
-}
 
 function isGeneratedByContent(absolutePath: string): boolean {
   try {
@@ -252,105 +252,139 @@ export function walkProjectFiles(
     try { return new RegExp(p) } catch { return null }
   }).filter(Boolean) as RegExp[]
 
-  function walk(dir: string): void {
-    let entries: string[]
-    try { entries = readdirSync(dir) } catch { return }
+  function walk(dir: string, depth: number = 0): void {
+    // Hard recursion-depth ceiling.
+    if (depth > MAX_DEPTH) {
+      console.warn(`[auditor-file-scope] Max depth ${MAX_DEPTH} exceeded at ${dir} — skipping subtree`)
+      return
+    }
+    // Hard total-files ceiling — anything above this means an excluded dir leaked in.
+    if (files.length >= MAX_FILES) {
+      console.warn(`[auditor-file-scope] Max files ${MAX_FILES} reached — stopping walk`)
+      return
+    }
 
-    for (const name of entries) {
-      const absPath = join(dir, name)
-      const relPath = relative(projectPath, absPath)
+    try {
+      let entries: string[]
+      try { entries = readdirSync(dir) } catch { return }
 
-      // Skip excluded dirs
-      if (EXCLUDED_DIRS.has(name.toLowerCase())) continue
+      for (const name of entries) {
+        if (files.length >= MAX_FILES) {
+          console.warn(`[auditor-file-scope] Max files ${MAX_FILES} reached — stopping walk`)
+          return
+        }
 
-      // Use lstatSync to detect symlinks BEFORE following them.
-      // statSync follows symlinks, which causes infinite loops on circular symlinks.
-      let lstat: ReturnType<typeof lstatSync>
-      try { lstat = lstatSync(absPath) } catch { continue }
+        const absPath = join(dir, name)
+        const relPath = relative(projectPath, absPath)
 
-      // Skip symlinks entirely — they can point outside the project or form cycles.
-      if (lstat.isSymbolicLink()) continue
+        // Skip excluded dirs
+        if (EXCLUDED_DIRS.has(name.toLowerCase())) {
+          // node_modules is the most likely OOM culprit — log when it IS skipped
+          // so a missing skip shows up as an absence in the terminal.
+          if (name.toLowerCase() === 'node_modules') {
+            console.log(`[auditor-file-scope] Skipped node_modules at ${dir}`)
+          }
+          continue
+        }
 
-      if (lstat.isDirectory()) {
-        walk(absPath)
-        continue
+        // Use lstatSync to detect symlinks BEFORE following them.
+        // statSync follows symlinks, which causes infinite loops on circular symlinks.
+        let lstat: ReturnType<typeof lstatSync>
+        try { lstat = lstatSync(absPath) } catch { continue }
+
+        // Skip symlinks entirely — they can point outside the project or form cycles.
+        if (lstat.isSymbolicLink()) continue
+
+        if (lstat.isDirectory()) {
+          walk(absPath, depth + 1)
+          continue
+        }
+
+        if (!lstat.isFile()) continue
+
+        const sizeBytes = lstat.size
+
+        // Too large — skip EARLY, before any read attempt (binary/generated/hash).
+        if (sizeBytes > MAX_FILE_SIZE) {
+          skipped.push({ relativePath: relPath, reason: `too large (${Math.round(sizeBytes / 1024)}KB > 200KB)` })
+          continue
+        }
+
+        // Extra ignore patterns from audit-rules.json
+        if (extraIgnoreRegexes.some((r) => r.test(relPath))) {
+          skipped.push({ relativePath: relPath, reason: 'custom ignore rule' })
+          continue
+        }
+
+        // Excluded file patterns (lock files, minified, etc.)
+        if (EXCLUDED_FILE_PATTERNS.some((p) => p.test(name))) {
+          skipped.push({ relativePath: relPath, reason: 'excluded file pattern' })
+          continue
+        }
+
+        // Generated path patterns — cheap check before content read
+        if (GENERATED_PATH_PATTERNS.some((p) => p.test('/' + relPath))) {
+          skipped.push({ relativePath: relPath, reason: 'generated path pattern' })
+          continue
+        }
+
+        // Test files excluded in v1
+        if (/\/__tests__\/|\/tests\/|\/test\/|\.test\.|\.spec\./.test(relPath)) {
+          skipped.push({ relativePath: relPath, reason: 'test file (v1 scope)' })
+          continue
+        }
+
+        const { included, category, skipReason } = classifyFile(name, relPath)
+
+        if (!included) {
+          skipped.push({ relativePath: relPath, reason: skipReason ?? 'no include rule' })
+          continue
+        }
+
+        // Binary check
+        if (isBinary(absPath)) {
+          skipped.push({ relativePath: relPath, reason: 'binary file' })
+          continue
+        }
+
+        // Generated-by-content check (only for files that passed path checks)
+        if (isGeneratedByContent(absPath)) {
+          skipped.push({ relativePath: relPath, reason: 'generated file (auto-generated header)' })
+          continue
+        }
+
+        // Fingerprint from path + size + mtime instead of reading file content.
+        // Stable across runs unless the file changes — "good enough" for cross-audit
+        // dedup — and avoids loading the whole file into memory during discovery.
+        const contentHash = createHash('sha256')
+          .update(relPath)
+          .update(String(sizeBytes))
+          .update(String(lstat.mtimeMs))
+          .digest('hex')
+          .slice(0, 16)
+
+        const ext = extname(name).toLowerCase()
+        const language = EXT_LANGUAGE[ext] ?? 'other'
+        const { importance, reason: reasonHighPriority } = computeImportance(absPath, relPath, category, sizeBytes)
+
+        files.push({
+          absolutePath: absPath,
+          relativePath: relPath,
+          sizeBytes,
+          category,
+          language,
+          importance,
+          reasonHighPriority,
+          contentHash,
+        })
+
+        // Progress log every 1000 files so a runaway walk is visible in the terminal.
+        if (files.length > 0 && files.length % 1000 === 0) {
+          console.log(`[auditor-file-scope] Walked ${files.length} files so far at ${relative(projectPath, dir)}`)
+        }
       }
-
-      if (!lstat.isFile()) continue
-
-      const sizeBytes = lstat.size
-
-      // Extra ignore patterns from audit-rules.json
-      if (extraIgnoreRegexes.some((r) => r.test(relPath))) {
-        skipped.push({ relativePath: relPath, reason: 'custom ignore rule' })
-        continue
-      }
-
-      // Too large
-      if (sizeBytes > MAX_FILE_SIZE) {
-        skipped.push({ relativePath: relPath, reason: `too large (${Math.round(sizeBytes / 1024)}KB > 200KB)` })
-        continue
-      }
-
-      // Excluded file patterns (lock files, minified, etc.)
-      if (EXCLUDED_FILE_PATTERNS.some((p) => p.test(name))) {
-        skipped.push({ relativePath: relPath, reason: 'excluded file pattern' })
-        continue
-      }
-
-      // Generated path patterns — cheap check before content read
-      if (GENERATED_PATH_PATTERNS.some((p) => p.test('/' + relPath))) {
-        skipped.push({ relativePath: relPath, reason: 'generated path pattern' })
-        continue
-      }
-
-      // Test files excluded in v1
-      if (/\/__tests__\/|\/tests\/|\/test\/|\.test\.|\.spec\./.test(relPath)) {
-        skipped.push({ relativePath: relPath, reason: 'test file (v1 scope)' })
-        continue
-      }
-
-      const { included, category, skipReason } = classifyFile(name, relPath)
-
-      if (!included) {
-        skipped.push({ relativePath: relPath, reason: skipReason ?? 'no include rule' })
-        continue
-      }
-
-      // Binary check
-      if (isBinary(absPath)) {
-        skipped.push({ relativePath: relPath, reason: 'binary file' })
-        continue
-      }
-
-      // Generated-by-content check (only for files that passed path checks)
-      if (isGeneratedByContent(absPath)) {
-        skipped.push({ relativePath: relPath, reason: 'generated file (auto-generated header)' })
-        continue
-      }
-
-      // Read content for hash
-      let content: string
-      try { content = readFileSync(absPath, 'utf-8') } catch {
-        skipped.push({ relativePath: relPath, reason: 'read error' })
-        continue
-      }
-
-      const contentHash = sha256(content)
-      const ext = extname(name).toLowerCase()
-      const language = EXT_LANGUAGE[ext] ?? 'other'
-      const { importance, reason: reasonHighPriority } = computeImportance(absPath, relPath, category, sizeBytes)
-
-      files.push({
-        absolutePath: absPath,
-        relativePath: relPath,
-        sizeBytes,
-        category,
-        language,
-        importance,
-        reasonHighPriority,
-        contentHash,
-      })
+    } catch (err) {
+      console.error(`[auditor-file-scope] Error walking ${dir}:`, err)
     }
   }
 
