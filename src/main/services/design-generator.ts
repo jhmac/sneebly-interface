@@ -98,6 +98,11 @@ async function runGeneration(
       prompt: opts.prompt,
       model: 'claude-sonnet-4-6',
       appendSystemPrompt: systemParts.join('\n\n---\n\n'),
+      // Disable all tools — design generation is text-in/text-out. Without this,
+      // claude runs with bypassPermissions (the default) and reads the project's
+      // CLAUDE.md + any files it references (CONTEXT.md, GOALS.md), which floods
+      // the context with domain detail and overrides the user's design intent.
+      extraArgs: ['--tools', ''],
       // Turn accounting: each assistant message (text OR tool_use) consumes one turn.
       // maxTurns: 1 fails when the model takes any sequential thinking/output steps.
       // maxTurns: 5 covers extended thinking + a follow-up text turn. Matches the
