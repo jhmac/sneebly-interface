@@ -104,7 +104,7 @@ export async function runReflection(
   const eventCount = events.length
   const frictionCount = countFriction(events)
 
-  const model = eventCount > 500 ? 'claude-opus-4-7' : 'claude-sonnet-4-6'
+  const model = eventCount > 500 ? 'claude-opus-4-8' : 'claude-sonnet-4-6'
 
   const prompt = `Project: ${projectPath}\nDate: ${dateStr}\nEvent count: ${eventCount}\n\n${buildEventsPrompt(events)}`
 

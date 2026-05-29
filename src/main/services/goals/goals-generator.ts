@@ -194,7 +194,7 @@ export async function generateGoalsAndPrompt(
     cwd: homedir(),
     projectId: 'goals-wizard',
     prompt,
-    model: 'claude-opus-4-7',
+    model: 'claude-opus-4-8',
     permissionMode: 'bypassPermissions',
     maxTurns: 5, // extended thinking or sequential output can consume >1 turn
     allowedTools: [],

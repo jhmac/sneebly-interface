@@ -48,7 +48,7 @@ export async function runPlan(
     cwd: projectRoot,
     projectId,
     prompt,
-    model: 'claude-opus-4-7',
+    model: 'claude-opus-4-8',
     permissionMode: 'bypassPermissions',
     maxTurns: 20,
     allowedTools: ['Read', 'Glob', 'Grep', 'LS'],

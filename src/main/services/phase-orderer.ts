@@ -111,7 +111,7 @@ export async function generatePhasePlan(
 
   const prompt = `GOALS.md:\n${goalsMd.slice(0, 6_000)}${specContent}\n\n---\nMilestones to order (JSON):\n${JSON.stringify(inputPayload, null, 2)}`
 
-  const model = milestones.length > 30 ? 'claude-opus-4-7' : 'claude-sonnet-4-6'
+  const model = milestones.length > 30 ? 'claude-opus-4-8' : 'claude-sonnet-4-6'
 
   const result = await runStandaloneTurn({
     cwd: projectPath,

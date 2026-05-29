@@ -54,7 +54,7 @@ export function startTurn(
     cwd: opts.cwd,
     projectId: opts.projectId,
     prompt: opts.prompt,
-    model: opts.model as 'claude-sonnet-4-6' | 'claude-opus-4-7' | 'claude-haiku-4-5',
+    model: opts.model as 'claude-sonnet-4-6' | 'claude-opus-4-8' | 'claude-haiku-4-5',
     permissionMode: 'bypassPermissions',
     resumeSessionId: opts.claudeCodeSessionId,
     appendSystemPrompt: opts.appendSystemPrompt,

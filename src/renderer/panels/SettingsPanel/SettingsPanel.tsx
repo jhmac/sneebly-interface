@@ -18,12 +18,12 @@ interface Props {
 
 const MODEL_OPTIONS: Array<{ value: ModelName; label: string }> = [
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (recommended)' },
-  { value: 'claude-opus-4-7',   label: 'Claude Opus 4.7' },
+  { value: 'claude-opus-4-8',   label: 'Claude Opus 4.7' },
   { value: 'claude-haiku-4-5',  label: 'Claude Haiku 4.5' },
 ]
 
 const REVIEW_MODEL_OPTIONS: Array<{ value: ModelName; label: string }> = [
-  { value: 'claude-opus-4-7',   label: 'Opus 4.7 (more thorough, slower)' },
+  { value: 'claude-opus-4-8',   label: 'Opus 4.7 (more thorough, slower)' },
   { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6 (balanced)' },
   { value: 'claude-haiku-4-5',  label: 'Haiku 4.5 (faster, cheaper)' },
 ]
@@ -179,7 +179,7 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
           <Row label="Review model" description="Model used for the per-milestone review pass after each successful build. Opus gives deeper bug and refactor analysis.">
             <div className="relative">
               <select
-                value={settings.phaseRunnerEscalationModel ?? 'claude-opus-4-7'}
+                value={settings.phaseRunnerEscalationModel ?? 'claude-opus-4-8'}
                 onChange={(e) => handleSave({ phaseRunnerEscalationModel: e.target.value as ModelName })}
                 className="appearance-none rounded-md bg-zinc-800 py-1.5 pl-3 pr-8 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
               >
@@ -243,7 +243,7 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
           <Row label="Review Agent model" description="Verdicts deserve careful reasoning. Opus is recommended; Sonnet for faster but less thorough audits.">
             <div className="relative">
               <select
-                value={settings.reviewAgentModel ?? 'claude-opus-4-7'}
+                value={settings.reviewAgentModel ?? 'claude-opus-4-8'}
                 onChange={(e) => handleSave({ reviewAgentModel: e.target.value as ModelName })}
                 className="appearance-none rounded-md bg-zinc-800 py-1.5 pl-3 pr-8 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
               >
@@ -434,7 +434,7 @@ function SettingsPanelInner({ onClose, activeProjectId }: { onClose: () => void;
               <Row label="Review model" description="Model used for the auto-review pass. Opus gives deeper analysis; Haiku is faster and cheaper.">
                 <div className="relative">
                   <select
-                    value={settings.autoSelfReviewModel ?? 'claude-opus-4-7'}
+                    value={settings.autoSelfReviewModel ?? 'claude-opus-4-8'}
                     onChange={(e) => handleSave({ autoSelfReviewModel: e.target.value as ModelName })}
                     className="appearance-none rounded-md bg-zinc-800 py-1.5 pl-3 pr-8 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600"
                   >

@@ -13,7 +13,7 @@ export interface StandaloneTurnOpts {
   cwd: string
   projectId: string
   prompt: string
-  model: 'claude-sonnet-4-6' | 'claude-opus-4-7' | 'claude-haiku-4-5'
+  model: 'claude-sonnet-4-6' | 'claude-opus-4-8' | 'claude-haiku-4-5'
   permissionMode?: 'bypassPermissions' | 'acceptEdits' | 'plan' | 'default'
   resumeSessionId?: string | null
   maxTurns?: number

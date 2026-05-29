@@ -5,7 +5,7 @@ import type { ModelName } from '../../../shared/types'
 
 const RATES: Record<ModelName, { input: number; output: number }> = {
   'claude-sonnet-4-6': { input: 3,    output: 15  },
-  'claude-opus-4-7':   { input: 15,   output: 75  },
+  'claude-opus-4-8':   { input: 15,   output: 75  },
   'claude-haiku-4-5':  { input: 0.80, output: 4   },
 }
 

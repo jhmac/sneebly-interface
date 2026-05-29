@@ -31,7 +31,7 @@ export async function runReflect(
     cwd: projectRoot,
     projectId,
     prompt,
-    model: 'claude-opus-4-7',
+    model: 'claude-opus-4-8',
     permissionMode: 'default',
     maxTurns: 10,
     allowedTools: ['Read'],

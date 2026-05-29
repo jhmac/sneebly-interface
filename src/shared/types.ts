@@ -183,7 +183,7 @@ export interface GoalsMd {
   openQuestions: string[]
 }
 
-export type ModelName = 'claude-sonnet-4-6' | 'claude-opus-4-7' | 'claude-haiku-4-5'
+export type ModelName = 'claude-sonnet-4-6' | 'claude-opus-4-8' | 'claude-haiku-4-5'
 
 export interface ChatAttachment {
   kind: 'image' | 'file' | 'screenshot'

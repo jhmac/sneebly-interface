@@ -368,7 +368,7 @@ async function driveRun(
 
   const appSettings = store.get('appSettings', {}) as Record<string, unknown>
   const primaryModel = (appSettings['phaseRunnerPrimaryModel'] as string | undefined) ?? 'claude-sonnet-4-6'
-  const escalationModel = (appSettings['phaseRunnerEscalationModel'] as string | undefined) ?? 'claude-opus-4-7'
+  const escalationModel = (appSettings['phaseRunnerEscalationModel'] as string | undefined) ?? 'claude-opus-4-8'
   const recordEvents = (appSettings['recordEventStream'] as boolean | undefined) ?? true
   const recordUsage = (appSettings['recordTokenUsage'] as boolean | undefined) ?? true
   const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null

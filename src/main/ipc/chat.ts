@@ -53,7 +53,7 @@ function maybeRunAutoReview(opts: {
   const reviewPrompt = getSkillPrompt('self-review')
   if (!reviewPrompt) return
 
-  const reviewModel = (appSettings['autoSelfReviewModel'] as ModelName | undefined) ?? 'claude-opus-4-7'
+  const reviewModel = (appSettings['autoSelfReviewModel'] as ModelName | undefined) ?? 'claude-opus-4-8'
   const recordUsage = (appSettings['recordTokenUsage'] as boolean | undefined) ?? true
   const claudeCodeSessionId = store.get(`claudeSessionIds.${sessionId}`, null) as string | null
   let reviewText = ''

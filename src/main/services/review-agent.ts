@@ -273,7 +273,7 @@ export function fireReview(
   // The auto-fire gate only governs reviews fired automatically after markMilestoneComplete.
   // Fix-cycle re-reviews are user-initiated (the user pasted the kickoff) and pass the bypass.
   if (autoFired && !opts?.bypassAutoFireGate && settings.reviewAgentAutoFire !== true) return null
-  const model = (settings.reviewAgentModel as ModelName | undefined) ?? 'claude-opus-4-7'
+  const model = (settings.reviewAgentModel as ModelName | undefined) ?? 'claude-opus-4-8'
   return startReview(projectId, milestoneId, model, autoFired, {
     onThinking: (turnId, status) =>
       sendToProjectWindows(projectId, IPC_CHANNELS.REVIEW_AGENT_THINKING, turnId, milestoneId, status),

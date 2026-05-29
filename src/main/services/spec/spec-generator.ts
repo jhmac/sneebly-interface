@@ -28,8 +28,8 @@ export interface SpecGenerationResult {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function depthToModel(depth: ResearchDepth): 'claude-sonnet-4-6' | 'claude-opus-4-7' {
-  return depth === 'light' ? 'claude-sonnet-4-6' : 'claude-opus-4-7'
+function depthToModel(depth: ResearchDepth): 'claude-sonnet-4-6' | 'claude-opus-4-8' {
+  return depth === 'light' ? 'claude-sonnet-4-6' : 'claude-opus-4-8'
 }
 
 function getFileTree(projectPath: string, maxDepth = 2): string {
@@ -466,7 +466,7 @@ export async function refineSpec(opts: SpecRefineOptions): Promise<SpecRefineRes
   }
   const existingSpecContent = readFileSync(specFilePath, 'utf-8')
 
-  const model: 'claude-sonnet-4-6' | 'claude-opus-4-7' = mode === 'edit-only' ? 'claude-sonnet-4-6' : 'claude-opus-4-7'
+  const model: 'claude-sonnet-4-6' | 'claude-opus-4-8' = mode === 'edit-only' ? 'claude-sonnet-4-6' : 'claude-opus-4-8'
   const allowedTools: string[] = mode === 'edit-only'
     ? ['Read', 'Glob', 'Grep']
     : ['Read', 'Glob', 'Grep', 'LS', 'WebSearch', 'WebFetch']
