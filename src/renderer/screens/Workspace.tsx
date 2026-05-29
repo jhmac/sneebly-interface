@@ -90,9 +90,19 @@ export default function Workspace() {
   // ── Audit push channels ─────────────────────────────────────────────────────
   useEffect(() => {
     const offProgress = window.api.auditOnProgress((event) => auditProgress(event))
-    const offDone = window.api.auditOnDone((auditId, status) => auditDone(auditId, status))
+    const offDone = window.api.auditOnDone((auditId, status) => {
+      auditDone(auditId, status)
+      // Re-fetch findings if the browser is open showing this audit — the cache
+      // is stale because findings were streamed to disk, not pushed to the renderer.
+      const s = useAuditorStore.getState()
+      if (s.browserOpen && s.activeAuditId === auditId && activeProjectId) {
+        window.api.auditGet(auditId, activeProjectId).then((result) => {
+          if (result) useAuditorStore.getState().setFindings(result.findings)
+        }).catch(console.error)
+      }
+    })
     return () => { offProgress(); offDone() }
-  }, [])
+  }, [activeProjectId])
 
   useEffect(() => {
     if (activeProjectId) refreshLearningsBadge(activeProjectId)

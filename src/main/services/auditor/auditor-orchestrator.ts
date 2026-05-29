@@ -28,7 +28,7 @@ import { loadAuditRules } from './auditor-rules-loader'
 import { detectTodos, detectEnvRefs, readEnvExample } from './auditor-detectors'
 import { runPackageAudit } from './auditor-depsec-checker'
 import { deduplicateFindings, prioritiseFindings, writeReport } from './auditor-synthesizer'
-import { notifyAuditComplete, notifyCostCapReached, notifyRateLimitPause, setDockBadge, clearDockBadge } from './auditor-notifications'
+import { notifyAuditComplete, notifyCostCapReached, setDockBadge, clearDockBadge } from './auditor-notifications'
 import { ProgressEstimator } from './auditor-progress-estimator'
 import { agentBus } from '../agent-bus'
 import { getProjectPath } from '../../ipc/design-handler-utils'
@@ -298,34 +298,6 @@ async function runAuditAsync(
     writeMeta(projectPath, auditId, meta)
     pool.resume()
     return true
-  }
-
-  // ── Helper: rate limit backoff ─────────────────────────────────────────────
-  let rateLimitCount = 0
-  async function handleRateLimit(): Promise<void> {
-    rateLimitCount++
-    pool.pause()
-    meta.status = 'paused-rate-limit'
-    writeMeta(projectPath, auditId, meta)
-
-    const pauseSec = rateLimitCount >= 3 ? 300 : 60
-    if (pauseSec >= 60) notifyRateLimitPause(projectPath.split('/').pop() ?? projectPath)
-
-    sendToAll(IPC_CHANNELS.AUDIT_PROGRESS, {
-      auditId, phase: 2, phaseName: 'Code Review',
-      message: `Rate limited — resuming in ${pauseSec}s`,
-      filesProcessedInPhase: 0, totalFilesInPhase: 0,
-      totalProcessed: processedFiles, totalFiles: filesToAudit.length,
-      findingsAccumulated: allFindings.length,
-      bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
-      estimatedRemainingMs: pauseSec * 1000, currentSpendUsd: totalCostUsd,
-      estimatedTotalUsd: estimate.estimatedCostUsdMax,
-    })
-
-    await new Promise<void>((r) => setTimeout(r, pauseSec * 1000))
-    meta.status = 'running'
-    writeMeta(projectPath, auditId, meta)
-    pool.resume()
   }
 
   // ── Helper: finish audit ───────────────────────────────────────────────────

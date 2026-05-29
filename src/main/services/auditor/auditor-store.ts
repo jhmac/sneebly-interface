@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import {
   existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync,
-  readdirSync, renameSync, unlinkSync, rmSync,
+  readdirSync, renameSync, unlinkSync, rmSync, statSync,
 } from 'node:fs'
 import { spawn } from 'node:child_process'
 import type { AuditMeta, AuditFinding, AuditId, AuditListEntry } from '../../../shared/types'
@@ -138,10 +138,17 @@ export function patchFinding(
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
 
+const LOG_MAX_BYTES = 1_000_000 // 1 MB cap — prevents unbounded growth on long audits
+
 export function appendLog(projectPath: string, auditId: AuditId, entry: Record<string, unknown>): void {
   const dir = auditDir(projectPath, auditId)
-  const line = JSON.stringify({ ts: Date.now(), ...entry }) + '\n'
-  try { appendFileSync(logPath(dir), line, 'utf-8') } catch { /* non-fatal */ }
+  const lp = logPath(dir)
+  try {
+    // Skip if log has already hit the cap
+    if (existsSync(lp) && statSync(lp).size >= LOG_MAX_BYTES) return
+    const line = JSON.stringify({ ts: Date.now(), ...entry }) + '\n'
+    appendFileSync(lp, line, 'utf-8')
+  } catch { /* non-fatal */ }
 }
 
 // ─── PID cleanup ──────────────────────────────────────────────────────────────

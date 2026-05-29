@@ -23,6 +23,7 @@ import { useReviewAgentStore } from './panels/ReviewAgent/useReviewAgentStore'
 import { useViewStore } from './state/viewStore'
 import { useDesignStore } from './state/designStore'
 import { useDesignImplementStore } from './state/designImplementStore'
+import { useAuditorStore } from './state/auditorStore'
 
 export default function App() {
   const { loadProjects, activeProjectId } = useProjectStore()
@@ -72,6 +73,10 @@ export default function App() {
     setView('workspace')
     useDesignStore.getState().newDesign()
     useDesignStore.getState().clearSeedFrame()
+    // Clear renderer-side audit state so the button/progress don't show the
+    // previous project's audit. The main-process audit keeps running unaffected.
+    useAuditorStore.getState().clearActiveAudit()
+    useAuditorStore.getState().closeBrowser()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectId])
 

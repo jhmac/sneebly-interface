@@ -122,9 +122,9 @@ export const useAuditorStore = create<AuditorStore>((set, get) => ({
   handleProgress: (event) => set({ activeAuditId: event.auditId, activeProgress: event }),
   handleDone: (auditId, status) => {
     set((s) => ({
-      activeProgress: s.activeAuditId === auditId
-        ? null
-        : s.activeProgress,
+      activeProgress: s.activeAuditId === auditId ? null : s.activeProgress,
+      // Mark findings as needing refresh if browser is showing this audit
+      findingsLoading: s.browserOpen && s.activeAuditId === auditId ? true : s.findingsLoading,
     }))
   },
   clearActiveAudit: () => set({ activeAuditId: null, activeProgress: null, activeMeta: null }),
