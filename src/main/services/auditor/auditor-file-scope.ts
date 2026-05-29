@@ -275,9 +275,10 @@ export function walkProjectFiles(
       console.log(`[auditor-file-scope] Cycle prevented: ${dir} resolves to already-visited ${realDir}`)
       return
     }
-    visitedRealPaths.add(realDir)
 
-    // Hard recursion-depth ceiling.
+    // Depth/file ceilings are checked BEFORE recording the path as visited: a
+    // subtree we decline to walk must not block the same realpath from being
+    // walked later via a shallower, legitimate route.
     if (depth > MAX_DEPTH) {
       console.warn(`[auditor-file-scope] Max depth ${MAX_DEPTH} exceeded at ${dir} — skipping subtree`)
       return
@@ -287,6 +288,9 @@ export function walkProjectFiles(
       console.warn(`[auditor-file-scope] Max files ${MAX_FILES} reached — stopping walk`)
       return
     }
+
+    // Record only once we commit to enumerating this directory.
+    visitedRealPaths.add(realDir)
 
     try {
       let entries: string[]
@@ -320,17 +324,8 @@ export function walkProjectFiles(
         if (lstat.isSymbolicLink()) continue
 
         if (lstat.isDirectory()) {
-          // Pre-resolve before descending so an already-visited directory is
-          // skipped without even a walk() call. Only directories are tracked in
-          // visitedRealPaths, so this check is meaningless for file entries and is
-          // intentionally scoped to this branch to avoid a realpath syscall per file.
-          let realAbsPath: string
-          try {
-            realAbsPath = realpathSync(absPath)
-          } catch {
-            continue // broken link or no access
-          }
-          if (visitedRealPaths.has(realAbsPath)) continue
+          // The realpath/visited dedup lives at the top of walk(), so the recursive
+          // call handles cycle detection itself — no need to pre-resolve here.
           walk(absPath, depth + 1)
           continue
         }
