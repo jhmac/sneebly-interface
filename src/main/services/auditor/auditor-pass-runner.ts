@@ -157,8 +157,17 @@ export interface PassOpts {
   defaultCategory: AuditFinding['category']
 }
 
-export async function runPass(opts: PassOpts): Promise<PassResult> {
-  const result = await runStandaloneTurn({
+const RATE_LIMIT_MARKERS = ['rate_limit', 'ratelimit', 'too many requests', '429']
+const RATE_LIMIT_PAUSE_MS = 60_000
+
+function isRateLimitError(error: string | undefined): boolean {
+  if (!error) return false
+  const lower = error.toLowerCase()
+  return RATE_LIMIT_MARKERS.some((m) => lower.includes(m))
+}
+
+async function callStandaloneTurn(opts: PassOpts): Promise<ReturnType<typeof runStandaloneTurn>> {
+  return runStandaloneTurn({
     cwd: opts.projectPath,
     projectId: opts.projectId,
     prompt: opts.userMessage,
@@ -170,6 +179,17 @@ export async function runPass(opts: PassOpts): Promise<PassResult> {
     // CLAUDE.md and project files, contaminating the audit with project conventions.
     extraArgs: ['--tools', ''],
   })
+}
+
+// One 60s retry on rate-limit errors. Deeper backoff (3-consecutive → 5min,
+// 5-consecutive → abort) is v1.1.
+export async function runPass(opts: PassOpts): Promise<PassResult> {
+  let result = await callStandaloneTurn(opts)
+
+  if (isRateLimitError(result.error)) {
+    await new Promise<void>((r) => setTimeout(r, RATE_LIMIT_PAUSE_MS))
+    result = await callStandaloneTurn(opts)
+  }
 
   const findings: AuditFinding[] = []
   const raw = extractJsonArray(result.assistantText)

@@ -246,14 +246,18 @@ async function runAuditAsync(
   }
 
   // ── Helper: accumulate LLM result ──────────────────────────────────────────
-  function accumulateCost(tokens: { tokensIn: number; tokensOut: number; costUsd: number }): void {
-    totalTokensIn += tokens.tokensIn
-    totalTokensOut += tokens.tokensOut
-    totalCostUsd += tokens.costUsd
+  function accumulateCost(r: { tokensIn: number; tokensOut: number; costUsd: number; error?: string }, context?: string): void {
+    totalTokensIn += r.tokensIn
+    totalTokensOut += r.tokensOut
+    totalCostUsd += r.costUsd
     meta.tokensIn = totalTokensIn
     meta.tokensOut = totalTokensOut
     meta.costActualUsd = totalCostUsd
     writeMeta(projectPath, auditId, meta)
+    // Log non-fatal LLM errors (rate limits after retry, context window, etc.)
+    if (r.error) {
+      appendLog(projectPath, auditId, { event: 'pass_error', context: context ?? 'unknown', error: r.error })
+    }
   }
 
   // ── Helper: cost ceiling check ─────────────────────────────────────────────
@@ -329,6 +333,8 @@ async function runAuditAsync(
         prioritised.length,
         criticalCount,
       )
+      meta.notificationSent = true
+      writeMeta(projectPath, auditId, meta)
     }
 
     sendToAll(IPC_CHANNELS.AUDIT_DONE, auditId, status)
@@ -379,7 +385,7 @@ async function runAuditAsync(
             phase: 2,
           })
           r.findings.forEach(saveFinding)
-          accumulateCost(r)
+          accumulateCost(r, "phase2")
           processedFiles += batch.length
           meta.processedFiles = processedFiles
           estimator.update(processedFiles)
@@ -411,7 +417,7 @@ async function runAuditAsync(
             model: settings.model, phase: 3, defaultCategory: 'security',
           })
           r.findings.forEach(saveFinding)
-          accumulateCost(r)
+          accumulateCost(r, "phase3")
         } catch (err) {
           appendLog(projectPath, auditId, { event: 'phase3_error', file: f.relativePath, error: String(err) })
         }
@@ -440,7 +446,7 @@ async function runAuditAsync(
           model: settings.model, phase: 5, defaultCategory: 'convention',
         })
         r.findings.forEach(saveFinding)
-        accumulateCost(r)
+        accumulateCost(r, "phase5")
       } catch (err) {
         appendLog(projectPath, auditId, { event: 'phase5_error', error: String(err) })
       }
@@ -477,7 +483,7 @@ async function runAuditAsync(
           model: settings.model, phase: 4, defaultCategory: 'schema',
         })
         r.findings.forEach(saveFinding)
-        accumulateCost(r)
+        accumulateCost(r, "phase4")
       } catch (err) {
         appendLog(projectPath, auditId, { event: 'phase4_error', file: sf.relativePath, error: String(err) })
       }
@@ -506,7 +512,7 @@ async function runAuditAsync(
           model: settings.model, phase: 6, defaultCategory: 'depsec',
         })
         r.findings.forEach(saveFinding)
-        accumulateCost(r)
+        accumulateCost(r, "phase6-depsec")
       } catch (err) {
         appendLog(projectPath, auditId, { event: 'phase6_error', error: String(err) })
       }
@@ -525,7 +531,7 @@ async function runAuditAsync(
         model: settings.model, phase: 6, defaultCategory: 'env',
       })
       r.findings.forEach(saveFinding)
-      accumulateCost(r)
+      accumulateCost(r, "phase6-env")
     } catch (err) {
       appendLog(projectPath, auditId, { event: 'phase6_env_error', error: String(err) })
     }
@@ -545,7 +551,7 @@ async function runAuditAsync(
         model: settings.model, phase: 6, defaultCategory: 'todo',
       })
       r.findings.forEach(saveFinding)
-      accumulateCost(r)
+      accumulateCost(r, "phase6-todo")
     } catch (err) {
       appendLog(projectPath, auditId, { event: 'phase6_todo_error', error: String(err) })
     }

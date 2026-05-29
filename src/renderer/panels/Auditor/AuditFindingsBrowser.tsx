@@ -207,7 +207,10 @@ export default function AuditFindingsBrowser() {
           {findingsLoading ? (
             <div className="flex h-32 items-center justify-center text-xs text-zinc-600">Loading…</div>
           ) : filtered.length === 0 ? (
-            <AuditEmptyState hasFindings={findings.length > 0} />
+            <AuditEmptyState
+              hasFindings={findings.length > 0}
+              allResolved={findings.length > 0 && findings.every((f) => f.resolved)}
+            />
           ) : (
             grouped.map((group) => (
               <div key={group.label}>

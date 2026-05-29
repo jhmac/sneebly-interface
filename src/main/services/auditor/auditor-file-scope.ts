@@ -1,4 +1,4 @@
-import { readdirSync, statSync, readFileSync, existsSync, openSync, readSync, closeSync } from 'node:fs'
+import { readdirSync, statSync, lstatSync, readFileSync, existsSync, openSync, readSync, closeSync } from 'node:fs'
 import { join, extname, relative } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { AuditableFile } from '../../../shared/types'
@@ -263,15 +263,23 @@ export function walkProjectFiles(
       // Skip excluded dirs
       if (EXCLUDED_DIRS.has(name.toLowerCase())) continue
 
-      let stat: ReturnType<typeof statSync>
-      try { stat = statSync(absPath) } catch { continue }
+      // Use lstatSync to detect symlinks BEFORE following them.
+      // statSync follows symlinks, which causes infinite loops on circular symlinks.
+      let lstat: ReturnType<typeof lstatSync>
+      try { lstat = lstatSync(absPath) } catch { continue }
 
-      if (stat.isDirectory()) {
+      // Skip symlinks entirely — they can point outside the project or form cycles.
+      if (lstat.isSymbolicLink()) continue
+
+      if (lstat.isDirectory()) {
         walk(absPath)
         continue
       }
 
-      if (!stat.isFile()) continue
+      if (!lstat.isFile()) continue
+
+      // statSync is still needed below for sizeBytes (same as lstat for non-symlinks).
+      const stat = lstat
 
       const sizeBytes = stat.size
 
