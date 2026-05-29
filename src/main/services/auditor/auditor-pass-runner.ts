@@ -267,6 +267,7 @@ export async function runCodeReviewBatch(
     batches.push([f])
   }
 
+  const combinedErrors: string[] = []
   const combined: PassResult = { findings: [], tokensIn: 0, tokensOut: 0, costUsd: 0 }
 
   for (const batch of batches) {
@@ -291,6 +292,7 @@ export async function runCodeReviewBatch(
         combined.tokensIn += r.tokensIn
         combined.tokensOut += r.tokensOut
         combined.costUsd += r.costUsd
+        if (r.error) combinedErrors.push(r.error)
       }
       continue
     }
@@ -304,7 +306,9 @@ export async function runCodeReviewBatch(
     combined.tokensIn += r.tokensIn
     combined.tokensOut += r.tokensOut
     combined.costUsd += r.costUsd
+    if (r.error) combinedErrors.push(r.error)
   }
 
+  if (combinedErrors.length > 0) combined.error = combinedErrors.join('; ')
   return combined
 }

@@ -1,4 +1,4 @@
-import { readdirSync, statSync, lstatSync, readFileSync, existsSync, openSync, readSync, closeSync } from 'node:fs'
+import { readdirSync, lstatSync, readFileSync, existsSync, openSync, readSync, closeSync } from 'node:fs'
 import { join, extname, relative } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { AuditableFile } from '../../../shared/types'
@@ -278,10 +278,7 @@ export function walkProjectFiles(
 
       if (!lstat.isFile()) continue
 
-      // statSync is still needed below for sizeBytes (same as lstat for non-symlinks).
-      const stat = lstat
-
-      const sizeBytes = stat.size
+      const sizeBytes = lstat.size
 
       // Extra ignore patterns from audit-rules.json
       if (extraIgnoreRegexes.some((r) => r.test(relPath))) {
