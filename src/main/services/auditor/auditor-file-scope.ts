@@ -356,10 +356,14 @@ export function walkProjectFiles(
         // Fingerprint from path + size + mtime instead of reading file content.
         // Stable across runs unless the file changes — "good enough" for cross-audit
         // dedup — and avoids loading the whole file into memory during discovery.
+        // mtime is floored to whole seconds: some filesystems store sub-ms precision
+        // while others round to 1s, so flooring keeps the hash stable across runs
+        // regardless of where the project lives.
+        const mtimeSeconds = Math.floor(lstat.mtimeMs / 1000)
         const contentHash = createHash('sha256')
           .update(relPath)
           .update(String(sizeBytes))
-          .update(String(lstat.mtimeMs))
+          .update(String(mtimeSeconds))
           .digest('hex')
           .slice(0, 16)
 
