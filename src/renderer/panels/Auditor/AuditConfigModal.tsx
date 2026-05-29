@@ -19,7 +19,7 @@ const SCOPE_ITEMS: Array<{ key: keyof AuditScope; label: string; description: st
 export default function AuditConfigModal() {
   const {
     configOpen, closeConfig, scope, setScope, mode, setMode,
-    estimate, setEstimate, estimating, setEstimating, activeAuditId,
+    estimate, setEstimate, estimating, setEstimating, markAuditStarted,
     openBrowser, setFindings,
   } = useAuditorStore()
   const { activeProjectId } = useProjectStore()
@@ -70,6 +70,7 @@ export default function AuditConfigModal() {
         scope,
         mode,
       })
+      markAuditStarted(auditId)
       closeConfig()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

@@ -67,6 +67,7 @@ interface AuditorStore {
   setEstimate: (estimate: AuditEstimate | null) => void
   setEstimating: (v: boolean) => void
 
+  markAuditStarted: (auditId: AuditId) => void
   handleProgress: (event: AuditProgressEvent) => void
   handleDone: (auditId: AuditId, status: AuditStatus) => void
   clearActiveAudit: () => void
@@ -125,10 +126,12 @@ export const useAuditorStore = create<AuditorStore>((set, get) => ({
   setEstimate: (estimate) => set({ estimate }),
   setEstimating: (estimating) => set({ estimating }),
 
+  // Called as soon as an audit is started so the running indicator responds
+  // immediately, before the first progress event (discovery can be slow).
+  markAuditStarted: (auditId) => set({ runningAuditId: auditId }),
   handleProgress: (event) =>
     set({ activeAuditId: event.auditId, runningAuditId: event.auditId, activeProgress: event }),
-  handleDone: (auditId, status) => {
-    void status
+  handleDone: (auditId) => {
     set((s) => ({
       // Stop the "running" indicator for this audit. Keep activeAuditId so the
       // findings browser / history selection for it survive completion.
