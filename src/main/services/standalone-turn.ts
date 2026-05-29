@@ -9,6 +9,13 @@ const CLAUDE_BIN = process.env['CLAUDE_BIN'] ?? '/Users/mister/.local/bin/claude
 // Rolling cap on stderr buffering — keeps the tail (most recent, most useful).
 const STDERR_CAP = 8 * 1024
 
+// Rolling cap on the retained event array. A normal turn emits well under this;
+// the bound only bites a runaway/looping stream (the secondary OOM path). Live
+// consumers still get every event via onEvent — only the retained tail is capped.
+// Trim in slack-sized batches so the amortised cost stays O(1) per event.
+const MAX_EVENTS = 1000
+const EVENTS_TRIM_AT = 1500
+
 export interface StandaloneTurnOpts {
   cwd: string
   projectId: string
@@ -150,6 +157,11 @@ export async function runStandaloneTurn(opts: StandaloneTurnOpts): Promise<Stand
       try { event = JSON.parse(line) as AgentEvent } catch { return }
 
       events.push(event)
+      // Drop the oldest events once we exceed the trim threshold, keeping the most
+      // recent MAX_EVENTS (which include the terminal `result` and any error events).
+      if (events.length >= EVENTS_TRIM_AT) {
+        events.splice(0, events.length - MAX_EVENTS)
+      }
 
       if (event.type === 'system' && event.subtype === 'init') {
         claudeCodeSessionId = event.session_id

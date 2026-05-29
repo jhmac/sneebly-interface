@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { runStandaloneTurn } from '../standalone-turn'
+import { runStandaloneTurn, type StandaloneTurnResult } from '../standalone-turn'
 import { buildExcerpt } from './auditor-file-scope'
 import type { AuditableFile, AuditFinding, ModelName } from '../../../shared/types'
 
@@ -160,14 +160,40 @@ export interface PassOpts {
 const RATE_LIMIT_MARKERS = ['rate_limit', 'ratelimit', 'too many requests', '429']
 const RATE_LIMIT_PAUSE_MS = 60_000
 
+// Per-pass watchdog. Auditor passes are bounded by construction (one file, or a
+// <=20KB 5-file batch, with tools locked), so anything past this is a hung claude
+// subprocess. Without it, a hung call never settles, permanently occupies an
+// AuditorPool concurrency slot, and the whole audit deadlocks at processedFiles=0.
+// Scoped to the auditor on purpose — chat and the build/cycle agents legitimately
+// run much longer, so this must NOT live in the shared runStandaloneTurn.
+const PASS_TIMEOUT_MS = 5 * 60 * 1000
+
 function isRateLimitError(error: string | undefined): boolean {
   if (!error) return false
   const lower = error.toLowerCase()
   return RATE_LIMIT_MARKERS.some((m) => lower.includes(m))
 }
 
-async function callStandaloneTurn(opts: PassOpts): Promise<ReturnType<typeof runStandaloneTurn>> {
-  return runStandaloneTurn({
+function timedOutResult(): StandaloneTurnResult {
+  return {
+    events: [],
+    assistantText: '',
+    claudeCodeSessionId: null,
+    durationMs: PASS_TIMEOUT_MS,
+    tokensIn: 0,
+    tokensOut: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    costUsd: 0,
+    error: `timed out after ${PASS_TIMEOUT_MS / 60_000}min`,
+  }
+}
+
+async function callStandaloneTurn(opts: PassOpts): Promise<StandaloneTurnResult> {
+  let proc: import('node:child_process').ChildProcess | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const turn = runStandaloneTurn({
     cwd: opts.projectPath,
     projectId: opts.projectId,
     prompt: opts.userMessage,
@@ -178,7 +204,26 @@ async function callStandaloneTurn(opts: PassOpts): Promise<ReturnType<typeof run
     // Tool lock: design generation bug confirmed that without this, Claude reads
     // CLAUDE.md and project files, contaminating the audit with project conventions.
     extraArgs: ['--tools', ''],
+    // Capture the child process so the watchdog can kill it on timeout.
+    onProcess: (p) => { proc = p },
   })
+
+  const watchdog = new Promise<StandaloneTurnResult>((resolve) => {
+    timer = setTimeout(() => {
+      // Kill the hung claude so its pool slot frees and the underlying turn
+      // promise eventually settles (on proc 'close'). SIGKILL escalation covers
+      // a process wedged badly enough to ignore SIGTERM.
+      try { proc?.kill('SIGTERM') } catch { /* already gone */ }
+      setTimeout(() => { try { proc?.kill('SIGKILL') } catch { /* already gone */ } }, 5_000)
+      resolve(timedOutResult())
+    }, PASS_TIMEOUT_MS)
+  })
+
+  try {
+    return await Promise.race([turn, watchdog])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 // One 60s retry on rate-limit errors. Deeper backoff (3-consecutive → 5min,
@@ -231,7 +276,9 @@ export async function runPass(opts: PassOpts): Promise<PassResult> {
     tokensIn: result.tokensIn,
     tokensOut: result.tokensOut,
     costUsd: result.costUsd,
-    error: raw ? undefined : `Could not parse findings JSON (${result.assistantText.length} chars)`,
+    // Preserve the underlying turn error (e.g. timeout, rate limit) for the log;
+    // only fall back to the parse-failure message when the turn itself succeeded.
+    error: result.error ?? (raw ? undefined : `Could not parse findings JSON (${result.assistantText.length} chars)`),
   }
 }
 
