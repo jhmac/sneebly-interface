@@ -262,10 +262,6 @@ export async function runCodeReviewBatch(
           ? `NOTE: This is chunk ${i + 1} of ${chunks.length} of this file. Line numbers are relative to the full file (starting at line ${chunk.startLine}). Do not report findings about missing imports or incomplete definitions — they may be in other chunks.`
           : undefined
 
-        const chunkFile: AuditableFile = {
-          ...batch[0]!,
-          // We pass chunk content by writing it inline in the prompt
-        }
         const numbered = chunk.content.split('\n')
           .map((l, idx) => `${chunk.startLine + idx}: ${l}`).join('\n')
         const chunkMsg = `relativePath: ${chunk.relativePath}\ncontent (lines ${chunk.startLine}-${chunk.startLine + chunk.content.split('\n').length - 1}):\n${numbered}${note ? '\n\n' + note : ''}`

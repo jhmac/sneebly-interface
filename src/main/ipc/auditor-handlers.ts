@@ -59,9 +59,9 @@ export function registerAuditorHandlers(getSettings: () => AppSettings): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.AUDIT_CANCEL, (_e, raw: unknown) => {
-    const { auditId } = AuditIdSchema.parse(raw)
-    // Find which project this audit belongs to and cancel
-    cancelAudit(auditId, '')
+    const schema = z.object({ auditId: z.string().min(1), projectId: z.string().optional() })
+    const { auditId, projectId } = schema.parse(raw)
+    cancelAudit(auditId, projectId ?? '')
   })
 
   ipcMain.handle(IPC_CHANNELS.AUDIT_RESUME_FROM_COST_CAP, (_e, raw: unknown) => {

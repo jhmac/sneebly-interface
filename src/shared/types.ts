@@ -1050,7 +1050,7 @@ export interface ElectronAPI {
   // ── Sentinel Auditor ──────────────────────────────────────────────────────
   auditEstimate: (opts: AuditStartOpts) => Promise<AuditEstimate>
   auditStart: (opts: AuditStartOpts) => Promise<{ auditId: AuditId }>
-  auditCancel: (auditId: AuditId) => Promise<void>
+  auditCancel: (auditId: AuditId, projectId?: string) => Promise<void>
   auditResumeFromCostCap: (auditId: AuditId) => Promise<void>
   auditList: (projectId: string) => Promise<AuditListEntry[]>
   auditGet: (auditId: AuditId, projectId: string) => Promise<AuditGetResult | null>

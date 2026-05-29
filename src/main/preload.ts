@@ -521,8 +521,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.AUDIT_ESTIMATE, opts),
   auditStart: (opts: AuditStartOpts): Promise<{ auditId: AuditId }> =>
     ipcRenderer.invoke(IPC_CHANNELS.AUDIT_START, opts),
-  auditCancel: (auditId: AuditId): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_CANCEL, { auditId }),
+  auditCancel: (auditId: AuditId, projectId?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUDIT_CANCEL, { auditId, projectId }),
   auditResumeFromCostCap: (auditId: AuditId): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.AUDIT_RESUME_FROM_COST_CAP, { auditId }),
   auditList: (projectId: string): Promise<AuditListEntry[]> =>

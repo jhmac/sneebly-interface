@@ -485,6 +485,13 @@ async function runAuditAsync(
 
   // ── Phase 4: schema review ──────────────────────────────────────────────────
   if (opts.scope.schemaReview && schemaFiles.length > 0) {
+    sendToAll(IPC_CHANNELS.AUDIT_PROGRESS, {
+      auditId, phase: 4, phaseName: 'Schema Review', message: `Reviewing ${schemaFiles.length} schema file(s)…`,
+      filesProcessedInPhase: 0, totalFilesInPhase: schemaFiles.length,
+      totalProcessed: processedFiles, totalFiles: filesToAudit.length,
+      findingsAccumulated: allFindings.length, bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
+      estimatedRemainingMs: 0, currentSpendUsd: totalCostUsd, estimatedTotalUsd: estimate.estimatedCostUsdMax,
+    })
     for (const schemaFile of schemaFiles) {
       const sf = schemaFile
       try {
@@ -507,7 +514,15 @@ async function runAuditAsync(
 
   if (pool.isCanceled) { await finishAudit('canceled'); return }
 
-  // ── Phase 6: dependency security ────────────────────────────────────────────
+  // ── Phase 6: dependency security / env vars / todos ─────────────────────────
+  sendToAll(IPC_CHANNELS.AUDIT_PROGRESS, {
+    auditId, phase: 6, phaseName: 'Dep Security / Env / TODO',
+    message: 'Running dependency security, env var, and TODO checks…',
+    filesProcessedInPhase: 0, totalFilesInPhase: 0,
+    totalProcessed: processedFiles, totalFiles: filesToAudit.length,
+    findingsAccumulated: allFindings.length, bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
+    estimatedRemainingMs: 0, currentSpendUsd: totalCostUsd, estimatedTotalUsd: estimate.estimatedCostUsdMax,
+  })
   if (opts.scope.dependencySecurityCheck) {
     const depSecInput = runPackageAudit(projectPath)
     if (depSecInput) {
@@ -555,7 +570,7 @@ async function runAuditAsync(
         projectId: opts.projectId, projectPath,
         systemPrompt: STALE_TODO_SYSTEM_PROMPT,
         userMessage: `TODOs to evaluate:\n\n${todoList}`,
-        model: settings.model, phase: 7, defaultCategory: 'todo',
+        model: settings.model, phase: 6, defaultCategory: 'todo',
       })
       r.findings.forEach(saveFinding)
       accumulateCost(r)
@@ -611,8 +626,15 @@ async function runAuditAsyncSafe(
 // ─── Cancel ───────────────────────────────────────────────────────────────────
 
 export function cancelAudit(auditId: AuditId, projectId: string): void {
-  activeAudits.delete(projectId)
-  // Resolution of the cost cap promise (if waiting) will let the runner detect cancellation
+  // If projectId is not provided (cancel triggered by auditId alone),
+  // find it by scanning the registry so the entry is always removed.
+  if (projectId) {
+    activeAudits.delete(projectId)
+  } else {
+    for (const [pid, aid] of activeAudits) {
+      if (aid === auditId) { activeAudits.delete(pid); break }
+    }
+  }
   resolveAuditCostCap(auditId)
 }
 
